@@ -28,8 +28,8 @@ class DemoMode {
     this.logs = [];
     this.returnToMenu = false;
 
-    // 可切换的武器
-    this.playerConfig = { weapon: "greatsword", spells: [], combatArts: [] };
+    // 可切换的战斗风格
+    this.playerConfig = { style: "fire", weapon: "staff", spells: ["fire"], combatArts: [] };
     this.playerHp = 100;
     this.playerMaxHp = 100;
     this.enemyHp = 200;
@@ -57,21 +57,30 @@ class DemoMode {
     ];
   }
 
-  // ========== 武器切换 ==========
+  // ========== 风格切换 ==========
 
-  get weaponList() {
-    return Object.entries(WeaponDatabase);
+  get styleList() {
+    return Object.entries(StyleDatabase);
+  }
+
+  applyStyle(styleId) {
+    const style = StyleDatabase[styleId];
+    if (!style) return;
+    this.playerConfig.style = styleId;
+    this.playerConfig.weapon = style.weapon || null;
+    this.playerConfig.spells = style.spells ? [...style.spells] : [];
+    this.playerConfig.combatArts = style.combatArts ? [...style.combatArts] : [];
   }
 
   cycleWeapon() {
-    const weapons = this.weaponList;
-    const currentIdx = weapons.findIndex(([id]) => id === this.playerConfig.weapon);
-    const nextIdx = (currentIdx + 1) % weapons.length;
-    this.playerConfig.weapon = weapons[nextIdx][0];
+    const styles = this.styleList;
+    const currentIdx = styles.findIndex(([id]) => id === this.playerConfig.style);
+    const nextIdx = (currentIdx + 1) % styles.length;
+    this.applyStyle(styles[nextIdx][0]);
     this.listPage = 0;
     this.resetHP();
-    const weapon = WeaponDatabase[this.playerConfig.weapon];
-    this.message = `已切换武器：${weapon.name} [${weapon.key}] — 选择分类查看效果`;
+    const style = StyleDatabase[this.playerConfig.style];
+    this.message = `已切换风格：${style.name} [${style.key}] — 选择分类查看效果`;
   }
 
   resetHP() {

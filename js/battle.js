@@ -9,15 +9,16 @@ class BattleSystem {
     this.enemyHp = this.enemyMaxHp;
 
     // 回合/阶段状态
-    this.turnState = "select_weapon"; // select_weapon | select_spells | select_arts | player_turn | enemy_turn | qte_running | resolving | game_over
+    this.turnState = "select_weapon"; // select_weapon | player_turn | enemy_turn | qte_running | resolving | game_over
     this.actionBarMax = 5.0;
     this.actionBar = 0;
 
     // 玩家配置（开局选择）
     this.playerConfig = {
+      style: null,     // 选择的战斗风格（替代旧武器）
       weapon: null,
-      spells: [],      // 可多选
-      combatArts: []   // 可多选
+      spells: [],
+      combatArts: []
     };
 
     // 玩家运行时状态
@@ -50,7 +51,7 @@ class BattleSystem {
     this.resolveDuration = 0.4;
 
     // 消息
-    this.message = "按 A / S / D 选择武器";
+    this.message = "按 1-5 选择战斗风格";
     this.messageTimer = 0;
     this.flashMessage = null;
 
@@ -109,12 +110,6 @@ class BattleSystem {
       case "select_weapon":
         this.updateWeaponSelect();
         break;
-      case "select_spells":
-        this.updateSpellSelect();
-        break;
-      case "select_arts":
-        this.updateArtSelect();
-        break;
       case "player_turn":
         this.updatePlayerTurn(dt);
         break;
@@ -133,18 +128,10 @@ class BattleSystem {
   // ========== 开局选择阶段 ==========
 
   updateWeaponSelect() {
-    this.consumeSelectionInputs("weapon");
+    this.consumeStyleSelectionInputs();
   }
 
-  updateSpellSelect() {
-    this.consumeSelectionInputs("spells");
-  }
-
-  updateArtSelect() {
-    this.consumeSelectionInputs("arts");
-  }
-
-  consumeSelectionInputs(phase) {
+  consumeStyleSelectionInputs() {
     while (true) {
       const ev = this.input.peek();
       if (!ev) return;
@@ -156,47 +143,12 @@ class BattleSystem {
 
       const key = ev.key.toUpperCase();
 
-      // 确认进入下一步
-      if (key === "SPACE" || key === "ENTER") {
-        this.input.consume();
-        if (phase === "spells") {
-          this.turnState = "select_arts";
-          this.setMessage("按 1 [德斯洛] / 2 [东方] / 3 [荒芜] 选择战技，按空格开始战斗");
-        } else if (phase === "arts") {
+      for (const [id, style] of Object.entries(StyleDatabase)) {
+        if (style.key === key) {
+          this.input.consume();
+          this.applyStyle(id);
           this.startPlayerTurn();
           return;
-        }
-        return;
-      }
-
-      if (phase === "weapon") {
-        for (const [id, weapon] of Object.entries(WeaponDatabase)) {
-          if (weapon.key === key) {
-            this.input.consume();
-            this.playerConfig.weapon = id;
-            this.turnState = "select_spells";
-            this.setMessage("按 1 [烈火重重] / 2 [咒还] 切换选择，按空格确认");
-            return;
-          }
-        }
-      } else if (phase === "spells") {
-        if (key === "1") {
-          this.input.consume();
-          this.toggleSpell("fire");
-        } else if (key === "2") {
-          this.input.consume();
-          this.toggleSpell("absorb");
-        }
-      } else if (phase === "arts") {
-        if (key === "1") {
-          this.input.consume();
-          this.toggleCombatArt("desslo");
-        } else if (key === "2") {
-          this.input.consume();
-          this.toggleCombatArt("eastern");
-        } else if (key === "3") {
-          this.input.consume();
-          this.toggleCombatArt("desolo");
         }
       }
 
@@ -205,34 +157,13 @@ class BattleSystem {
     }
   }
 
-  toggleSpell(spellId) {
-    const idx = this.playerConfig.spells.indexOf(spellId);
-    if (idx >= 0) {
-      this.playerConfig.spells.splice(idx, 1);
-    } else {
-      this.playerConfig.spells.push(spellId);
-    }
-    this.updateSelectionMessage();
-  }
-
-  toggleCombatArt(artId) {
-    const idx = this.playerConfig.combatArts.indexOf(artId);
-    if (idx >= 0) {
-      this.playerConfig.combatArts.splice(idx, 1);
-    } else {
-      this.playerConfig.combatArts.push(artId);
-    }
-    this.updateSelectionMessage();
-  }
-
-  updateSelectionMessage() {
-    if (this.turnState === "select_spells") {
-      const selected = this.playerConfig.spells.map(id => SpellDatabase[id].name).join(", ") || "无";
-      this.setMessage(`已选咒术：${selected} — 按 1/2 切换，空格确认`);
-    } else if (this.turnState === "select_arts") {
-      const selected = this.playerConfig.combatArts.map(id => CombatArtDatabase[id].name).join(", ") || "无";
-      this.setMessage(`已选战技：${selected} — 按 1/2/3 切换，空格开始战斗`);
-    }
+  applyStyle(styleId) {
+    const style = StyleDatabase[styleId];
+    if (!style) return;
+    this.playerConfig.style = styleId;
+    this.playerConfig.weapon = style.weapon || null;
+    this.playerConfig.spells = style.spells ? [...style.spells] : [];
+    this.playerConfig.combatArts = style.combatArts ? [...style.combatArts] : [];
   }
 
   // ========== 玩家回合 ==========
@@ -922,10 +853,10 @@ class BattleSystem {
       .map(([key, chain]) => `[${key}]${chain.name}`)
       .join(" ");
 
-    const spellNames = this.playerConfig.spells.map(id => SpellDatabase[id].name).join(",") || "无";
-    const artNames = this.playerConfig.combatArts.map(id => CombatArtDatabase[id].name).join(",") || "无";
+    const style = this.playerConfig.style ? StyleDatabase[this.playerConfig.style] : null;
+    const styleName = style ? style.name : weapon.name;
 
-    this.setMessage(`${weapon.name} 就绪 — ${chainNames} / 咒术:${spellNames} / 战技:${artNames}`);
+    this.setMessage(`${styleName} 就绪 — ${chainNames}`);
   }
 
   startResolving(callback) {

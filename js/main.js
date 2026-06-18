@@ -21,9 +21,9 @@ const uiLayer = document.getElementById("ui-layer");
 const helpPanel = document.getElementById("help-panel");
 
 const battleHelpHtml = `<div class="help-title">操作说明</div>
-  <div>开局：A/S/D 选武器 → 1/2 选咒术 → 1/2/3 选战技</div>
+  <div>开局：按 1-5 选择战斗风格</div>
   <div>我方回合：[A/S/D] 触发对应 QTE 链</div>
-  <div>敌方回合：[SPACE] 闪避/弹反　[F] 格挡　[A/S/D] 战技反击</div>`;
+  <div>敌方回合：[SPACE] 闪避/弹反　[F] 格挡　[A/S/D] 反击</div>`;
 
 function setHelpPanel(html) {
   if (helpPanel) helpPanel.innerHTML = html;
@@ -134,11 +134,11 @@ function updateUI() {
     else if (battle.turnState === "game_over") turnText = "战斗结束";
     turnIndicator.textContent = turnText;
 
-    const weapon = battle.playerConfig.weapon ? WeaponDatabase[battle.playerConfig.weapon] : null;
-    if (weapon) {
-      weaponInfo.textContent = `当前武器：${weapon.name} [${weapon.key}]`;
+    const style = battle.playerConfig.style ? StyleDatabase[battle.playerConfig.style] : null;
+    if (style) {
+      weaponInfo.textContent = `当前风格：${style.name} [${style.key}]`;
     } else {
-      weaponInfo.textContent = "当前武器：未选择";
+      weaponInfo.textContent = "当前风格：未选择";
     }
 
     if (battle.qteRunner && battle.qteRunner.isRunning()) {
@@ -189,7 +189,7 @@ function updateUI() {
     if (helpPanel) {
       if (demo.state === "main") {
         helpPanel.innerHTML = `<div class="help-title">演示操作</div>
-          <div>1-4 选择分类 | W 切换武器 | 6 切换难度</div>
+          <div>1-4 选择分类 | W 切换风格 | 6 切换难度</div>
           <div>ESC 返回主菜单</div>`;
       } else if (demo.state === "list") {
         helpPanel.innerHTML = `<div class="help-title">${demo.getCategoryName()} — 演示列表</div>

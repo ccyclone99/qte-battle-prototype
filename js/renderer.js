@@ -267,72 +267,76 @@ class CanvasRenderer {
 
     // 标题
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 36px sans-serif";
+    ctx.font = "bold 34px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("选择你的武器", this.width / 2, 80);
+    ctx.fillText("选择你的战斗风格", this.width / 2, 70);
 
+    const styles = Object.entries(StyleDatabase);
     const cardW = 150;
-    const cardH = 210;
+    const cardH = 200;
     const gap = 24;
-    const totalW = cardW * 3 + gap * 2;
-    const startX = (this.width - totalW) / 2;
-    const y = 150;
 
-    let idx = 0;
-    for (const [id, weapon] of Object.entries(WeaponDatabase)) {
-      const x = startX + idx * (cardW + gap);
-      const isHovered = false; // 后续可扩展鼠标悬停
+    // 两行布局：3 + 2
+    const row1Count = 3;
+    const row2Count = 2;
+    const row1W = cardW * row1Count + gap * (row1Count - 1);
+    const row2W = cardW * row2Count + gap * (row2Count - 1);
+    const row1X = (this.width - row1W) / 2;
+    const row2X = (this.width - row2W) / 2;
+    const row1Y = 145;
+    const row2Y = row1Y + cardH + gap;
+
+    styles.forEach(([id, style], idx) => {
+      const row = idx < row1Count ? 0 : 1;
+      const col = row === 0 ? idx : idx - row1Count;
+      const x = row === 0 ? row1X + col * (cardW + gap) : row2X + col * (cardW + gap);
+      const y = row === 0 ? row1Y : row2Y;
 
       // 卡片背景
       ctx.fillStyle = "rgba(30, 30, 40, 0.9)";
-      ctx.strokeStyle = weapon.color;
+      ctx.strokeStyle = style.color;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.roundRect(x, y, cardW, cardH, 12);
+      ctx.roundRect(x, y, cardW, cardH, 10);
       ctx.fill();
       ctx.stroke();
 
-      // 按键提示
-      ctx.fillStyle = weapon.color;
-      ctx.font = "bold 28px sans-serif";
-      ctx.textAlign = "center";
+      // 编号与按键
+      ctx.fillStyle = style.color;
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(`[${weapon.key}]`, x + cardW / 2, y + 14);
+      ctx.fillText(`${style.number} · [${style.key}]`, x + 10, y + 10);
 
       // 图标
-      ctx.fillStyle = weapon.color;
-      ctx.font = "bold 44px sans-serif";
+      ctx.fillStyle = style.color;
+      ctx.font = "bold 40px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(weapon.icon || weapon.name[0], x + cardW / 2, y + 62);
+      ctx.fillText(style.icon, x + cardW / 2, y + 52);
 
-      // 武器名
+      // 名称
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 18px sans-serif";
+      ctx.font = "bold 16px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(weapon.name, x + cardW / 2, y + 102);
+      this.drawWrappedLine(ctx, style.name, x + cardW / 2, y + 84, cardW - 16, 18, 2);
 
       // 描述
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "12px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      const words = weapon.description || "";
-      ctx.fillText(words, x + cardW / 2, y + 128);
-
-      // 链列表
-      ctx.fillStyle = "#cccccc";
       ctx.font = "11px sans-serif";
-      let chainY = y + 152;
-      for (const [ckey, chain] of Object.entries(weapon.chains)) {
-        ctx.fillText(`${ckey}: ${chain.name}`, x + cardW / 2, chainY);
-        chainY += 20;
-      }
+      this.drawWrappedLine(ctx, style.description, x + cardW / 2, y + 120, cardW - 12, 15, 4);
 
-      idx++;
-    }
+      // 底层配置提示
+      const tags = [];
+      if (style.weapon) tags.push(WeaponDatabase[style.weapon].name);
+      for (const sid of style.spells || []) tags.push(SpellDatabase[sid].name);
+      for (const aid of style.combatArts || []) tags.push(CombatArtDatabase[aid].name);
+      ctx.fillStyle = "#888899";
+      ctx.font = "10px sans-serif";
+      ctx.fillText(tags.join(" / "), x + cardW / 2, y + cardH - 16);
+    });
   }
 
   drawChainHints(scene) {
@@ -860,16 +864,16 @@ class CanvasRenderer {
     ctx.textBaseline = "top";
     ctx.fillText("效果演示模式", this.width / 2, 55);
 
-    // 当前武器与难度信息
-    const weapon = scene.playerConfig.weapon ? WeaponDatabase[scene.playerConfig.weapon] : null;
+    // 当前风格与难度信息
+    const style = scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
     ctx.fillStyle = "#ffffff";
     ctx.font = "16px sans-serif";
     ctx.textAlign = "left";
     let infoX = 40;
     const infoY = 110;
-    if (weapon) {
-      ctx.fillStyle = weapon.color;
-      ctx.fillText(`当前武器: ${weapon.name} [${weapon.key}]  |  按 W 切换武器`, infoX, infoY);
+    if (style) {
+      ctx.fillStyle = style.color;
+      ctx.fillText(`当前风格: ${style.name} [${style.key}]  |  按 W 切换风格`, infoX, infoY);
     }
     ctx.fillStyle = "#aaaaaa";
     ctx.fillText(`难度: ${Difficulty.get().name}  |  按 6 切换（演示中自动 Perfect，仅影响参数展示）`, infoX, infoY + 22);
@@ -929,11 +933,11 @@ class CanvasRenderer {
     ctx.textBaseline = "top";
     ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 50);
 
-    // 当前武器提示
-    const weapon = scene.playerConfig.weapon ? WeaponDatabase[scene.playerConfig.weapon] : null;
+    // 当前风格提示
+    const style = scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
-    ctx.fillText(`当前武器: ${weapon ? weapon.name : "无"}  |  共 ${totalItems} 项效果  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 90);
+    ctx.fillText(`当前风格: ${style ? style.name : "无"}  |  共 ${totalItems} 项效果  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 90);
 
     const cols = 3;
     const cardW = 220;
