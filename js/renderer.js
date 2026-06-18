@@ -222,7 +222,7 @@ class CanvasRenderer {
     if (scene.enemyStunTimer > 0) {
       ctx.fillStyle = "#f1c40f";
       ctx.font = "bold 18px sans-serif";
-      ctx.fillText(`眩晕 ${battle.enemyStunTimer.toFixed(1)}s`, ex, ey - 70);
+      ctx.fillText(`眩晕 ${scene.enemyStunTimer.toFixed(1)}s`, ex, ey - 70);
     }
   }
 
@@ -482,6 +482,47 @@ class CanvasRenderer {
       }
     }
     ctx.fillText(line, x, lineY);
+  }
+
+  drawWrappedLine(ctx, text, x, y, maxWidth, lineHeight, maxLines = Infinity) {
+    const chars = String(text || "").split("");
+    let line = "";
+    let lineY = y;
+    let linesDrawn = 0;
+
+    for (let i = 0; i < chars.length; i++) {
+      const testLine = line + chars[i];
+      if (ctx.measureText(testLine).width > maxWidth && line !== "") {
+        if (linesDrawn >= maxLines - 1) {
+          ctx.fillText(this.truncateText(ctx, line + chars.slice(i).join(""), maxWidth), x, lineY);
+          return lineY + lineHeight;
+        }
+        ctx.fillText(line, x, lineY);
+        line = chars[i];
+        lineY += lineHeight;
+        linesDrawn++;
+      } else {
+        line = testLine;
+      }
+    }
+
+    if (line && linesDrawn < maxLines) {
+      ctx.fillText(line, x, lineY);
+      lineY += lineHeight;
+    }
+
+    return lineY;
+  }
+
+  truncateText(ctx, text, maxWidth) {
+    const raw = String(text || "");
+    if (ctx.measureText(raw).width <= maxWidth) return raw;
+
+    let output = raw;
+    while (output.length > 0 && ctx.measureText(output + "...").width > maxWidth) {
+      output = output.slice(0, -1);
+    }
+    return output + "...";
   }
 
   drawActionBar(scene) {
@@ -780,13 +821,24 @@ class CanvasRenderer {
   drawDemo(scene) {
     const ctx = this.ctx;
 
-    if (scene.turnState === "demo_menu") {
+    if (scene.turnState === "demo_main") {
       this.drawDemoMenu(scene);
     } else if (scene.turnState === "demo_list") {
       this.drawDemoList(scene);
     } else if (scene.turnState === "demo_preview") {
       this.drawDemoPreview(scene);
     } else if (scene.turnState === "demo_qte") {
+      // 演示 QTE 播放中 — 显示标题横幅
+      const ctx = this.ctx;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(0, 0, this.width, 70);
+      ctx.fillStyle = "#f1c40f";
+      ctx.font = "bold 22px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`演示: ${scene.previewTitle}`, this.width / 2, 35);
+
+      this.drawDemoInspector(scene);
       this.drawQTEBar(scene);
       this.drawPlayerState(scene);
     }
@@ -801,15 +853,30 @@ class CanvasRenderer {
     ctx.font = "bold 40px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("效果演示模式", this.width / 2, 70);
+    ctx.fillText("效果演示模式", this.width / 2, 55);
+
+    // 当前武器与难度信息
+    const weapon = scene.playerConfig.weapon ? WeaponDatabase[scene.playerConfig.weapon] : null;
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "16px sans-serif";
+    ctx.textAlign = "left";
+    let infoX = 40;
+    const infoY = 110;
+    if (weapon) {
+      ctx.fillStyle = weapon.color;
+      ctx.fillText(`当前武器: ${weapon.name} [${weapon.key}]  |  按 W 切换武器`, infoX, infoY);
+    }
+    ctx.fillStyle = "#aaaaaa";
+    ctx.fillText(`难度: ${Difficulty.get().name}  |  按 6 切换（演示中自动 Perfect，仅影响参数展示）`, infoX, infoY + 22);
+    ctx.fillText(`敌人 HP: ${scene.enemyHp}/${scene.enemyMaxHp}  |  效果会实时扣减 HP 条`, infoX, infoY + 44);
 
     const categories = scene.categories;
     const cardW = 200;
-    const cardH = 120;
+    const cardH = 130;
     const gap = 30;
     const totalW = cardW * categories.length + gap * (categories.length - 1);
     const startX = (this.width - totalW) / 2;
-    const y = 180;
+    const y = 195;
 
     categories.forEach((cat, idx) => {
       const x = startX + idx * (cardW + gap);
@@ -822,27 +889,30 @@ class CanvasRenderer {
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 28px sans-serif";
+      ctx.font = "bold 32px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(cat.icon, x + cardW / 2, y + 35);
+      ctx.fillText(cat.icon, x + cardW / 2, y + 40);
 
       ctx.font = "bold 20px sans-serif";
-      ctx.fillText(cat.name, x + cardW / 2, y + 78);
+      ctx.fillText(cat.name, x + cardW / 2, y + 85);
 
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "13px sans-serif";
-      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 102);
+      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 112);
     });
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 16px sans-serif";
-    ctx.fillText("按 ESC 返回主菜单", this.width / 2, y + cardH + 35);
+    ctx.textAlign = "center";
+    ctx.fillText("按 1-4 选择分类 | W 切换武器 | 6 切换难度 | ESC 返回主菜单", this.width / 2, y + cardH + 30);
   }
 
   drawDemoList(scene) {
     const ctx = this.ctx;
-    const items = scene.getCurrentItems();
+    const items = scene.getCurrentPageItems();
+    const totalItems = scene.getCurrentItems().length;
+    const totalPages = scene.getTotalPages();
     const categoryName = scene.getCategoryName();
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
@@ -852,15 +922,22 @@ class CanvasRenderer {
     ctx.font = "bold 32px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 60);
+    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 50);
+
+    // 当前武器提示
+    const weapon = scene.playerConfig.weapon ? WeaponDatabase[scene.playerConfig.weapon] : null;
+    ctx.fillStyle = "#aaaaaa";
+    ctx.font = "14px sans-serif";
+    ctx.fillText(`当前武器: ${weapon ? weapon.name : "无"}  |  共 ${totalItems} 项效果  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 90);
 
     const cols = 3;
     const cardW = 280;
-    const cardH = 48;
+    const cardH = 88;
     const gapX = 20;
     const gapY = 12;
-    const startX = (this.width - (cardW * cols + gapX * (cols - 1))) / 2;
-    const startY = 110;
+    const totalW = cardW * cols + gapX * (cols - 1);
+    const startX = Math.floor((this.width - totalW) / 2);
+    const startY = 120;
 
     items.forEach((item, idx) => {
       const col = idx % cols;
@@ -877,20 +954,24 @@ class CanvasRenderer {
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 14px sans-serif";
+      ctx.font = "bold 13px sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(`${idx + 1}. ${item.name}`, x + 10, y + 7);
+      ctx.fillText(this.truncateText(ctx, `${idx + 1}. ${item.name}`, cardW - 16), x + 8, y + 8);
 
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "11px sans-serif";
-      ctx.fillText(item.description, x + 10, y + 28);
+      this.drawWrappedLine(ctx, item.description, x + 8, y + 30, cardW - 16, 16, 2);
+
+      ctx.fillStyle = "#666f85";
+      ctx.font = "10px sans-serif";
+      ctx.fillText(item.chain ? "QTE 链演示" : "即时效果预览", x + 8, y + cardH - 18);
     });
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("按数字选择，ESC 返回", this.width / 2, this.height - 40);
+    ctx.fillText(`按 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | ESC 返回`, this.width / 2, this.height - 30);
   }
 
   drawDemoPreview(scene) {
@@ -902,15 +983,124 @@ class CanvasRenderer {
     ctx.font = "bold 28px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 100);
+    ctx.fillText(scene.previewTitle, this.width / 2, 80);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "18px sans-serif";
-    this.wrapText(ctx, scene.previewText, this.width / 2, 160, 600, 28);
+    this.wrapText(ctx, scene.previewText, this.width / 2, 130, 600, 28);
 
+    // 显示当前 HP 状态
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "left";
+    const infoX = 80;
+    const infoY = 220;
+    ctx.fillStyle = "#3498db";
+    ctx.fillText(`玩家 HP: ${scene.playerHp}/${scene.playerMaxHp}`, infoX, infoY);
+    ctx.fillStyle = "#c0392b";
+    ctx.fillText(`敌人 HP: ${scene.enemyHp}/${scene.enemyMaxHp}`, infoX, infoY + 28);
+    if (scene.enemyStunTimer > 0) {
+      ctx.fillStyle = "#f1c40f";
+      ctx.fillText(`敌人眩晕: ${scene.enemyStunTimer.toFixed(1)}s`, infoX, infoY + 56);
+    }
+    if (scene.armorBreakActive) {
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillText(`破甲生效中: ${scene.armorBreakTurns} 回合`, infoX, infoY + 84);
+    }
+
+    // 特效状态指示器
+    let fxY = infoY;
+    ctx.textAlign = "right";
+    const fxX = this.width - 80;
+    if (scene.playerState.shieldEnchanted) {
+      ctx.fillStyle = "#9b59b6";
+      ctx.fillText("盾牌附魔", fxX, fxY);
+      fxY += 24;
+    }
+    if (scene.playerState.spellEnergy > 100) {
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillText(`能量过载: ${Math.floor(scene.playerState.spellEnergy)}`, fxX, fxY);
+      fxY += 24;
+    } else if (scene.playerState.spellEnergy > 0) {
+      ctx.fillStyle = "#9b59b6";
+      ctx.fillText(`法术能量: ${Math.floor(scene.playerState.spellEnergy)}`, fxX, fxY);
+      fxY += 24;
+    }
+
+    this.drawDemoDetails(scene, 80, 305, this.width - 160, 145);
+
+    ctx.textAlign = "center";
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "bold 16px sans-serif";
-    ctx.fillText("按任意键继续", this.width / 2, this.height - 60);
+    const pulse = 1 + Math.sin(performance.now() / 500) * 0.3;
+    ctx.globalAlpha = 0.6 + pulse * 0.4;
+    ctx.fillText("按任意键继续", this.width / 2, this.height - 50);
+    ctx.globalAlpha = 1;
+  }
+
+  drawDemoInspector(scene) {
+    const ctx = this.ctx;
+    const lines = scene.getQTEInspectorLines();
+    const x = 40;
+    const y = 84;
+    const w = 360;
+    const h = 170;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(10, 10, 16, 0.88)";
+    ctx.strokeStyle = "#4a4a5a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("当前演示", x + 14, y + 12);
+
+    let lineY = y + 38;
+    ctx.fillStyle = "#d8d8e8";
+    ctx.font = "12px sans-serif";
+    for (const line of lines.slice(0, 7)) {
+      ctx.fillText(this.truncateText(ctx, line, w - 28), x + 14, lineY);
+      lineY += 18;
+    }
+    ctx.restore();
+  }
+
+  drawDemoDetails(scene, x, y, w, h) {
+    const ctx = this.ctx;
+    const detailLines = scene.detailLines || [];
+    const resultLines = scene.resultLines || [];
+    const lines = [...detailLines, ...resultLines];
+    if (lines.length === 0) return;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(10, 10, 16, 0.82)";
+    ctx.strokeStyle = "#4a4a5a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("具体情况", x + 14, y + 12);
+
+    let lineY = y + 36;
+    const maxY = y + h - 12;
+    ctx.font = "12px sans-serif";
+    for (const line of lines) {
+      if (lineY >= maxY) break;
+      ctx.fillStyle = resultLines.includes(line) ? "#ffffff" : "#c8c8d8";
+      lineY = this.drawWrappedLine(ctx, line, x + 14, lineY, w - 28, 17, 2);
+    }
+    ctx.restore();
   }
 
   drawGameOver(battle) {

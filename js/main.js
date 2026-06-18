@@ -18,6 +18,16 @@ const difficultySelect = document.getElementById("difficulty-select");
 const battleLog = document.getElementById("battle-log");
 const logContent = document.getElementById("log-content");
 const uiLayer = document.getElementById("ui-layer");
+const helpPanel = document.getElementById("help-panel");
+
+const battleHelpHtml = `<div class="help-title">操作说明</div>
+  <div>开局：A/S/D 选武器 → 1/2 选咒术 → 1/2/3 选战技</div>
+  <div>我方回合：[A/S/D] 触发对应 QTE 链</div>
+  <div>敌方回合：[SPACE] 闪避/弹反　[F] 格挡　[A/S/D] 战技反击</div>`;
+
+function setHelpPanel(html) {
+  if (helpPanel) helpPanel.innerHTML = html;
+}
 
 let appState = "menu"; // menu | battle | demo
 let battle = null;
@@ -49,6 +59,7 @@ function showMenu() {
   mainMenu.style.display = "flex";
   uiLayer.style.display = "none";
   battleLog.classList.remove("visible");
+  setHelpPanel(battleHelpHtml);
   input.clear();
 }
 
@@ -61,24 +72,20 @@ function startBattle() {
   mainMenu.style.display = "none";
   uiLayer.style.display = "block";
   battleLog.classList.add("visible");
+  setHelpPanel(battleHelpHtml);
   clearLog();
   addLog(`战斗开始 — 难度：${Difficulty.get().name}`);
 }
 
 function startDemo() {
   demo = new DemoMode(input, addLog);
-  demo.playerConfig = { weapon: "greatsword", spells: [], combatArts: [] };
-  demo.playerHp = 100;
-  demo.playerMaxHp = 100;
-  demo.enemyHp = 200;
-  demo.enemyMaxHp = 200;
   battle = null;
   appState = "demo";
   mainMenu.style.display = "none";
   uiLayer.style.display = "block";
   battleLog.classList.add("visible");
   clearLog();
-  addLog("进入效果演示模式");
+  addLog("进入效果演示模式 — 按 W 切换武器，1-4 选择分类");
 }
 
 btnStart.addEventListener("click", startBattle);
@@ -130,10 +137,58 @@ function updateUI() {
 
     messageText.textContent = battle.message;
   } else if (appState === "demo" && demo) {
-    turnIndicator.textContent = "效果演示";
-    weaponInfo.textContent = "当前武器：演示用大剑";
-    chainInfo.textContent = demo.state === "qte" && demo.qteRunner ? demo.qteRunner.chain.name : "—";
+    // HP bars
+    const pRatio = demo.playerHp / demo.playerMaxHp;
+    playerHpFill.style.width = `${pRatio * 100}%`;
+    playerHpText.textContent = `${demo.playerHp}/${demo.playerMaxHp}`;
+
+    const eRatio = demo.enemyHp / demo.enemyMaxHp;
+    enemyHpFill.style.width = `${eRatio * 100}%`;
+    enemyHpText.textContent = `${demo.enemyHp}/${demo.enemyMaxHp}`;
+
+    // Turn indicator
+    if (demo.state === "main") turnIndicator.textContent = "演示 - 主菜单";
+    else if (demo.state === "list") turnIndicator.textContent = `演示 - ${demo.getCategoryName()}`;
+    else if (demo.state === "qte") turnIndicator.textContent = "演示 - QTE 播放中";
+    else if (demo.state === "preview") turnIndicator.textContent = "演示 - 效果预览";
+
+    // Weapon info
+    const dWeapon = demo.playerConfig.weapon ? WeaponDatabase[demo.playerConfig.weapon] : null;
+    if (dWeapon) {
+      weaponInfo.textContent = `当前武器：${dWeapon.name} [${dWeapon.key}]`;
+    } else {
+      weaponInfo.textContent = "当前武器：未选择";
+    }
+
+    // Chain info
+    if (demo.state === "qte" && demo.qteRunner && demo.qteRunner.isRunning()) {
+      const nodeName = demo.qteRunner.currentNodeName();
+      const chainName = demo.qteRunner.chain.name;
+      chainInfo.textContent = `${chainName} — ${nodeName}`;
+    } else {
+      chainInfo.textContent = "—";
+    }
+
     messageText.textContent = demo.message;
+
+    // 更新帮助面板为演示模式的操作说明
+    if (helpPanel) {
+      if (demo.state === "main") {
+        helpPanel.innerHTML = `<div class="help-title">演示操作</div>
+          <div>1-4 选择分类 | W 切换武器 | 6 切换难度</div>
+          <div>ESC 返回主菜单</div>`;
+      } else if (demo.state === "list") {
+        helpPanel.innerHTML = `<div class="help-title">${demo.getCategoryName()} — 演示列表</div>
+          <div>1-9 选择效果 | A/D 翻页 | ESC 返回分类</div>`;
+      } else if (demo.state === "preview") {
+        helpPanel.innerHTML = `<div class="help-title">效果预览</div>
+          <div>查看特效与伤害数值</div>
+          <div>按任意键返回列表</div>`;
+      } else if (demo.state === "qte") {
+        helpPanel.innerHTML = `<div class="help-title">QTE 自动演示中</div>
+          <div>自动 Perfect 判定，观察 QTE 条变化</div>`;
+      }
+    }
   }
 }
 

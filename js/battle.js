@@ -282,11 +282,8 @@ class BattleSystem {
     }
 
     if (this.enemyAttackPhase === "response") {
-      this.consumeDefenseInputs();
-      // 战技：敌我回合都能攻击
-      if (this.hasAttackAnytime()) {
-        this.consumeEnemyTurnAttackInputs();
-      }
+      this.consumeEnemyResponseInputs();
+      if (this.turnState !== "enemy_turn") return;
     }
 
     if (this.enemyAttackTimer >= attack.windup + attack.hitTime && !this.defenseTriggered) {
@@ -296,6 +293,10 @@ class BattleSystem {
   }
 
   resolveEnemyHit(attack) {
+    if (this.tryAbsorbIncomingSpell(attack)) {
+      return;
+    }
+
     let damage = attack.damage;
 
     // 烈火重重：盾火反
@@ -388,12 +389,62 @@ class BattleSystem {
       const attack = this.enemyAttack;
       if (!attack) return;
 
-      for (const defenseId of attack.allowedResponses) {
+      for (const defenseId of attack.allowedResponses || []) {
         const defense = DefenseDatabase[defenseId];
         if (defense && defense.key === key) {
           this.input.consume();
           this.defenseTriggered = true;
           this.triggerDefenseQTE(defenseId);
+          return;
+        }
+      }
+
+      this.input.consume();
+    }
+  }
+
+  consumeEnemyResponseInputs() {
+    if (this.defenseTriggered) return;
+
+    while (true) {
+      const ev = this.input.peek();
+      if (!ev) return;
+
+      if (ev.type !== "press") {
+        this.input.consume();
+        continue;
+      }
+
+      const key = ev.key.toUpperCase();
+      const attack = this.enemyAttack;
+      if (!attack) return;
+
+      if (this.canEasternGuardNeutralize(key)) {
+        this.input.consume();
+        this.triggerEasternGuardNeutralize();
+        return;
+      }
+
+      for (const defenseId of attack.allowedResponses || []) {
+        const defense = DefenseDatabase[defenseId];
+        if (defense && defense.key === key) {
+          this.input.consume();
+          this.defenseTriggered = true;
+          this.triggerDefenseQTE(defenseId);
+          return;
+        }
+      }
+
+      if (this.hasAttackAnytime()) {
+        const chains = this.getEffectiveChains();
+        const chain = chains[key];
+        if (chain) {
+          this.input.consume();
+          if (this.hasCombatArt("desolo") && this.pendingFollowUp) {
+            this.triggerFollowUpQTE();
+          } else {
+            this.triggerCounterAttack(key);
+          }
           return;
         }
       }
@@ -586,7 +637,7 @@ class BattleSystem {
   interruptCastingAndParry() {
     this.qteRunner = null;
     this.playerState.currentState = "idle";
-    if (this.enemyAttack && this.enemyAttack.allowedResponses.includes("parry")) {
+    if (this.enemyAttack && (this.enemyAttack.allowedResponses || []).includes("parry")) {
       this.triggerDefenseQTE("parry");
     } else {
       this.setMessage("当前攻击无法弹反");
@@ -599,6 +650,28 @@ class BattleSystem {
     this.playerState.currentState = "idle";
     this.defenseTriggered = true;
     this.setMessage("格挡中闪避！");
+    this.startResolving(() => this.startPlayerTurn());
+  }
+
+  canEasternGuardNeutralize(key) {
+    if (key !== "F") return false;
+    if (!this.hasCombatArt("eastern")) return false;
+    if (!this.playerState.lastAttackTime) return false;
+
+    const elapsed = Utils.now() - this.playerState.lastAttackTime;
+    return elapsed >= 0 && elapsed <= CombatArtDatabase.eastern.attackGuardNeutralize;
+  }
+
+  triggerEasternGuardNeutralize() {
+    const attackName = this.enemyAttack ? this.enemyAttack.name : "攻击";
+    this.defenseTriggered = true;
+    this.playerState.lastAttackTime = 0;
+    this.playerState.currentState = "shield";
+    this.spawnFloatingText(CombatArtDatabase.eastern.attackGuardMessage, 220, 300, "status");
+    this.spawnParticles("guard", 220, 360, 1.4);
+    this.flashScreen("#2ecc71", 0.18);
+    this.setMessage(`${CombatArtDatabase.eastern.attackGuardMessage} ${attackName} 被化解`);
+    this.log(`东方诸国剑术化解了 ${attackName}`);
     this.startResolving(() => this.startPlayerTurn());
   }
 
@@ -729,6 +802,7 @@ class BattleSystem {
     if (finalDamage > 0) {
       this.applyDamage("player", finalDamage);
       this.setMessage(`未能完全规避，受到 ${finalDamage} 伤害`);
+      if (this.playerHp <= 0 || this.turnState === "game_over") return;
     } else if (effects.iframe > 0 || effects.damageMul === 0) {
       this.setMessage("完全规避！");
     }
@@ -759,15 +833,15 @@ class BattleSystem {
       }
     }
 
-    if (effects.stunEnemy > 0) {
-      this.enemyStunTimer = effects.stunEnemy;
-      this.startResolving(() => this.startPlayerTurn());
-      return;
-    }
-
     if (this.enemyHp <= 0) {
       this.turnState = "game_over";
       this.setMessage("胜利！");
+      return;
+    }
+
+    if (effects.stunEnemy > 0) {
+      this.enemyStunTimer = effects.stunEnemy;
+      this.startResolving(() => this.startPlayerTurn());
       return;
     }
 
@@ -883,6 +957,45 @@ class BattleSystem {
     } else {
       this.playerState.spellEnergy = Math.min(this.playerState.spellEnergy + amount, this.playerState.maxSpellEnergy);
     }
+  }
+
+  tryAbsorbIncomingSpell(attack) {
+    if (!attack || attack.id !== "spellCast") return false;
+    if (!this.hasSpell("absorb")) return false;
+
+    const absorb = SpellDatabase.absorb;
+    const absorbStates = absorb.absorbStates || [];
+    const stateCanAbsorb = absorbStates.includes(this.playerState.currentState);
+    const preparedAbsorb = this.playerState.absorbReady || this.playerState.shieldEnchanted;
+    const staffReflect = this.playerConfig.weapon === "staff" && absorb.staffBaseReflect;
+
+    if (!stateCanAbsorb && !preparedAbsorb && !staffReflect) return false;
+
+    const absorbAmount = attack.damage * 2;
+    const reflect = Math.floor(attack.damage * absorb.shieldReflectMul);
+
+    this.addSpellEnergy(absorbAmount);
+    if (reflect > 0) {
+      this.applyDamage("enemy", reflect);
+    }
+
+    this.playerState.absorbReady = false;
+    this.playerState.shieldEnchanted = false;
+    this.defenseTriggered = true;
+    this.spawnFloatingText(`+${Math.floor(absorbAmount)} 能量`, 220, 300, "status");
+    this.spawnParticles("magic", 220, 360, 1.2);
+    this.flashScreen("#9b59b6", 0.2);
+
+    if (this.enemyHp <= 0) {
+      this.turnState = "game_over";
+      this.setMessage("胜利！");
+      return true;
+    }
+
+    this.setMessage(`咒还吸收 ${attack.name}，反射 ${reflect} 伤害`);
+    this.log(`咒还吸收法术，获得 ${Math.floor(absorbAmount)} 能量`);
+    this.startResolving(() => this.startPlayerTurn());
+    return true;
   }
 
   // ========== 伤害与效果 ==========

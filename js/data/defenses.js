@@ -74,7 +74,7 @@ const DefenseDatabase = {
         input: { type: "hold_release", key: "F" },
         window: { start: 0.40, end: 0.90 },
         perfect: 0.65,
-        onPerfect: { next: "guard_counter", effect: "guard_perfect", damage: 0, staminaCost: 10, message: "完美格挡！" },
+        onPerfect: { next: "guard_counter", effect: "guard_perfect", damage: 0, staminaCost: 10, damageMul: 0, message: "完美格挡！" },
         onSuccess: { next: null, effect: "guard", damage: 0, staminaCost: 15, damageMul: 0, message: "格挡成功" },
         onEarly: { next: null, effect: "guard_early", damage: 0, damageMul: 0.3, message: "格挡过早" },
         onLate: { next: null, effect: "guard_late", damage: 0, damageMul: 0.5, message: "格挡过晚" }
