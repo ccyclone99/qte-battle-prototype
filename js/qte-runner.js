@@ -17,6 +17,9 @@ class QTEChainRunner {
     // 当前节点是否已经结算过（防止一帧多次判定）
     this.resolvedThisFrame = false;
 
+    // 演示模式强制结果
+    this.forcedOutcome = null;
+
     const firstNode = this.currentNode();
     if (firstNode && firstNode.input.type === "rhythm") {
       this.rhythmState.beatIndex = 0;
@@ -47,8 +50,8 @@ class QTEChainRunner {
   }
 
   getEffectiveWindow(node) {
-    // 全局放宽判定窗口，让原型更易上手
-    const pad = 0.06;
+    // 判定窗口基础放宽
+    const pad = 0.04;
     return {
       start: Math.max(0, node.window.start - pad),
       end: Math.min(node.duration + 0.3, node.window.end + pad),
@@ -87,12 +90,23 @@ class QTEChainRunner {
     }
 
     // 普通节点超时判定
-    if (this.nodeTimer > node.duration + 0.5) {
+    if (this.nodeTimer > node.duration + 0.3) {
       this.resolveNode("timeout");
+    }
+
+    // 演示/自动模式：强制结果（持续到链结束）
+    if (this.forcedOutcome && this.nodeTimer > 0.18) {
+      this.resolveNode(this.forcedOutcome);
     }
   }
 
   updateRhythm(node) {
+    // 演示/自动模式：强制结果
+    if (this.forcedOutcome && this.nodeTimer > 0.18) {
+      this.resolveNode(this.forcedOutcome);
+      return;
+    }
+
     const beats = node.input.beats;
     const tolerance = (node.rhythmTolerance || 0.15) + 0.04;
 
@@ -129,6 +143,16 @@ class QTEChainRunner {
 
     const node = this.currentNode();
     if (!node) return;
+
+    // 演示/自动模式：强制结果
+    if (this.forcedOutcome) {
+      if (node.input.type === "rhythm" || Utils.inputMatches(node.input, event)) {
+        const outcome = this.forcedOutcome;
+        this.forcedOutcome = null;
+        this.resolveNode(outcome);
+      }
+      return;
+    }
 
     if (node.input.type === "rhythm") {
       this.handleRhythmInput(node, event);
@@ -175,6 +199,10 @@ class QTEChainRunner {
       this.rhythmState.missCount++;
       this.rhythmState.beatIndex++;
     }
+  }
+
+  forceOutcome(outcome) {
+    this.forcedOutcome = outcome;
   }
 
   resolveNode(outcome) {

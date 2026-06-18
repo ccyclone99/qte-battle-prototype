@@ -58,6 +58,16 @@ class BattleSystem {
     this.screenShake = 0;
     this.hitStop = 0;
     this.lastDamageNumber = null;
+
+    // 特效
+    this.particles = new ParticleSystem();
+    this.floatingTexts = new FloatingTextManager();
+    this.turnBanner = null;
+    this.screenFlash = null;
+
+    // 日志
+    this.logs = [];
+    this.onLog = null;
   }
 
   // ========== 核心更新 ==========
@@ -81,6 +91,19 @@ class BattleSystem {
         this.flashMessage = null;
       }
     }
+
+    if (this.turnBanner) {
+      this.turnBanner.timer -= dt;
+      if (this.turnBanner.timer <= 0) this.turnBanner = null;
+    }
+
+    if (this.screenFlash) {
+      this.screenFlash.timer -= dt;
+      if (this.screenFlash.timer <= 0) this.screenFlash = null;
+    }
+
+    this.particles.update(dt);
+    this.floatingTexts.update(dt);
 
     switch (this.turnState) {
       case "select_weapon":
@@ -138,9 +161,10 @@ class BattleSystem {
         this.input.consume();
         if (phase === "spells") {
           this.turnState = "select_arts";
-          this.setMessage("按 1 / 2 选择咒术，按空格确认并开始战斗");
+          this.setMessage("按 1 [德斯洛] / 2 [东方] / 3 [荒芜] 选择战技，按空格开始战斗");
         } else if (phase === "arts") {
           this.startPlayerTurn();
+          return;
         }
         return;
       }
@@ -249,7 +273,7 @@ class BattleSystem {
     const attack = this.enemyAttack;
     this.enemyAttackTimer += dt;
 
-    const responseDuration = 1.6;
+    const responseDuration = Difficulty.responseDuration();
     const responseStart = Math.max(0, attack.windup - responseDuration);
 
     if (this.enemyAttackPhase === "windup" && this.enemyAttackTimer >= responseStart) {
@@ -490,8 +514,9 @@ class BattleSystem {
     }
 
     this.turnState = "qte_running";
-    this.qteRunner = new QTEChainRunner(chain, {
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chain), {
       source: "player",
+      context: { isSwordChain: this.isSwordChain(chainKey) },
       onNodeEffect: (node, outcome, transition) => {
         if (node.input.type === "hold_release" || node.input.type === "rhythm") {
           this.playerState.currentState = "charge";
@@ -514,9 +539,9 @@ class BattleSystem {
     this.defenseTriggered = true;
     this.playerState.currentState = "swordAttack";
     this.turnState = "qte_running";
-    this.qteRunner = new QTEChainRunner(chain, {
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chain), {
       source: "player",
-      context: { counterAttack: true },
+      context: { counterAttack: true, isSwordChain: true },
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
       },
@@ -537,9 +562,9 @@ class BattleSystem {
     this.defenseTriggered = true;
     this.playerState.currentState = "swordAttack";
     this.turnState = "qte_running";
-    this.qteRunner = new QTEChainRunner(chain, {
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chain), {
       source: "player",
-      context: { followUp: true, interruptEnemy: true },
+      context: { followUp: true, interruptEnemy: true, isSwordChain: true },
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
       }
@@ -605,7 +630,7 @@ class BattleSystem {
     }
 
     // 烈火重重：剑对防御敌人增伤
-    if (this.hasSpell("fire") && this.playerState.currentState === "swordAttack") {
+    if (this.hasSpell("fire") && context && context.isSwordChain) {
       damage = Math.floor(damage * 1.5);
     }
 
@@ -615,19 +640,23 @@ class BattleSystem {
     }
 
     // 东方：连续闪避后暴击
-    if (this.hasCombatArt("eastern") && this.playerState.consecutiveDodges >= CombatArtDatabase.eastern.consecutiveDodgeCrit) {
+    const easternCrit = this.hasCombatArt("eastern") && this.playerState.consecutiveDodges >= CombatArtDatabase.eastern.consecutiveDodgeCrit;
+    if (easternCrit) {
       damage = Math.floor(damage * 1.5);
       this.playerState.consecutiveDodges = 0;
     }
 
+    // 是否暴击
+    const isCrit = (this.hasCombatArt("desslo") && effects.perfectHit) || easternCrit;
+
     // 应用伤害
     if (damage > 0) {
-      this.applyDamage("enemy", damage);
-      this.lastDamageNumber = { value: damage, target: "enemy", time: 1.0 };
+      this.applyDamage("enemy", damage, { isCrit });
+      if (isCrit) this.flashScreen("#f1c40f", 0.18);
     }
 
     // 烈火重重：累计破甲
-    if (this.hasSpell("fire") && this.playerState.currentState === "swordAttack") {
+    if (this.hasSpell("fire") && context && context.isSwordChain) {
       this.armorBreakHits++;
       if (this.armorBreakHits >= SpellDatabase.fire.armorBreakHits) {
         this.armorBreakHits = 0;
@@ -644,12 +673,12 @@ class BattleSystem {
     }
 
     // 咒还：剑攻击时吸收准备
-    if (this.hasSpell("absorb") && this.playerState.currentState === "swordAttack") {
+    if (this.hasSpell("absorb") && context && context.isSwordChain) {
       this.playerState.absorbReady = true;
     }
 
     // 东方：出剑后格挡化解窗口
-    if (this.hasCombatArt("eastern") && this.playerState.currentState === "swordAttack") {
+    if (this.hasCombatArt("eastern") && context && context.isSwordChain) {
       this.playerState.lastAttackTime = performance.now() / 1000;
     }
 
@@ -672,7 +701,7 @@ class BattleSystem {
     }
 
     // 荒芜之地：攻击后触发追加攻击机会
-    if (this.hasCombatArt("desolo") && this.playerState.currentState === "swordAttack" && !context.followUp) {
+    if (this.hasCombatArt("desolo") && context && context.isSwordChain && !context.followUp) {
       this.pendingFollowUp = true;
       this.setMessage("可追加攻击！按 A 发动");
       this.turnState = "player_turn";
@@ -711,7 +740,6 @@ class BattleSystem {
         counterDamage += SpellDatabase.fire.shieldThornDamage;
       }
       this.applyDamage("enemy", Math.floor(counterDamage));
-      this.lastDamageNumber = { value: Math.floor(counterDamage), target: "enemy", time: 1.0 };
     }
 
     // 咒还：吸收法术攻击
@@ -766,7 +794,6 @@ class BattleSystem {
     }
 
     this.applyDamage("enemy", damage);
-    this.lastDamageNumber = { value: damage, target: "enemy", time: 1.0 };
     this.setMessage(`${weapon.name} 普通攻击，造成 ${damage} 伤害`);
 
     if (this.enemyHp <= 0) {
@@ -780,6 +807,7 @@ class BattleSystem {
 
   startEnemyTurn() {
     this.turnState = "enemy_turn";
+    this.showTurnBanner("敌方回合", "#e74c3c");
     this.actionBar = 0;
     this.defenseTriggered = false;
     this.pendingFollowUp = false;
@@ -795,7 +823,7 @@ class BattleSystem {
 
     const attackIds = EnemyDatabase.base.attacks;
     const attackId = attackIds[Math.floor(Math.random() * attackIds.length)];
-    this.enemyAttack = { id: attackId, ...EnemyDatabase.attacks[attackId] };
+    this.enemyAttack = Difficulty.scaleAttack({ id: attackId, ...EnemyDatabase.attacks[attackId] });
     this.enemyAttackTimer = 0;
     this.enemyAttackPhase = "windup";
 
@@ -804,6 +832,7 @@ class BattleSystem {
 
   startPlayerTurn() {
     this.turnState = "player_turn";
+    this.showTurnBanner("玩家回合", "#3498db");
     this.actionBar = 0;
     this.enemyAttack = null;
     this.enemyAttackPhase = "none";
@@ -826,7 +855,6 @@ class BattleSystem {
 
   startResolving(callback) {
     if (this.turnState === "game_over") {
-      if (callback) callback();
       return;
     }
     this.turnState = "resolving";
@@ -859,21 +887,34 @@ class BattleSystem {
 
   // ========== 伤害与效果 ==========
 
-  applyDamage(target, amount) {
+  applyDamage(target, amount, options = {}) {
     if (amount <= 0) return;
+
+    const px = 220;
+    const py = 380;
+    const ex = 740;
+    const ey = 380;
 
     if (target === "player") {
       this.playerHp = Math.max(0, this.playerHp - amount);
       this.screenShake = 0.25;
       this.hitStop = 0.12;
+      this.floatingTexts.add(`-${amount}`, px, py - 40, "damage");
+      this.spawnParticles("hit", px, py, 1);
+      this.flashScreen("#e74c3c", 0.15);
+      this.log(`玩家受到 ${amount} 伤害`);
       if (this.playerHp <= 0) {
         this.turnState = "game_over";
         this.setMessage("战败…");
       }
     } else {
       this.enemyHp = Math.max(0, this.enemyHp - amount);
-      this.screenShake = 0.15;
-      this.hitStop = 0.08;
+      this.screenShake = options.isCrit ? 0.25 : 0.15;
+      this.hitStop = options.isCrit ? 0.12 : 0.08;
+      const textType = options.isCrit ? "crit" : "damage";
+      this.floatingTexts.add(`-${amount}`, ex, ey - 40, textType);
+      this.spawnParticles(options.isCrit ? "slash" : "hit", ex, ey, options.isCrit ? 1.5 : 1);
+      this.log(`敌人受到 ${amount} ${options.isCrit ? "暴击" : ""}伤害`);
     }
   }
 
@@ -917,7 +958,7 @@ class BattleSystem {
 
     this.playerState.currentState = "shield";
     this.turnState = "qte_running";
-    this.qteRunner = new QTEChainRunner(defense, {
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(defense), {
       source: "enemy",
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
@@ -930,5 +971,31 @@ class BattleSystem {
   setMessage(text) {
     this.message = text;
     this.messageTimer = 0;
+  }
+
+  log(text) {
+    this.logs.unshift({ text, time: performance.now() });
+    if (this.logs.length > 30) this.logs.pop();
+    if (this.onLog) this.onLog(text);
+  }
+
+  spawnFloatingText(value, x, y, type) {
+    this.floatingTexts.add(value, x, y, type);
+  }
+
+  spawnParticles(type, x, y, intensity) {
+    this.particles.emit(type, x, y, intensity);
+  }
+
+  shakeScreen(amount) {
+    this.screenShake = amount;
+  }
+
+  flashScreen(color, duration) {
+    this.screenFlash = { color, timer: duration, maxTime: duration };
+  }
+
+  showTurnBanner(text, color = "#f1c40f") {
+    this.turnBanner = { text, color, timer: 1.2, maxTime: 1.2 };
   }
 }

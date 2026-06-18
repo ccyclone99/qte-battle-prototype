@@ -10,6 +10,24 @@
   <div id="game-container">
     <canvas id="game-canvas" width="960" height="540"></canvas>
 
+    <div id="main-menu" class="overlay">
+      <h1>QTE 战斗原型</h1>
+      <div class="menu-buttons">
+        <button id="btn-start">开始战斗</button>
+        <button id="btn-demo">效果演示</button>
+      </div>
+      <div class="difficulty-row">
+        <label for="difficulty-select">难度：</label>
+        <select id="difficulty-select">
+          <option value="easy">简单</option>
+          <option value="normal" selected>普通</option>
+          <option value="hard">困难</option>
+          <option value="extreme">极难</option>
+        </select>
+      </div>
+      <div class="menu-hint">战斗中按 ESC 可返回此菜单</div>
+    </div>
+
     <div id="ui-layer">
       <div class="panel top-left">
         <div class="bar-row">
@@ -26,7 +44,7 @@
 
       <div class="panel top-right">
         <div id="turn-indicator">玩家回合</div>
-        <div id="weapon-info">当前武器：大剑 [A]</div>
+        <div id="weapon-info">当前武器：未选择</div>
         <div id="chain-info">—</div>
       </div>
 
@@ -40,16 +58,24 @@
       <div class="panel bottom-center" id="message-panel">
         <div id="message-text">按 A / S / D 选择武器，开始战斗</div>
       </div>
+
+      <div id="battle-log" class="panel">
+        <div class="log-title">战斗日志</div>
+        <div id="log-content"></div>
+      </div>
     </div>
   </div>
 
   <script src="js/utils.js"></script>
+  <script src="js/difficulty.js"></script>
+  <script src="js/fx.js"></script>
   <script src="js/input.js"></script>
   <script src="js/data/weapons.js"></script>
   <script src="js/data/spells.js"></script>
   <script src="js/data/combatArts.js"></script>
   <script src="js/data/defenses.js"></script>
   <script src="js/data/enemies.js"></script>
+  <script src="js/demo-mode.js"></script>
   <script src="js/qte-runner.js"></script>
   <script src="js/battle.js"></script>
   <script src="js/renderer.js"></script>

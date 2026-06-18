@@ -31,6 +31,8 @@ const SpellDatabase = {
               perfect: 0.30,
               onPerfect: { next: "charge", effect: "raise_perfect", damage: 0, message: "法杖高举" },
               onSuccess: { next: "charge", effect: "raise", damage: 0, message: "举杖" },
+              onEarly: { next: "charge", effect: "raise", damage: 0, message: "举杖" },
+              onLate: { next: "charge", effect: "raise", damage: 0, message: "举杖" },
               onFail: { next: null, effect: "raise_fail", damage: 0, message: "施法失败" }
             },
             {
@@ -40,43 +42,10 @@ const SpellDatabase = {
               input: { type: "hold_release", key: "A" },
               window: { start: 0.6, end: 1.4 },
               perfect: 1.0,
-              onPerfect: { next: "cast_big", effect: "charge_perfect", damage: 0, chargeMul: 2.0, message: "烈焰凝聚！" },
-              onSuccess: { next: "cast", effect: "charge_good", damage: 0, chargeMul: 1.3, message: "火焰成型" },
-              onEarly: { next: "cast_small", effect: "charge_early", damage: 0, chargeMul: 0.7, message: "火焰微弱" },
-              onLate: { next: "cast", effect: "charge_late", damage: 0, chargeMul: 1.0, message: "火焰成型" }
-            },
-            {
-              id: "cast_small",
-              name: "小火球",
-              duration: 0.4,
-              input: { type: "press", key: "A" },
-              window: { start: 0.15, end: 0.35 },
-              perfect: 0.25,
-              onPerfect: { next: null, effect: "fireball_small_perfect", damage: 14, message: "小火球命中" },
-              onSuccess: { next: null, effect: "fireball_small", damage: 10, message: "小火球命中" },
-              onFail: { next: null, effect: "fireball_small_fail", damage: 3, message: "法术失控" }
-            },
-            {
-              id: "cast",
-              name: "火球",
-              duration: 0.4,
-              input: { type: "press", key: "A" },
-              window: { start: 0.15, end: 0.35 },
-              perfect: 0.25,
-              onPerfect: { next: null, effect: "fireball_perfect", damage: 24, message: "火球暴击！" },
-              onSuccess: { next: null, effect: "fireball", damage: 18, message: "火球命中" },
-              onFail: { next: null, effect: "fireball_fail", damage: 5, message: "法术失控" }
-            },
-            {
-              id: "cast_big",
-              name: "大火球",
-              duration: 0.5,
-              input: { type: "press", key: "A" },
-              window: { start: 0.18, end: 0.42 },
-              perfect: 0.30,
               onPerfect: { next: null, effect: "fireball_big_perfect", damage: 42, message: "大火球爆裂！" },
-              onSuccess: { next: null, effect: "fireball_big", damage: 32, message: "大火球命中" },
-              onFail: { next: null, effect: "fireball_big_fail", damage: 10, message: "法术失控" }
+              onSuccess: { next: null, effect: "fireball", damage: 32, message: "火球命中" },
+              onEarly: { next: null, effect: "fireball_small", damage: 10, message: "小火球命中" },
+              onLate: { next: null, effect: "fireball_fail", damage: 5, message: "法术失控" }
             }
           ]
         }

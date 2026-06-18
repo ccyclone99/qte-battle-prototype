@@ -49,7 +49,7 @@ const WeaponDatabase = {
       },
       S: {
         name: "蓄力重劈",
-        description: "完美蓄力可造成极高伤害",
+        description: "按住蓄力，松手即释放；完美蓄力可造成极高伤害",
         color: "#c0392b",
         nodes: [
           {
@@ -70,32 +70,10 @@ const WeaponDatabase = {
             input: { type: "hold_release", key: "S" },
             window: { start: 1.2, end: 1.9 },
             perfect: 1.55,
-            onPerfect: { next: "slash", effect: "charge_full", damage: 0, chargeMul: 2.0, message: "完美蓄力！" },
-            onSuccess: { next: "slash", effect: "charge_good", damage: 0, chargeMul: 1.4, message: "蓄力充足" },
-            onEarly: { next: "early_slash", effect: "charge_early", damage: 0, chargeMul: 0.8, message: "蓄力不足" },
-            onLate: { next: null, effect: "charge_late", damage: 0, chargeMul: 0, selfStun: 1.0, message: "蓄力过度，失衡！" }
-          },
-          {
-            id: "slash",
-            name: "挥砍",
-            duration: 0.6,
-            input: { type: "press", key: "S" },
-            window: { start: 0.25, end: 0.50 },
-            perfect: 0.38,
-            onPerfect: { next: null, effect: "slash_perfect", damage: 40, message: "超重斩！" },
-            onSuccess: { next: null, effect: "slash", damage: 30, message: "重斩命中" },
-            onFail: { next: null, effect: "slash_fail", damage: 10, message: "斩击偏斜" }
-          },
-          {
-            id: "early_slash",
-            name: "仓促挥砍",
-            duration: 0.5,
-            input: { type: "press", key: "S" },
-            window: { start: 0.20, end: 0.45 },
-            perfect: 0.32,
-            onPerfect: { next: null, effect: "early_slash_perfect", damage: 20, message: "仓促但有效" },
-            onSuccess: { next: null, effect: "early_slash", damage: 15, message: "仓促挥砍" },
-            onFail: { next: null, effect: "early_slash_fail", damage: 5, message: "挥空" }
+            onPerfect: { next: null, effect: "charge_full", damage: 80, message: "完美蓄力！超重斩！" },
+            onSuccess: { next: null, effect: "charge_good", damage: 56, message: "蓄力充足，重斩命中" },
+            onEarly: { next: null, effect: "charge_early", damage: 32, message: "蓄力不足，仓促斩" },
+            onLate: { next: null, effect: "charge_late", damage: 0, selfStun: 1.0, message: "蓄力过度，失衡！" }
           }
         ]
       },
