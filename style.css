@@ -43,43 +43,57 @@ body {
 
 .panel {
   position: absolute;
-  background: rgba(10, 10, 16, 0.85);
+  background: rgba(10, 10, 16, 0.88);
   border: 1px solid #4a4a5a;
   border-radius: 6px;
-  padding: 10px 14px;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.top-left { top: 12px; left: 12px; min-width: 240px; }
-.top-right { top: 12px; right: 12px; text-align: right; min-width: 200px; }
-.bottom-left { bottom: 12px; left: 12px; }
+.top-left { top: 10px; left: 10px; min-width: 220px; }
+.top-right { top: 10px; right: 10px; text-align: right; min-width: 180px; }
 .bottom-center {
-  bottom: 12px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  min-width: 320px;
+  min-width: 280px;
+  max-width: 520px;
+  padding: 8px 16px;
+}
+
+.help-panel {
+  position: absolute;
+  top: 102px;
+  left: 10px;
+  max-width: 250px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(10, 10, 16, 0.88);
+  border: 1px solid #4a4a5a;
+  border-radius: 6px;
 }
 
 .bar-row {
   display: flex;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   gap: 8px;
 }
 
 .bar-row:last-child { margin-bottom: 0; }
 
 .label {
-  width: 60px;
-  font-size: 12px;
+  width: 54px;
+  font-size: 11px;
   color: #a0a0b0;
 }
 
 .bar {
   flex: 1;
-  height: 14px;
+  height: 12px;
   background: #2a2a3a;
   border-radius: 3px;
   overflow: hidden;
@@ -95,30 +109,32 @@ body {
 .fill.hp.enemy { background: linear-gradient(90deg, #8e44ad, #9b59b6); }
 
 #turn-indicator {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: bold;
   color: #f1c40f;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 #weapon-info {
   color: #3498db;
   margin-bottom: 2px;
+  font-size: 12px;
 }
 
 #chain-info {
   color: #2ecc71;
-  min-height: 22px;
+  min-height: 18px;
+  font-size: 12px;
 }
 
 .help-title {
   font-weight: bold;
   color: #f1c40f;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 #message-panel {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: bold;
 }
 
@@ -198,14 +214,15 @@ body {
 }
 
 #battle-log {
-  bottom: 12px;
-  right: 12px;
-  top: auto;
-  width: 240px;
-  max-height: 220px;
+  top: 102px;
+  right: 10px;
+  bottom: auto;
+  left: auto;
+  width: 220px;
+  max-height: 240px;
   display: none;
   flex-direction: column;
-  padding: 10px;
+  padding: 8px;
 }
 
 #battle-log.visible {
@@ -215,14 +232,14 @@ body {
 .log-title {
   font-weight: bold;
   color: #f1c40f;
-  margin-bottom: 6px;
-  font-size: 14px;
+  margin-bottom: 4px;
+  font-size: 13px;
 }
 
 #log-content {
   overflow-y: auto;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
   color: #cccccc;
   max-height: 220px;
 }

@@ -267,12 +267,12 @@ class CanvasRenderer {
     ctx.textBaseline = "top";
     ctx.fillText("选择你的武器", this.width / 2, 80);
 
-    const cardW = 220;
-    const cardH = 280;
-    const gap = 40;
+    const cardW = 200;
+    const cardH = 250;
+    const gap = 30;
     const totalW = cardW * 3 + gap * 2;
     const startX = (this.width - totalW) / 2;
-    const y = 160;
+    const y = 150;
 
     let idx = 0;
     for (const [id, weapon] of Object.entries(WeaponDatabase)) {
@@ -293,34 +293,34 @@ class CanvasRenderer {
       ctx.font = "bold 28px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(`[${weapon.key}]`, x + cardW / 2, y + 18);
+      ctx.fillText(`[${weapon.key}]`, x + cardW / 2, y + 16);
 
       // 图标
       ctx.fillStyle = weapon.color;
-      ctx.font = "bold 64px sans-serif";
+      ctx.font = "bold 56px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(weapon.icon || weapon.name[0], x + cardW / 2, y + 90);
+      ctx.fillText(weapon.icon || weapon.name[0], x + cardW / 2, y + 78);
 
       // 武器名
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 24px sans-serif";
+      ctx.font = "bold 22px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(weapon.name, x + cardW / 2, y + 145);
+      ctx.fillText(weapon.name, x + cardW / 2, y + 130);
 
       // 描述
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "14px sans-serif";
+      ctx.font = "13px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const words = weapon.description || "";
-      ctx.fillText(words, x + cardW / 2, y + 180);
+      ctx.fillText(words, x + cardW / 2, y + 160);
 
       // 链列表
       ctx.fillStyle = "#cccccc";
-      ctx.font = "13px sans-serif";
-      let chainY = y + 215;
+      ctx.font = "12px sans-serif";
+      let chainY = y + 188;
       for (const [ckey, chain] of Object.entries(weapon.chains)) {
         ctx.fillText(`${ckey}: ${chain.name}`, x + cardW / 2, chainY);
         chainY += 20;
@@ -971,7 +971,7 @@ class CanvasRenderer {
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`按 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | ESC 返回`, this.width / 2, this.height - 30);
+    ctx.fillText(`按 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | ESC 返回`, this.width / 2, this.height - 54);
   }
 
   drawDemoPreview(scene) {
