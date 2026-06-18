@@ -34,20 +34,6 @@ let battle = null;
 let demo = null;
 let lastTime = performance.now();
 
-function updateContainerScale() {
-  const baseW = 960;
-  const baseH = 540;
-  const scale = Math.min(window.innerWidth / baseW, window.innerHeight / baseH);
-  const container = document.getElementById("game-container");
-  if (container) {
-    container.style.setProperty("--scale", String(scale));
-  }
-}
-
-updateContainerScale();
-window.addEventListener("resize", updateContainerScale);
-window.addEventListener("orientationchange", updateContainerScale);
-
 function addLog(msg) {
   const entry = document.createElement("div");
   entry.className = "log-entry log-latest";
