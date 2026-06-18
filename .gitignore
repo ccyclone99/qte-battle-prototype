@@ -1,0 +1,15 @@
+# 分发包
+qte-battle-prototype.zip
+
+# 临时文件/验证目录
+_verify/
+tmp_*
+*.tmp
+
+# 编辑器
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+Thumbs.db
