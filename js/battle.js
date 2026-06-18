@@ -428,9 +428,10 @@ class BattleSystem {
       for (const defenseId of attack.allowedResponses || []) {
         const defense = DefenseDatabase[defenseId];
         if (defense && defense.key === key) {
+          const pressTime = this.enemyAttackTimer;
           this.input.consume();
           this.defenseTriggered = true;
-          this.triggerDefenseQTE(defenseId);
+          this.triggerDefenseQTE(defenseId, pressTime);
           return;
         }
       }
@@ -1052,7 +1053,7 @@ class BattleSystem {
     return (weapon === "greatsword" || weapon === "dualBlades") && ["A", "S", "D"].includes(chainKey);
   }
 
-  triggerDefenseQTE(defenseId) {
+  triggerDefenseQTE(defenseId, triggerTime) {
     let defense = DefenseDatabase[defenseId];
     if (!defense) return;
 
@@ -1078,7 +1079,32 @@ class BattleSystem {
       }
     });
 
-    this.setMessage(`${defense.name} — ${this.qteRunner.currentNodeName()}`);
+    // 修复：按一次按键即可触发 press 型防御（闪避/弹反），并根据按下时机判定结果
+    const firstNode = this.qteRunner.currentNode();
+    if (firstNode && firstNode.input.type === "press" && triggerTime !== undefined) {
+      const outcome = this.computeDefenseOutcome(triggerTime);
+      this.qteRunner.resolveNode(outcome);
+    } else {
+      this.setMessage(`${defense.name} — ${this.qteRunner.currentNodeName()}`);
+    }
+  }
+
+  computeDefenseOutcome(triggerTime) {
+    const attack = this.enemyAttack;
+    if (!attack) return "success";
+
+    const responseStart = Math.max(0, attack.windup - Difficulty.responseDuration());
+    const hitTime = attack.windup + attack.hitTime;
+    const remaining = hitTime - triggerTime;
+
+    // 按得太急（刚进入反应窗口就按）=> 过早，会落入 onFail
+    if (triggerTime < responseStart + 0.08) return "early";
+    // 按得太晚（攻击已命中）=> 过晚，会落入 onFail
+    if (remaining < 0) return "late";
+    // 在命中前 0.18 秒内按下 => 完美
+    if (remaining <= 0.18) return "perfect";
+    // 其他情况 => 成功
+    return "success";
   }
 
   setMessage(text) {
