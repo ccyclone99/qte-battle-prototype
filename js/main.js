@@ -82,10 +82,10 @@ function startDemo() {
   battle = null;
   appState = "demo";
   mainMenu.style.display = "none";
-  uiLayer.style.display = "block";
-  battleLog.classList.add("visible");
+  uiLayer.style.display = "none";
+  battleLog.classList.remove("visible");
   clearLog();
-  addLog("进入效果演示模式 — 按 W 切换武器，1-4 选择分类");
+  addLog("进入效果演示模式 — 按 W 切换风格，1-4 选择分类");
 }
 
 btnStart.addEventListener("click", startBattle);

@@ -19,6 +19,8 @@ class QTEChainRunner {
 
     // 演示模式强制结果
     this.forcedOutcome = null;
+    this.forcedDelay = 0.18;
+    this.postNodePause = 0;
 
     const firstNode = this.currentNode();
     if (firstNode && firstNode.input.type === "rhythm") {
@@ -233,7 +235,7 @@ class QTEChainRunner {
       const nextIndex = Utils.findNodeIndex(this.chain, transition.next);
       if (nextIndex >= 0) {
         this.nodeIndex = nextIndex;
-        this.nodeTimer = 0;
+        this.nodeTimer = -this.postNodePause;
         this.rhythmState = { beatIndex: 0, hitCount: 0, missCount: 0 };
         const nextNode = this.currentNode();
         if (nextNode && nextNode.input.type === "rhythm") {

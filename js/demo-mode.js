@@ -15,7 +15,9 @@ class DemoMode {
     this.resultLines = [];
     this.currentItem = null;
     this.listPage = 0;
-    this.pageSize = 9;
+    this.pageSize = 6;
+
+    this.manualMode = false;
 
     this.particles = new ParticleSystem();
     this.floatingTexts = new FloatingTextManager();
@@ -50,7 +52,7 @@ class DemoMode {
     this.actionBarMax = 5;
 
     this.categories = [
-      { key: "weapons", name: "武器链", icon: "⚔" },
+      { key: "weapons", name: "风格链", icon: "⚔" },
       { key: "spells", name: "咒术", icon: "🔥" },
       { key: "arts", name: "战技", icon: "🗡" },
       { key: "defenses", name: "防御反击", icon: "🛡" }
@@ -195,13 +197,20 @@ class DemoMode {
           this.message = `${this.categories[idx - 1].name} — 按数字选择效果，ESC 返回`;
           return;
         }
-        // W 键或 5 切换武器
+        // W 键或 5 切换风格
         if (key === "W" || key === "5") {
           this.input.consume();
           this.cycleWeapon();
           return;
         }
-        // D 键或 6 切换难度（仅用于展示缩放参数）
+        // M 切换手动/自动
+        if (key === "M") {
+          this.input.consume();
+          this.manualMode = !this.manualMode;
+          this.message = `已切换为${this.manualMode ? "手动试玩" : "自动演示"}模式`;
+          return;
+        }
+        // 6 切换难度（仅用于展示缩放参数）
         if (key === "6") {
           this.input.consume();
           const diffs = Object.keys(Difficulty.presets);
@@ -214,6 +223,13 @@ class DemoMode {
       } else if (this.state === "list") {
         const items = this.getCurrentPageItems();
         const totalPages = this.getTotalPages();
+
+        if (key === "M") {
+          this.input.consume();
+          this.manualMode = !this.manualMode;
+          this.message = `已切换为${this.manualMode ? "手动试玩" : "自动演示"}模式`;
+          return;
+        }
 
         if (key === "A" || key === "ARROWLEFT") {
           this.input.consume();
@@ -270,14 +286,15 @@ class DemoMode {
     const weapon = WeaponDatabase[weaponId];
 
     if (category === "weapons") {
-      // 当前装备武器的所有链
+      const style = StyleDatabase[this.playerConfig.style];
+      // 当前风格武器的所有链
       for (const [chainKey, chain] of Object.entries(weapon.chains)) {
         items.push({
           name: `${weapon.name} · ${chain.name} [${chainKey}]`,
           description: chain.description,
           chain,
           source: "player",
-          preview: `${weapon.name} ${chain.name} 自动 Perfect 演示`
+          preview: `${style ? style.name : weapon.name} — ${chain.name}`
         });
       }
       // 普通攻击
@@ -295,19 +312,6 @@ class DemoMode {
             return `${weapon.name} 普通攻击，造成 ${dmg} 伤害`;
           }
         });
-      }
-      // 所有武器的链（供对比）
-      for (const [wid, w] of Object.entries(WeaponDatabase)) {
-        if (wid === weaponId) continue;
-        for (const [ckey, chain] of Object.entries(w.chains)) {
-          items.push({
-            name: `[对比] ${w.name} · ${chain.name}`,
-            description: `切换武器查看完整参数 — ${chain.description}`,
-            chain,
-            source: "player",
-            preview: `${w.name} ${chain.name} 跨武器预览`
-          });
-        }
       }
     }
 
@@ -571,12 +575,22 @@ class DemoMode {
         this.log(`节拍 ${idx + 1} 命中`);
       }
     });
-    if (item.forceOutcome) {
-      this.qteRunner.forceOutcome(item.forceOutcome);
+
+    if (this.manualMode) {
+      this.qteRunner.forcedDelay = 0;
+      this.qteRunner.postNodePause = 0;
+      this.message = `${item.name} — 手动试玩：请在判定窗口内按键`;
     } else {
-      this.qteRunner.forceOutcome("perfect");
+      // 自动演示：放慢节奏，节点间稍作停顿
+      this.qteRunner.forcedDelay = 0.55;
+      this.qteRunner.postNodePause = 0.25;
+      if (item.forceOutcome) {
+        this.qteRunner.forceOutcome(item.forceOutcome);
+      } else {
+        this.qteRunner.forceOutcome("perfect");
+      }
+      this.message = `${item.name} — 自动演示中`;
     }
-    this.message = `${item.name} — 自动演示中`;
   }
 
   updateQTE(dt) {
@@ -585,6 +599,24 @@ class DemoMode {
       this.previewTimer = 3.0;
       this.message = `${this.previewTitle} — 按任意键返回列表`;
       return;
+    }
+
+    // 手动试玩：消费输入交给 QTE Runner
+    if (this.manualMode) {
+      while (true) {
+        const ev = this.input.peek();
+        if (!ev) break;
+        if (ev.type === "press" && ev.key.toUpperCase() === "ESCAPE") {
+          this.input.consume();
+          this.qteRunner = null;
+          this.state = "list";
+          this.resetHP();
+          this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
+          return;
+        }
+        this.input.consume();
+        this.qteRunner.handleInput(ev, this.input.heldKeys);
+      }
     }
 
     this.qteRunner.update(dt);

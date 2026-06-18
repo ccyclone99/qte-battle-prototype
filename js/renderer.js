@@ -726,6 +726,100 @@ class CanvasRenderer {
     ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 35);
   }
 
+  drawDemoQTEBar(scene) {
+    const ctx = this.ctx;
+    const runner = scene.qteRunner;
+    if (!runner) return;
+
+    const node = runner.currentNode();
+    if (!node) return;
+
+    const barW = 760;
+    const barH = 44;
+    const x = (this.width - barW) / 2;
+    const y = this.height - 130;
+    const bounds = runner.getWindowBounds();
+
+    // 背景
+    ctx.fillStyle = "#2a2a3a";
+    ctx.fillRect(x, y, barW, barH);
+
+    // 判定窗口
+    const winStartX = x + barW * (bounds.start / bounds.duration);
+    const winEndX = x + barW * (bounds.end / bounds.duration);
+    const winGrad = ctx.createLinearGradient(winStartX, y, winEndX, y);
+    winGrad.addColorStop(0, "rgba(46, 204, 113, 0.25)");
+    winGrad.addColorStop(0.5, "rgba(46, 204, 113, 0.55)");
+    winGrad.addColorStop(1, "rgba(46, 204, 113, 0.25)");
+    ctx.fillStyle = winGrad;
+    ctx.fillRect(winStartX, y, winEndX - winStartX, barH);
+
+    // Perfect 标记脉冲
+    if (bounds.perfect !== null && bounds.perfect !== undefined) {
+      const perfectX = x + barW * (bounds.perfect / bounds.duration);
+      const pulse = 1 + Math.sin(performance.now() / 120) * 0.25;
+      ctx.strokeStyle = "#f1c40f";
+      ctx.lineWidth = 3;
+      ctx.shadowColor = "#f1c40f";
+      ctx.shadowBlur = 14 * pulse;
+      ctx.beginPath();
+      ctx.moveTo(perfectX, y - 10);
+      ctx.lineTo(perfectX, y + barH + 10);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // 节奏节点：拍子标记
+    if (node.input.type === "rhythm") {
+      ctx.fillStyle = "rgba(155, 89, 182, 0.7)";
+      for (const beat of node.input.beats) {
+        const beatX = x + barW * (beat / bounds.duration);
+        ctx.beginPath();
+        ctx.arc(beatX, y + barH / 2, 11, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 进度指针拖尾
+    const progress = runner.currentNodeProgress();
+    const pointerX = x + barW * progress;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.fillRect(pointerX - 50, y, 50, barH);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "rgba(255,255,255,0.8)";
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(pointerX, y - 12);
+    ctx.lineTo(pointerX - 11, y - 26);
+    ctx.lineTo(pointerX + 11, y - 26);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 边框
+    ctx.strokeStyle = "#5a5a6a";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, barW, barH);
+
+    // 节点名称与按键提示
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    let inputHint = "";
+    if (node.input.type === "press") inputHint = `按 [${node.input.key}]`;
+    else if (node.input.type === "hold_release") inputHint = `松开 [${node.input.key}]`;
+    else if (node.input.type === "rhythm") inputHint = `跟随节奏按 [${node.input.key}]`;
+
+    ctx.fillText(`${node.name} — ${inputHint}`, x + barW / 2, y + barH / 2);
+
+    // 链标题
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 42);
+  }
+
   drawDamageNumbers(battle) {
     if (!battle.lastDamageNumber) return;
 
@@ -837,19 +931,24 @@ class CanvasRenderer {
     } else if (scene.turnState === "demo_preview") {
       this.drawDemoPreview(scene);
     } else if (scene.turnState === "demo_qte") {
-      // 演示 QTE 播放中 — 显示标题横幅
+      // 演示 QTE 播放中 — 全屏剧场布局
       const ctx = this.ctx;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-      ctx.fillRect(0, 0, this.width, 70);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.fillRect(0, 0, this.width, this.height);
+
       ctx.fillStyle = "#f1c40f";
-      ctx.font = "bold 22px sans-serif";
+      ctx.font = "bold 28px sans-serif";
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`演示: ${scene.previewTitle}`, this.width / 2, 35);
+      ctx.textBaseline = "top";
+      ctx.fillText(scene.previewTitle, this.width / 2, 45);
+
+      const modeText = scene.manualMode ? "手动试玩：请在判定窗口内按下对应按键" : "自动演示中";
+      ctx.fillStyle = "#aaaaaa";
+      ctx.font = "15px sans-serif";
+      ctx.fillText(modeText, this.width / 2, 82);
 
       this.drawDemoInspector(scene);
-      this.drawQTEBar(scene);
-      this.drawPlayerState(scene);
+      this.drawDemoQTEBar(scene);
     }
   }
 
@@ -859,62 +958,72 @@ class CanvasRenderer {
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 40px sans-serif";
+    ctx.font = "bold 44px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("效果演示模式", this.width / 2, 55);
+    ctx.fillText("效果演示模式", this.width / 2, 45);
 
     // 当前风格与难度信息
     const style = scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
     ctx.fillStyle = "#ffffff";
-    ctx.font = "16px sans-serif";
-    ctx.textAlign = "left";
-    let infoX = 40;
-    const infoY = 110;
+    ctx.font = "18px sans-serif";
+    ctx.textAlign = "center";
+    const infoY = 105;
     if (style) {
       ctx.fillStyle = style.color;
-      ctx.fillText(`当前风格: ${style.name} [${style.key}]  |  按 W 切换风格`, infoX, infoY);
+      ctx.font = "bold 18px sans-serif";
+      ctx.fillText(`当前风格：${style.name} [${style.key}]`, this.width / 2, infoY);
     }
     ctx.fillStyle = "#aaaaaa";
-    ctx.fillText(`难度: ${Difficulty.get().name}  |  按 6 切换（演示中自动 Perfect，仅影响参数展示）`, infoX, infoY + 22);
-    ctx.fillText(`敌人 HP: ${scene.enemyHp}/${scene.enemyMaxHp}  |  效果会实时扣减 HP 条`, infoX, infoY + 44);
+    ctx.font = "14px sans-serif";
+    ctx.fillText(`难度：${Difficulty.get().name}（按 6 切换） | 敌人 HP：${scene.enemyHp}/${scene.enemyMaxHp}`, this.width / 2, infoY + 26);
 
     const categories = scene.categories;
-    const cardW = 160;
-    const cardH = 120;
-    const gap = 24;
-    const totalW = cardW * categories.length + gap * (categories.length - 1);
-    const startX = (this.width - totalW) / 2;
-    const y = 190;
+    const cardW = 220;
+    const cardH = 150;
+    const gap = 30;
+    const row1Count = 2;
+    const row2Count = 2;
+    const row1W = cardW * row1Count + gap * (row1Count - 1);
+    const row2W = cardW * row2Count + gap * (row2Count - 1);
+    const row1X = (this.width - row1W) / 2;
+    const row2X = (this.width - row2W) / 2;
+    const row1Y = 175;
+    const row2Y = row1Y + cardH + gap;
 
     categories.forEach((cat, idx) => {
-      const x = startX + idx * (cardW + gap);
+      const row = idx < row1Count ? 0 : 1;
+      const col = row === 0 ? idx : idx - row1Count;
+      const x = row === 0 ? row1X + col * (cardW + gap) : row2X + col * (cardW + gap);
+      const y = row === 0 ? row1Y : row2Y;
+
       ctx.fillStyle = "rgba(30, 30, 40, 0.9)";
       ctx.strokeStyle = "#555";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(x, y, cardW, cardH, 10);
+      ctx.roundRect(x, y, cardW, cardH, 12);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 32px sans-serif";
+      ctx.font = "bold 40px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(cat.icon, x + cardW / 2, y + 40);
+      ctx.fillText(cat.icon, x + cardW / 2, y + 48);
 
-      ctx.font = "bold 20px sans-serif";
-      ctx.fillText(cat.name, x + cardW / 2, y + 85);
+      ctx.font = "bold 22px sans-serif";
+      ctx.fillText(cat.name, x + cardW / 2, y + 102);
 
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "13px sans-serif";
-      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 112);
+      ctx.font = "14px sans-serif";
+      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 130);
     });
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("按 1-4 选择分类 | W 切换武器 | 6 切换难度 | ESC 返回主菜单", this.width / 2, y + cardH + 30);
+    const modeText = scene.manualMode ? "手动试玩" : "自动演示";
+    ctx.fillText(`按 1-4 选择分类 | W 切换风格 | M 切换${modeText} | 6 切换难度 | ESC 返回`, this.width / 2, this.height - 55);
   }
 
   drawDemoList(scene) {
@@ -931,22 +1040,22 @@ class CanvasRenderer {
     ctx.font = "bold 32px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 50);
+    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 40);
 
     // 当前风格提示
     const style = scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
-    ctx.fillText(`当前风格: ${style ? style.name : "无"}  |  共 ${totalItems} 项效果  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 90);
+    ctx.fillText(`当前风格：${style ? style.name : "无"}  |  共 ${totalItems} 项  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 78);
 
-    const cols = 3;
-    const cardW = 220;
-    const cardH = 80;
-    const gapX = 16;
-    const gapY = 12;
+    const cols = 2;
+    const cardW = 360;
+    const cardH = 110;
+    const gapX = 24;
+    const gapY = 16;
     const totalW = cardW * cols + gapX * (cols - 1);
     const startX = Math.floor((this.width - totalW) / 2);
-    const startY = 120;
+    const startY = 115;
 
     items.forEach((item, idx) => {
       const col = idx % cols;
@@ -955,126 +1064,119 @@ class CanvasRenderer {
       const y = startY + row * (cardH + gapY);
 
       ctx.fillStyle = "rgba(25, 25, 35, 0.9)";
-      ctx.strokeStyle = "#555";
+      ctx.strokeStyle = item.chain ? "#5a5a6a" : "#4a4a5a";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(x, y, cardW, cardH, 8);
+      ctx.roundRect(x, y, cardW, cardH, 10);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 13px sans-serif";
+      ctx.font = "bold 16px sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(this.truncateText(ctx, `${idx + 1}. ${item.name}`, cardW - 16), x + 8, y + 8);
+      ctx.fillText(this.truncateText(ctx, `${idx + 1}. ${item.name}`, cardW - 20), x + 12, y + 12);
 
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "11px sans-serif";
-      this.drawWrappedLine(ctx, item.description, x + 8, y + 30, cardW - 16, 16, 2);
+      ctx.font = "13px sans-serif";
+      this.drawWrappedLine(ctx, item.description, x + 12, y + 38, cardW - 24, 19, 3);
 
       ctx.fillStyle = "#666f85";
-      ctx.font = "10px sans-serif";
-      ctx.fillText(item.chain ? "QTE 链演示" : "即时效果预览", x + 8, y + cardH - 18);
+      ctx.font = "12px sans-serif";
+      ctx.fillText(item.chain ? "QTE 链演示" : "即时效果预览", x + 12, y + cardH - 20);
     });
 
+    const modeText = scene.manualMode ? "手动试玩" : "自动演示";
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`按 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | ESC 返回`, this.width / 2, this.height - 54);
+    ctx.fillText(`按 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换${modeText} | ESC 返回`, this.width / 2, this.height - 50);
   }
 
   drawDemoPreview(scene) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
     ctx.fillRect(0, 0, this.width, this.height);
 
+    // 大标题
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 28px sans-serif";
+    ctx.font = "bold 34px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 80);
+    ctx.fillText(scene.previewTitle, this.width / 2, 55);
 
+    // 说明
     ctx.fillStyle = "#ffffff";
     ctx.font = "18px sans-serif";
-    this.wrapText(ctx, scene.previewText, this.width / 2, 130, 600, 28);
+    this.wrapText(ctx, scene.previewText, this.width / 2, 110, 720, 28);
 
-    // 显示当前 HP 状态
-    ctx.font = "bold 16px sans-serif";
+    // 左侧状态
+    ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "left";
-    const infoX = 80;
-    const infoY = 220;
+    const infoX = 60;
+    const infoY = 205;
     ctx.fillStyle = "#3498db";
-    ctx.fillText(`玩家 HP: ${scene.playerHp}/${scene.playerMaxHp}`, infoX, infoY);
+    ctx.fillText(`玩家 HP：${scene.playerHp}/${scene.playerMaxHp}`, infoX, infoY);
     ctx.fillStyle = "#c0392b";
-    ctx.fillText(`敌人 HP: ${scene.enemyHp}/${scene.enemyMaxHp}`, infoX, infoY + 28);
+    ctx.fillText(`敌人 HP：${scene.enemyHp}/${scene.enemyMaxHp}`, infoX, infoY + 26);
     if (scene.enemyStunTimer > 0) {
       ctx.fillStyle = "#f1c40f";
-      ctx.fillText(`敌人眩晕: ${scene.enemyStunTimer.toFixed(1)}s`, infoX, infoY + 56);
+      ctx.fillText(`敌人眩晕：${scene.enemyStunTimer.toFixed(1)}s`, infoX, infoY + 52);
     }
     if (scene.armorBreakActive) {
       ctx.fillStyle = "#e74c3c";
-      ctx.fillText(`破甲生效中: ${scene.armorBreakTurns} 回合`, infoX, infoY + 84);
+      ctx.fillText(`破甲生效中：${scene.armorBreakTurns} 回合`, infoX, infoY + 78);
     }
-
-    // 特效状态指示器
-    let fxY = infoY;
-    ctx.textAlign = "right";
-    const fxX = 220;
     if (scene.playerState.shieldEnchanted) {
       ctx.fillStyle = "#9b59b6";
-      ctx.fillText("盾牌附魔", fxX, fxY);
-      fxY += 24;
+      ctx.fillText("盾牌：咒还附魔", infoX, infoY + 104);
     }
-    if (scene.playerState.spellEnergy > 100) {
-      ctx.fillStyle = "#e74c3c";
-      ctx.fillText(`能量过载: ${Math.floor(scene.playerState.spellEnergy)}`, fxX, fxY);
-      fxY += 24;
-    } else if (scene.playerState.spellEnergy > 0) {
-      ctx.fillStyle = "#9b59b6";
-      ctx.fillText(`法术能量: ${Math.floor(scene.playerState.spellEnergy)}`, fxX, fxY);
-      fxY += 24;
+    if (scene.playerState.spellEnergy > 0) {
+      ctx.fillStyle = scene.playerState.spellEnergy > 100 ? "#e74c3c" : "#9b59b6";
+      ctx.fillText(`法术能量：${Math.floor(scene.playerState.spellEnergy)}`, infoX, infoY + 130);
     }
 
-    this.drawDemoDetails(scene, 80, 360, this.width - 160, 125);
+    // 右侧详情
+    this.drawDemoDetails(scene, this.width - 400, 200, 340, 280);
 
     ctx.textAlign = "center";
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "bold 16px sans-serif";
     const pulse = 1 + Math.sin(performance.now() / 500) * 0.3;
     ctx.globalAlpha = 0.6 + pulse * 0.4;
-    ctx.fillText("按任意键继续", this.width / 2, this.height - 50);
+    ctx.fillText("按任意键继续", this.width / 2, this.height - 45);
     ctx.globalAlpha = 1;
   }
 
   drawDemoInspector(scene) {
     const ctx = this.ctx;
     const lines = scene.getQTEInspectorLines();
-    const x = 40;
-    const y = 84;
-    const w = 360;
-    const h = 170;
+    const x = this.width - 390;
+    const y = 70;
+    const w = 350;
+    const h = 230;
 
     ctx.save();
-    ctx.fillStyle = "rgba(10, 10, 16, 0.88)";
+    ctx.fillStyle = "rgba(10, 10, 16, 0.9)";
     ctx.strokeStyle = "#4a4a5a";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 8);
+    ctx.roundRect(x, y, w, h, 10);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 14px sans-serif";
+    ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText("当前演示", x + 14, y + 12);
 
     let lineY = y + 38;
     ctx.fillStyle = "#d8d8e8";
-    ctx.font = "12px sans-serif";
-    for (const line of lines.slice(0, 7)) {
+    ctx.font = "13px sans-serif";
+    for (const line of lines.slice(0, 8)) {
       ctx.fillText(this.truncateText(ctx, line, w - 28), x + 14, lineY);
-      lineY += 18;
+      lineY += 20;
     }
     ctx.restore();
   }
