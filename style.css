@@ -70,15 +70,17 @@ body {
 
 .help-panel {
   position: absolute;
-  top: 102px;
-  left: 10px;
-  max-width: 250px;
+  top: 80px;
+  right: 10px;
+  left: auto;
+  max-width: 220px;
   padding: 8px 12px;
   font-size: 12px;
   line-height: 1.5;
   background: rgba(10, 10, 16, 0.88);
   border: 1px solid #4a4a5a;
   border-radius: 6px;
+  text-align: right;
 }
 
 .bar-row {
@@ -219,12 +221,12 @@ body {
 }
 
 #battle-log {
-  top: 102px;
+  top: 165px;
   right: 10px;
   bottom: auto;
   left: auto;
   width: 220px;
-  max-height: 240px;
+  max-height: 180px;
   display: none;
   flex-direction: column;
   padding: 8px;

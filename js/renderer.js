@@ -2,8 +2,13 @@ class CanvasRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
-    this.width = canvas.width;
-    this.height = canvas.height;
+
+    // 逻辑分辨率 960×540，物理分辨率 1280×720，保证 720p 清晰且不改动全部坐标
+    this.width = 960;
+    this.height = 540;
+    const scaleX = canvas.width / this.width;
+    const scaleY = canvas.height / this.height;
+    this.ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
   }
 
   renderBlank() {
@@ -92,7 +97,7 @@ class CanvasRenderer {
   drawPlayerState(battle) {
     const ctx = this.ctx;
     const x = 20;
-    const y = 160;
+    const y = this.height - 260;
     const barW = 160;
     const barH = 12;
 
@@ -758,7 +763,7 @@ class CanvasRenderer {
     if (icons.length === 0) return;
 
     const startX = 20;
-    let y = 100;
+    let y = 85;
     const size = 22;
     const gap = 6;
 
@@ -1026,7 +1031,7 @@ class CanvasRenderer {
       fxY += 24;
     }
 
-    this.drawDemoDetails(scene, 80, 305, this.width - 160, 145);
+    this.drawDemoDetails(scene, 80, 360, this.width - 160, 125);
 
     ctx.textAlign = "center";
     ctx.fillStyle = "#aaaaaa";
