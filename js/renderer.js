@@ -33,15 +33,22 @@ class CanvasRenderer {
     this.drawCharacters(battle);
     this.drawHUD(battle);
 
-    if (battle.turnState === "weapon_select") {
+    if (battle.turnState === "select_weapon") {
       this.drawWeaponSelection(battle);
+    } else if (battle.turnState === "select_spells") {
+      this.drawSpellSelection(battle);
+    } else if (battle.turnState === "select_arts") {
+      this.drawArtSelection(battle);
     } else if (battle.turnState === "player_turn") {
       this.drawActionBar(battle);
       this.drawChainHints(battle);
+      this.drawPlayerState(battle);
     } else if (battle.turnState === "enemy_turn") {
       this.drawEnemyAttackBar(battle);
+      this.drawPlayerState(battle);
     } else if (battle.turnState === "qte_running" && battle.qteRunner) {
       this.drawQTEBar(battle);
+      this.drawPlayerState(battle);
     }
 
     if (battle.turnState === "game_over") {
@@ -51,6 +58,79 @@ class CanvasRenderer {
     this.drawDamageNumbers(battle);
 
     ctx.restore();
+  }
+
+  drawPlayerState(battle) {
+    const ctx = this.ctx;
+    const x = 20;
+    const y = 160;
+    const barW = 160;
+    const barH = 12;
+
+    // 法术能量条
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillRect(x, y, barW, barH + 18);
+
+    ctx.fillStyle = "#2a2a3a";
+    ctx.fillRect(x, y + 18, barW, barH);
+
+    const energyRatio = Math.min(battle.playerState.spellEnergy / battle.playerState.maxSpellEnergy, 1.5);
+    const displayRatio = Math.min(energyRatio, 1);
+    ctx.fillStyle = battle.playerState.spellEnergy > battle.playerState.maxSpellEnergy ? "#e74c3c" : "#9b59b6";
+    ctx.fillRect(x, y + 18, barW * displayRatio, barH);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(`法术能量 ${Math.floor(battle.playerState.spellEnergy)}/${battle.playerState.maxSpellEnergy}`, x, y);
+
+    let offsetY = y + 40;
+
+    // 破甲
+    if (battle.armorBreakActive) {
+      ctx.fillStyle = "#e74c3c";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText(`破甲中 ${battle.armorBreakTurns} 回合`, x, offsetY);
+      offsetY += 22;
+    }
+
+    // 连续闪避
+    if (battle.playerState.consecutiveDodges > 0) {
+      ctx.fillStyle = "#2ecc71";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText(`连续闪避 ${battle.playerState.consecutiveDodges}`, x, offsetY);
+      offsetY += 22;
+    }
+
+    // 盾附魔
+    if (battle.playerState.shieldEnchanted) {
+      ctx.fillStyle = "#9b59b6";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText("盾牌附魔", x, offsetY);
+      offsetY += 22;
+    }
+
+    // 当前激活咒术/战技
+    if (battle.playerConfig.spells.length > 0 || battle.playerConfig.combatArts.length > 0) {
+      ctx.fillStyle = "#f1c40f";
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillText("已装备:", x, offsetY);
+      offsetY += 18;
+
+      for (const id of battle.playerConfig.spells) {
+        const spell = SpellDatabase[id];
+        ctx.fillStyle = spell.color;
+        ctx.fillText(`· ${spell.name}`, x + 5, offsetY);
+        offsetY += 16;
+      }
+      for (const id of battle.playerConfig.combatArts) {
+        const art = CombatArtDatabase[id];
+        ctx.fillStyle = art.color;
+        ctx.fillText(`· ${art.name}`, x + 5, offsetY);
+        offsetY += 16;
+      }
+    }
   }
 
   drawCharacters(battle) {
@@ -119,15 +199,17 @@ class CanvasRenderer {
   drawHUD(battle) {
     const ctx = this.ctx;
 
-    // 当前状态提示（大字体）
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.font = "bold 22px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillText(battle.message, this.width / 2, 70);
+    // 当前状态提示（大字体，选择界面由选择画面自己渲染）
+    if (!battle.turnState.startsWith("select_")) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.font = "bold 22px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(battle.message, this.width / 2, 70);
+    }
 
     // 武器选择提示（仅在非选择界面显示）
-    if (battle.turnState !== "weapon_select") {
+    if (!battle.turnState.startsWith("select_")) {
       const weaponY = 110;
       ctx.font = "16px sans-serif";
       let xOffset = this.width / 2 - 180;
@@ -254,6 +336,120 @@ class CanvasRenderer {
 
       idx++;
     }
+  }
+
+  drawSpellSelection(battle) {
+    this.drawOptionSelection(battle, {
+      title: "选择咒术（可多选）",
+      options: Object.entries(SpellDatabase).map(([id, spell], idx) => ({
+        key: String(idx + 1),
+        name: spell.name,
+        description: spell.description,
+        icon: spell.icon,
+        color: spell.color,
+        selected: battle.playerConfig.spells.includes(id)
+      })),
+      confirmHint: "按空格确认"
+    });
+  }
+
+  drawArtSelection(battle) {
+    this.drawOptionSelection(battle, {
+      title: "选择战技（可多选）",
+      options: Object.entries(CombatArtDatabase).map(([id, art], idx) => ({
+        key: String(idx + 1),
+        name: art.name,
+        description: art.description,
+        icon: art.icon,
+        color: art.color,
+        selected: battle.playerConfig.combatArts.includes(id)
+      })),
+      confirmHint: "按空格开始战斗"
+    });
+  }
+
+  drawOptionSelection(battle, config) {
+    const ctx = this.ctx;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 32px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(config.title, this.width / 2, 70);
+
+    const cardW = 260;
+    const cardH = 320;
+    const gap = 30;
+    const totalW = cardW * config.options.length + gap * (config.options.length - 1);
+    const startX = (this.width - totalW) / 2;
+    const y = 140;
+
+    config.options.forEach((opt, idx) => {
+      const x = startX + idx * (cardW + gap);
+
+      ctx.fillStyle = opt.selected ? "rgba(40, 40, 55, 0.95)" : "rgba(25, 25, 35, 0.9)";
+      ctx.strokeStyle = opt.selected ? opt.color : "#555";
+      ctx.lineWidth = opt.selected ? 4 : 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, cardW, cardH, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = opt.color;
+      ctx.font = "bold 22px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(`[${opt.key}]`, x + cardW / 2, y + 15);
+
+      ctx.font = "bold 56px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(opt.icon, x + cardW / 2, y + 90);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 22px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(opt.name, x + cardW / 2, y + 145);
+
+      ctx.fillStyle = "#aaaaaa";
+      ctx.font = "13px sans-serif";
+      this.wrapText(ctx, opt.description, x + cardW / 2, y + 185, cardW - 30, 20);
+
+      if (opt.selected) {
+        ctx.fillStyle = opt.color;
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillText("✓ 已选择", x + cardW / 2, y + cardH - 30);
+      }
+    });
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(config.confirmHint, this.width / 2, y + cardH + 25);
+  }
+
+  wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = text.split("");
+    let line = "";
+    let lineY = y;
+
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i];
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && line !== "") {
+        ctx.fillText(line, x, lineY);
+        line = words[i];
+        lineY += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, lineY);
   }
 
   drawActionBar(battle) {

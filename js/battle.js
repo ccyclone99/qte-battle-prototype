@@ -2,36 +2,65 @@ class BattleSystem {
   constructor(input) {
     this.input = input;
 
+    // 基础属性
     this.playerMaxHp = 100;
     this.playerHp = this.playerMaxHp;
     this.enemyMaxHp = 200;
     this.enemyHp = this.enemyMaxHp;
 
-    this.turnState = "weapon_select"; // weapon_select | player_turn | enemy_turn | qte_running | resolving | game_over
+    // 回合/阶段状态
+    this.turnState = "select_weapon"; // select_weapon | select_spells | select_arts | player_turn | enemy_turn | qte_running | resolving | game_over
     this.actionBarMax = 5.0;
     this.actionBar = 0;
-    this.currentWeapon = null; // 开局选择后固定
 
+    // 玩家配置（开局选择）
+    this.playerConfig = {
+      weapon: null,
+      spells: [],      // 可多选
+      combatArts: []   // 可多选
+    };
+
+    // 玩家运行时状态
+    this.playerState = {
+      spellEnergy: 0,
+      maxSpellEnergy: 100,
+      consecutiveDodges: 0,
+      lastAttackTime: 0,
+      shieldEnchanted: false,
+      absorbReady: false,
+      currentState: "idle" // idle | charge | shield | swordAttack | casting
+    };
+
+    // 敌人状态
     this.enemyAttack = null;
     this.enemyAttackTimer = 0;
-    this.enemyAttackPhase = "none"; // none | windup | response | hit
+    this.enemyAttackPhase = "none";
     this.enemyStunTimer = 0;
+    this.armorBreakHits = 0;
+    this.armorBreakTurns = 0;
+    this.armorBreakActive = false;
     this.defenseTriggered = false;
 
+    // QTE
     this.qteRunner = null;
+    this.pendingFollowUp = false; // 荒芜之地追加攻击待触发
+
+    // 结算
     this.resolveTimer = 0;
     this.resolveDuration = 0.4;
 
+    // 消息
     this.message = "按 A / S / D 选择武器";
-    this.weaponSelectMessage = "按 A / S / D 选择武器";
     this.messageTimer = 0;
     this.flashMessage = null;
 
+    // 视觉
     this.screenShake = 0;
     this.hitStop = 0;
-
     this.lastDamageNumber = null;
   }
+
+  // ========== 核心更新 ==========
 
   update(dt) {
     if (this.hitStop > 0) {
@@ -54,8 +83,14 @@ class BattleSystem {
     }
 
     switch (this.turnState) {
-      case "weapon_select":
+      case "select_weapon":
         this.updateWeaponSelect();
+        break;
+      case "select_spells":
+        this.updateSpellSelect();
+        break;
+      case "select_arts":
+        this.updateArtSelect();
         break;
       case "player_turn":
         this.updatePlayerTurn(dt);
@@ -72,19 +107,131 @@ class BattleSystem {
     }
   }
 
+  // ========== 开局选择阶段 ==========
+
   updateWeaponSelect() {
-    this.consumeBufferedInputs();
+    this.consumeSelectionInputs("weapon");
   }
 
+  updateSpellSelect() {
+    this.consumeSelectionInputs("spells");
+  }
+
+  updateArtSelect() {
+    this.consumeSelectionInputs("arts");
+  }
+
+  consumeSelectionInputs(phase) {
+    while (true) {
+      const ev = this.input.peek();
+      if (!ev) return;
+
+      if (ev.type !== "press") {
+        this.input.consume();
+        continue;
+      }
+
+      const key = ev.key.toUpperCase();
+
+      // 确认进入下一步
+      if (key === "SPACE" || key === "ENTER") {
+        this.input.consume();
+        if (phase === "spells") {
+          this.turnState = "select_arts";
+          this.setMessage("按 1 / 2 选择咒术，按空格确认并开始战斗");
+        } else if (phase === "arts") {
+          this.startPlayerTurn();
+        }
+        return;
+      }
+
+      if (phase === "weapon") {
+        for (const [id, weapon] of Object.entries(WeaponDatabase)) {
+          if (weapon.key === key) {
+            this.input.consume();
+            this.playerConfig.weapon = id;
+            this.turnState = "select_spells";
+            this.setMessage("按 1 [烈火重重] / 2 [咒还] 切换选择，按空格确认");
+            return;
+          }
+        }
+      } else if (phase === "spells") {
+        if (key === "1") {
+          this.input.consume();
+          this.toggleSpell("fire");
+        } else if (key === "2") {
+          this.input.consume();
+          this.toggleSpell("absorb");
+        }
+      } else if (phase === "arts") {
+        if (key === "1") {
+          this.input.consume();
+          this.toggleCombatArt("desslo");
+        } else if (key === "2") {
+          this.input.consume();
+          this.toggleCombatArt("eastern");
+        } else if (key === "3") {
+          this.input.consume();
+          this.toggleCombatArt("desolo");
+        }
+      }
+
+      // 未匹配的按键丢弃
+      this.input.consume();
+    }
+  }
+
+  toggleSpell(spellId) {
+    const idx = this.playerConfig.spells.indexOf(spellId);
+    if (idx >= 0) {
+      this.playerConfig.spells.splice(idx, 1);
+    } else {
+      this.playerConfig.spells.push(spellId);
+    }
+    this.updateSelectionMessage();
+  }
+
+  toggleCombatArt(artId) {
+    const idx = this.playerConfig.combatArts.indexOf(artId);
+    if (idx >= 0) {
+      this.playerConfig.combatArts.splice(idx, 1);
+    } else {
+      this.playerConfig.combatArts.push(artId);
+    }
+    this.updateSelectionMessage();
+  }
+
+  updateSelectionMessage() {
+    if (this.turnState === "select_spells") {
+      const selected = this.playerConfig.spells.map(id => SpellDatabase[id].name).join(", ") || "无";
+      this.setMessage(`已选咒术：${selected} — 按 1/2 切换，空格确认`);
+    } else if (this.turnState === "select_arts") {
+      const selected = this.playerConfig.combatArts.map(id => CombatArtDatabase[id].name).join(", ") || "无";
+      this.setMessage(`已选战技：${selected} — 按 1/2/3 切换，空格开始战斗`);
+    }
+  }
+
+  // ========== 玩家回合 ==========
+
   updatePlayerTurn(dt) {
-    // 先读取输入，允许玩家在行动条满前最后一刻触发 QTE
-    this.consumeBufferedInputs();
+    // 先读取输入
+    this.consumeCombatInputs();
     if (this.turnState !== "player_turn") return;
 
-    // 敌人眩晕会冻结/恢复玩家行动条
+    // 敌人眩晕处理
     if (this.enemyStunTimer > 0) {
       this.enemyStunTimer -= dt;
       if (this.enemyStunTimer < 0) this.enemyStunTimer = 0;
+    }
+
+    // 法术能量过载伤害
+    if (this.hasSpell("absorb") && this.playerState.spellEnergy > this.playerState.maxSpellEnergy) {
+      this.playerHp = Math.max(0, this.playerHp - SpellDatabase.absorb.staffOverflowDecay * dt);
+      if (this.playerHp <= 0) {
+        this.turnState = "game_over";
+        this.setMessage("法术能量反噬…");
+        return;
+      }
     }
 
     this.actionBar += dt;
@@ -93,6 +240,8 @@ class BattleSystem {
       this.performNormalAttack();
     }
   }
+
+  // ========== 敌方回合 ==========
 
   updateEnemyTurn(dt) {
     if (!this.enemyAttack) return;
@@ -110,24 +259,47 @@ class BattleSystem {
 
     if (this.enemyAttackPhase === "response") {
       this.consumeDefenseInputs();
+      // 战技：敌我回合都能攻击
+      if (this.hasAttackAnytime()) {
+        this.consumeEnemyTurnAttackInputs();
+      }
     }
 
     if (this.enemyAttackTimer >= attack.windup + attack.hitTime && !this.defenseTriggered) {
       this.enemyAttackPhase = "hit";
-      this.applyDamage("player", attack.damage);
-      this.setMessage(`${attack.name} 命中！受到 ${attack.damage} 伤害`);
-      if (attack.stunOnHit) {
-        // 玩家被眩晕？可以扩展
-      }
-      this.startResolving(() => this.startPlayerTurn());
+      this.resolveEnemyHit(attack);
     }
   }
+
+  resolveEnemyHit(attack) {
+    let damage = attack.damage;
+
+    // 烈火重重：盾火反
+    if (this.hasSpell("fire")) {
+      this.applyDamage("enemy", SpellDatabase.fire.shieldThornDamage);
+      this.setMessage(`${SpellDatabase.fire.shieldThornMessage} 敌人受到 ${SpellDatabase.fire.shieldThornDamage} 反伤`);
+    }
+
+    // 护甲破坏增伤
+    if (this.armorBreakActive) {
+      damage = Math.floor(damage * (1 + SpellDatabase.fire.armorBreakDamageBonus));
+    }
+
+    this.applyDamage("player", damage);
+    this.setMessage(`${attack.name} 命中！受到 ${damage} 伤害`);
+    this.startResolving(() => this.startPlayerTurn());
+  }
+
+  // ========== QTE 运行 ==========
 
   updateQTE(dt) {
     if (!this.qteRunner) {
       this.turnState = "resolving";
       return;
     }
+
+    // 战技：施法/持盾时闪避
+    this.consumeQTECombatArtInputs();
 
     this.qteRunner.update(dt);
 
@@ -142,56 +314,36 @@ class BattleSystem {
     }
   }
 
-  updateResolving(dt) {
-    this.resolveTimer -= dt;
-    if (this.resolveTimer <= 0) {
-      this.resolveTimer = 0;
-      if (this.resolveCallback) {
-        const cb = this.resolveCallback;
-        this.resolveCallback = null;
-        cb();
-      }
-    }
-  }
+  // ========== 输入处理 ==========
 
-  consumeBufferedInputs() {
+  consumeCombatInputs() {
     while (true) {
       const ev = this.input.peek();
       if (!ev) return;
 
       if (ev.type !== "press") {
-        this.input.consume(); // 清掉非按下事件
+        this.input.consume();
         continue;
       }
 
       const key = ev.key.toUpperCase();
 
-      // 开局选择武器
-      if (this.turnState === "weapon_select") {
-        for (const [id, weapon] of Object.entries(WeaponDatabase)) {
-          if (weapon.key === key) {
-            this.input.consume();
-            this.currentWeapon = id;
-            this.startPlayerTurn();
-            return;
-          }
-        }
-        this.input.consume(); // 无效选择丢弃
-        continue;
+      // 荒芜之地：追加攻击
+      if (this.pendingFollowUp && key === "A") {
+        this.input.consume();
+        this.triggerFollowUpQTE();
+        return;
       }
 
-      // 战斗中触发当前武器的 QTE 链
-      if (this.turnState === "player_turn" && this.currentWeapon) {
-        const weapon = WeaponDatabase[this.currentWeapon];
-        const chain = weapon.chains[key];
-        if (chain) {
-          this.input.consume();
-          this.triggerWeaponQTE(key);
-          return;
-        }
+      const chains = this.getEffectiveChains();
+      const chain = chains[key];
+
+      if (chain) {
+        this.input.consume();
+        this.triggerWeaponQTE(key);
+        return;
       }
 
-      // 非当前可用按键直接丢弃
       this.input.consume();
     }
   }
@@ -222,20 +374,128 @@ class BattleSystem {
         }
       }
 
-      // 非当前可响应按键直接丢弃
       this.input.consume();
     }
   }
 
+  consumeEnemyTurnAttackInputs() {
+    while (true) {
+      const ev = this.input.peek();
+      if (!ev) return;
+
+      if (ev.type !== "press") {
+        this.input.consume();
+        continue;
+      }
+
+      const key = ev.key.toUpperCase();
+      const chains = this.getEffectiveChains();
+      const chain = chains[key];
+
+      if (chain) {
+        this.input.consume();
+        // 荒芜之地：追加攻击在敌方回合触发为化解/打断
+        if (this.hasCombatArt("desolo") && this.pendingFollowUp) {
+          this.triggerFollowUpQTE();
+        } else {
+          this.triggerCounterAttack(key);
+        }
+        return;
+      }
+
+      this.input.consume();
+    }
+  }
+
+  consumeQTECombatArtInputs() {
+    if (!this.qteRunner) return;
+
+    const node = this.qteRunner.currentNode();
+    if (!node) return;
+
+    const ev = this.input.peek();
+    if (!ev || ev.type !== "press") return;
+
+    const key = ev.key.toUpperCase();
+
+    // 施法时闪避（德斯洛 / 荒芜之地）
+    if (this.playerState.currentState === "casting") {
+      if ((this.hasCombatArt("desslo") || this.hasCombatArt("desolo")) && key === "SPACE") {
+        this.input.consume();
+        this.interruptCastingAndDodge();
+        return;
+      }
+      // 施法时招架/咒还（荒芜之地）
+      if (this.hasCombatArt("desolo") && key === "F") {
+        this.input.consume();
+        this.interruptCastingAndParry();
+        return;
+      }
+    }
+
+    // 持盾时闪避（德斯洛 / 东方）
+    if (this.playerState.currentState === "shield") {
+      if ((this.hasCombatArt("desslo") || this.hasCombatArt("eastern")) && key === "SPACE") {
+        this.input.consume();
+        this.interruptGuardAndDodge();
+        return;
+      }
+    }
+  }
+
+  // ========== 动作触发 ==========
+
+  getEffectiveChains() {
+    if (!this.playerConfig.weapon) return {};
+
+    const weapon = WeaponDatabase[this.playerConfig.weapon];
+    const chains = {};
+
+    // 复制基础链
+    for (const [key, chain] of Object.entries(weapon.chains)) {
+      chains[key] = chain;
+    }
+
+    // 咒术覆盖
+    for (const spellId of this.playerConfig.spells) {
+      const spell = SpellDatabase[spellId];
+      if (spell.chainOverrides && spell.chainOverrides[this.playerConfig.weapon]) {
+        for (const [key, chain] of Object.entries(spell.chainOverrides[this.playerConfig.weapon])) {
+          chains[key] = chain;
+        }
+      }
+    }
+
+    // 战技追加链
+    for (const artId of this.playerConfig.combatArts) {
+      const art = CombatArtDatabase[artId];
+      if (art.chainOverrides && art.chainOverrides[this.playerConfig.weapon]) {
+        for (const [key, chain] of Object.entries(art.chainOverrides[this.playerConfig.weapon])) {
+          chains[key] = chain;
+        }
+      }
+    }
+
+    return chains;
+  }
+
   triggerWeaponQTE(chainKey) {
-    const weapon = WeaponDatabase[this.currentWeapon];
-    const chain = weapon.chains[chainKey];
+    const chains = this.getEffectiveChains();
+    const chain = chains[chainKey];
     if (!chain) return;
+
+    this.playerState.currentState = this.isSwordChain(chainKey) ? "swordAttack" : "idle";
+    if (chainKey === "S" && this.playerConfig.weapon === "staff") {
+      this.playerState.currentState = "casting";
+    }
 
     this.turnState = "qte_running";
     this.qteRunner = new QTEChainRunner(chain, {
       source: "player",
       onNodeEffect: (node, outcome, transition) => {
+        if (node.input.type === "hold_release" || node.input.type === "rhythm") {
+          this.playerState.currentState = "charge";
+        }
         if (transition.message) this.setMessage(transition.message);
       },
       onRhythmHit: (idx, diff) => {
@@ -246,20 +506,78 @@ class BattleSystem {
     this.setMessage(`${chain.name} — ${this.qteRunner.currentNodeName()}`);
   }
 
-  triggerDefenseQTE(defenseId) {
-    const defense = DefenseDatabase[defenseId];
-    if (!defense) return;
+  triggerCounterAttack(chainKey) {
+    const chains = this.getEffectiveChains();
+    const chain = chains[chainKey];
+    if (!chain) return;
 
+    this.defenseTriggered = true;
+    this.playerState.currentState = "swordAttack";
     this.turnState = "qte_running";
-    this.qteRunner = new QTEChainRunner(defense, {
-      source: "enemy",
+    this.qteRunner = new QTEChainRunner(chain, {
+      source: "player",
+      context: { counterAttack: true },
+      onNodeEffect: (node, outcome, transition) => {
+        if (transition.message) this.setMessage(transition.message);
+      },
+      onRhythmHit: (idx, diff) => {
+        this.setMessage(`节拍 ${idx + 1} 命中`);
+      }
+    });
+
+    this.setMessage(`反击：${chain.name} — ${this.qteRunner.currentNodeName()}`);
+  }
+
+  triggerFollowUpQTE() {
+    const chains = this.getEffectiveChains();
+    const chain = chains["followUp"];
+    if (!chain) return;
+
+    this.pendingFollowUp = false;
+    this.defenseTriggered = true;
+    this.playerState.currentState = "swordAttack";
+    this.turnState = "qte_running";
+    this.qteRunner = new QTEChainRunner(chain, {
+      source: "player",
+      context: { followUp: true, interruptEnemy: true },
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
       }
     });
 
-    this.setMessage(`${defense.name} — ${this.qteRunner.currentNodeName()}`);
+    this.setMessage(`追加攻击 — ${this.qteRunner.currentNodeName()}`);
   }
+
+  // ========== 战技中断类 ==========
+
+  interruptCastingAndDodge() {
+    this.qteRunner = null;
+    this.playerState.currentState = "idle";
+    this.defenseTriggered = true;
+    this.setMessage("施法中闪避！");
+    this.startResolving(() => this.startPlayerTurn());
+  }
+
+  interruptCastingAndParry() {
+    this.qteRunner = null;
+    this.playerState.currentState = "idle";
+    if (this.enemyAttack && this.enemyAttack.allowedResponses.includes("parry")) {
+      this.triggerDefenseQTE("parry");
+    } else {
+      this.setMessage("当前攻击无法弹反");
+      this.startResolving(() => this.startPlayerTurn());
+    }
+  }
+
+  interruptGuardAndDodge() {
+    this.qteRunner = null;
+    this.playerState.currentState = "idle";
+    this.defenseTriggered = true;
+    this.setMessage("格挡中闪避！");
+    this.startResolving(() => this.startPlayerTurn());
+  }
+
+  // ========== QTE 完成结算 ==========
 
   onQTEComplete() {
     if (this.turnState === "game_over" || this.playerHp <= 0) return;
@@ -271,74 +589,275 @@ class BattleSystem {
     const source = runner.context.source;
 
     if (source === "player") {
-      // 武器 QTE：伤害敌人
-      if (effects.damage > 0) {
-        const actualDamage = Math.floor(effects.damage);
-        this.applyDamage("enemy", actualDamage);
-        this.lastDamageNumber = { value: actualDamage, target: "enemy", time: 1.0 };
-      }
-
-      if (this.enemyHp <= 0) {
-        this.turnState = "game_over";
-        this.setMessage("胜利！");
-        return;
-      }
-
-      // 玩家失衡，直接结束回合
-      if (effects.selfStun > 0) {
-        this.startResolving(() => this.startEnemyTurn());
-        return;
-      }
-
-      // 把敌人打眩晕 → 获得额外回合
-      if (effects.stunEnemy > 0) {
-        this.enemyStunTimer = effects.stunEnemy;
-        this.setMessage(`敌人眩晕 ${effects.stunEnemy.toFixed(1)} 秒，额外回合！`);
-        this.startResolving(() => this.startPlayerTurn());
-        return;
-      }
-
-      // 否则正常结束玩家回合
-      this.startResolving(() => this.startEnemyTurn());
+      this.resolvePlayerQTE(effects, runner.context);
     } else {
-      // 防御 QTE：根据效果处理
-      const attack = this.enemyAttack;
-      let finalDamage = 0;
-
-      if (effects.iframe > 0) {
-        finalDamage = 0;
-      } else if (effects.damageMul !== undefined) {
-        finalDamage = Math.floor(attack.damage * effects.damageMul);
-      }
-
-      if (finalDamage > 0) {
-        this.applyDamage("player", finalDamage);
-        this.setMessage(`未能完全规避，受到 ${finalDamage} 伤害`);
-      } else if (effects.iframe > 0 || effects.damageMul === 0) {
-        this.setMessage("完全规避！");
-      }
-
-      if (effects.damage > 0) {
-        const counterDamage = Math.floor(effects.damage);
-        this.applyDamage("enemy", counterDamage);
-        this.lastDamageNumber = { value: counterDamage, target: "enemy", time: 1.0 };
-      }
-
-      if (effects.stunEnemy > 0) {
-        this.enemyStunTimer = effects.stunEnemy;
-        this.startResolving(() => this.startPlayerTurn());
-        return;
-      }
-
-      if (this.enemyHp <= 0) {
-        this.turnState = "game_over";
-        this.setMessage("胜利！");
-        return;
-      }
-
-      this.startResolving(() => this.startPlayerTurn());
+      this.resolveDefenseQTE(effects);
     }
   }
+
+  resolvePlayerQTE(effects, context) {
+    // 计算最终伤害
+    let damage = effects.damage;
+
+    // 护甲破坏增伤
+    if (this.armorBreakActive) {
+      damage = Math.floor(damage * 1.3);
+    }
+
+    // 烈火重重：剑对防御敌人增伤
+    if (this.hasSpell("fire") && this.playerState.currentState === "swordAttack") {
+      damage = Math.floor(damage * 1.5);
+    }
+
+    // 德斯洛：Perfect 暴击
+    if (this.hasCombatArt("desslo") && effects.perfectHit) {
+      damage = Math.floor(damage * 1.5);
+    }
+
+    // 东方：连续闪避后暴击
+    if (this.hasCombatArt("eastern") && this.playerState.consecutiveDodges >= CombatArtDatabase.eastern.consecutiveDodgeCrit) {
+      damage = Math.floor(damage * 1.5);
+      this.playerState.consecutiveDodges = 0;
+    }
+
+    // 应用伤害
+    if (damage > 0) {
+      this.applyDamage("enemy", damage);
+      this.lastDamageNumber = { value: damage, target: "enemy", time: 1.0 };
+    }
+
+    // 烈火重重：累计破甲
+    if (this.hasSpell("fire") && this.playerState.currentState === "swordAttack") {
+      this.armorBreakHits++;
+      if (this.armorBreakHits >= SpellDatabase.fire.armorBreakHits) {
+        this.armorBreakHits = 0;
+        this.armorBreakTurns = SpellDatabase.fire.armorBreakTurns;
+        this.armorBreakActive = true;
+        this.setMessage("敌人装甲被破坏！");
+      }
+    }
+
+    // 荒芜之地：追加攻击打断
+    if (context && context.followUp && context.interruptEnemy) {
+      this.enemyStunTimer = Math.max(this.enemyStunTimer, 1.5);
+      this.setMessage(CombatArtDatabase.desolo.followUpMessage);
+    }
+
+    // 咒还：剑攻击时吸收准备
+    if (this.hasSpell("absorb") && this.playerState.currentState === "swordAttack") {
+      this.playerState.absorbReady = true;
+    }
+
+    // 东方：出剑后格挡化解窗口
+    if (this.hasCombatArt("eastern") && this.playerState.currentState === "swordAttack") {
+      this.playerState.lastAttackTime = performance.now() / 1000;
+    }
+
+    if (this.enemyHp <= 0) {
+      this.turnState = "game_over";
+      this.setMessage("胜利！");
+      return;
+    }
+
+    if (effects.selfStun > 0) {
+      this.startResolving(() => this.startEnemyTurn());
+      return;
+    }
+
+    if (effects.stunEnemy > 0) {
+      this.enemyStunTimer = effects.stunEnemy;
+      this.setMessage(`敌人眩晕 ${effects.stunEnemy.toFixed(1)} 秒，额外回合！`);
+      this.startResolving(() => this.startPlayerTurn());
+      return;
+    }
+
+    // 荒芜之地：攻击后触发追加攻击机会
+    if (this.hasCombatArt("desolo") && this.playerState.currentState === "swordAttack" && !context.followUp) {
+      this.pendingFollowUp = true;
+      this.setMessage("可追加攻击！按 A 发动");
+      this.turnState = "player_turn";
+      this.qteRunner = null;
+      return;
+    }
+
+    this.startResolving(() => this.startEnemyTurn());
+  }
+
+  resolveDefenseQTE(effects) {
+    const attack = this.enemyAttack;
+    let finalDamage = 0;
+
+    if (effects.iframe > 0) {
+      finalDamage = 0;
+      this.playerState.consecutiveDodges++;
+    } else if (effects.damageMul !== undefined) {
+      finalDamage = Math.floor(attack.damage * effects.damageMul);
+      this.playerState.consecutiveDodges = 0;
+    } else {
+      this.playerState.consecutiveDodges = 0;
+    }
+
+    if (finalDamage > 0) {
+      this.applyDamage("player", finalDamage);
+      this.setMessage(`未能完全规避，受到 ${finalDamage} 伤害`);
+    } else if (effects.iframe > 0 || effects.damageMul === 0) {
+      this.setMessage("完全规避！");
+    }
+
+    // 反击伤害
+    if (effects.damage > 0) {
+      let counterDamage = effects.damage;
+      if (this.hasSpell("fire")) {
+        counterDamage += SpellDatabase.fire.shieldThornDamage;
+      }
+      this.applyDamage("enemy", Math.floor(counterDamage));
+      this.lastDamageNumber = { value: Math.floor(counterDamage), target: "enemy", time: 1.0 };
+    }
+
+    // 咒还：吸收法术攻击
+    if (this.hasSpell("absorb") && attack.id === "spellCast") {
+      const absorbAmount = attack.damage * 2;
+      this.addSpellEnergy(absorbAmount);
+      this.setMessage(`咒还吸收！获得 ${Math.floor(absorbAmount)} 法术能量`);
+
+      // 盾：完美格挡/弹反反射魔法
+      if (effects.damageMul === 0) {
+        const reflect = Math.floor(attack.damage * SpellDatabase.absorb.shieldReflectMul);
+        if (reflect > 0) {
+          this.applyDamage("enemy", reflect);
+          this.setMessage(`咒还反射！敌人受到 ${reflect} 伤害`);
+        }
+        this.playerState.shieldEnchanted = true;
+      }
+    }
+
+    if (effects.stunEnemy > 0) {
+      this.enemyStunTimer = effects.stunEnemy;
+      this.startResolving(() => this.startPlayerTurn());
+      return;
+    }
+
+    if (this.enemyHp <= 0) {
+      this.turnState = "game_over";
+      this.setMessage("胜利！");
+      return;
+    }
+
+    this.startResolving(() => this.startPlayerTurn());
+  }
+
+  // ========== 普通攻击与回合切换 ==========
+
+  performNormalAttack() {
+    const weapon = WeaponDatabase[this.playerConfig.weapon];
+    if (!weapon) return;
+
+    let damage = weapon.normalAttack || 10;
+
+    // 护甲破坏增伤
+    if (this.armorBreakActive) {
+      damage = Math.floor(damage * 1.3);
+    }
+
+    // 东方：连续闪避后暴击
+    if (this.hasCombatArt("eastern") && this.playerState.consecutiveDodges >= CombatArtDatabase.eastern.consecutiveDodgeCrit) {
+      damage = Math.floor(damage * 1.5);
+      this.playerState.consecutiveDodges = 0;
+    }
+
+    this.applyDamage("enemy", damage);
+    this.lastDamageNumber = { value: damage, target: "enemy", time: 1.0 };
+    this.setMessage(`${weapon.name} 普通攻击，造成 ${damage} 伤害`);
+
+    if (this.enemyHp <= 0) {
+      this.turnState = "game_over";
+      this.setMessage("胜利！");
+      return;
+    }
+
+    this.startResolving(() => this.startEnemyTurn());
+  }
+
+  startEnemyTurn() {
+    this.turnState = "enemy_turn";
+    this.actionBar = 0;
+    this.defenseTriggered = false;
+    this.pendingFollowUp = false;
+    this.playerState.currentState = "idle";
+
+    // 护甲破坏回合衰减
+    if (this.armorBreakActive) {
+      this.armorBreakTurns--;
+      if (this.armorBreakTurns <= 0) {
+        this.armorBreakActive = false;
+      }
+    }
+
+    const attackIds = EnemyDatabase.base.attacks;
+    const attackId = attackIds[Math.floor(Math.random() * attackIds.length)];
+    this.enemyAttack = { id: attackId, ...EnemyDatabase.attacks[attackId] };
+    this.enemyAttackTimer = 0;
+    this.enemyAttackPhase = "windup";
+
+    this.setMessage(`敌人准备：${this.enemyAttack.name}`);
+  }
+
+  startPlayerTurn() {
+    this.turnState = "player_turn";
+    this.actionBar = 0;
+    this.enemyAttack = null;
+    this.enemyAttackPhase = "none";
+    this.defenseTriggered = false;
+    this.qteRunner = null;
+    this.pendingFollowUp = false;
+    this.playerState.currentState = "idle";
+
+    const weapon = WeaponDatabase[this.playerConfig.weapon];
+    const chains = this.getEffectiveChains();
+    const chainNames = Object.entries(chains)
+      .map(([key, chain]) => `[${key}]${chain.name}`)
+      .join(" ");
+
+    const spellNames = this.playerConfig.spells.map(id => SpellDatabase[id].name).join(",") || "无";
+    const artNames = this.playerConfig.combatArts.map(id => CombatArtDatabase[id].name).join(",") || "无";
+
+    this.setMessage(`${weapon.name} 就绪 — ${chainNames} / 咒术:${spellNames} / 战技:${artNames}`);
+  }
+
+  startResolving(callback) {
+    if (this.turnState === "game_over") {
+      if (callback) callback();
+      return;
+    }
+    this.turnState = "resolving";
+    this.resolveTimer = this.resolveDuration;
+    this.resolveCallback = callback;
+    this.qteRunner = null;
+    this.playerState.currentState = "idle";
+  }
+
+  updateResolving(dt) {
+    this.resolveTimer -= dt;
+    if (this.resolveTimer <= 0) {
+      this.resolveTimer = 0;
+      if (this.resolveCallback) {
+        const cb = this.resolveCallback;
+        this.resolveCallback = null;
+        cb();
+      }
+    }
+  }
+
+  addSpellEnergy(amount) {
+    if (this.hasSpell("absorb")) {
+      const maxOverflow = this.playerState.maxSpellEnergy * SpellDatabase.absorb.staffOverflowMul;
+      this.playerState.spellEnergy = Math.min(this.playerState.spellEnergy + amount, maxOverflow);
+    } else {
+      this.playerState.spellEnergy = Math.min(this.playerState.spellEnergy + amount, this.playerState.maxSpellEnergy);
+    }
+  }
+
+  // ========== 伤害与效果 ==========
 
   applyDamage(target, amount) {
     if (amount <= 0) return;
@@ -358,84 +877,58 @@ class BattleSystem {
     }
   }
 
-  performNormalAttack() {
-    const weapon = WeaponDatabase[this.currentWeapon];
-    if (!weapon) return;
+  // ========== 辅助方法 ==========
 
-    const damage = weapon.normalAttack || 10;
-    this.applyDamage("enemy", damage);
-    this.lastDamageNumber = { value: damage, target: "enemy", time: 1.0 };
-    this.setMessage(`${weapon.name} 普通攻击，造成 ${damage} 伤害`);
-
-    if (this.enemyHp <= 0) {
-      this.turnState = "game_over";
-      this.setMessage("胜利！");
-      return;
-    }
-
-    this.startResolving(() => this.startEnemyTurn());
+  hasSpell(id) {
+    return this.playerConfig.spells.includes(id);
   }
 
-  startEnemyTurn() {
-    this.turnState = "enemy_turn";
-    this.actionBar = 0;
-    this.defenseTriggered = false;
-
-    const attackIds = EnemyDatabase.base.attacks;
-    const attackId = attackIds[Math.floor(Math.random() * attackIds.length)];
-    this.enemyAttack = { id: attackId, ...EnemyDatabase.attacks[attackId] };
-    this.enemyAttackTimer = 0;
-    this.enemyAttackPhase = "windup";
-
-    this.setMessage(`敌人准备：${this.enemyAttack.name}`);
+  hasCombatArt(id) {
+    return this.playerConfig.combatArts.includes(id);
   }
 
-  startPlayerTurn() {
-    this.turnState = "player_turn";
-    this.actionBar = 0;
-    this.enemyAttack = null;
-    this.enemyAttackPhase = "none";
-    this.defenseTriggered = false;
-    this.qteRunner = null;
-
-    const weapon = WeaponDatabase[this.currentWeapon];
-    if (weapon) {
-      const chainNames = Object.entries(weapon.chains)
-        .map(([key, chain]) => `[${key}]${chain.name}`)
-        .join(" ");
-      this.setMessage(`${weapon.name} 就绪 — ${chainNames} / 等待普通攻击`);
-    } else {
-      this.setMessage("玩家回合");
-    }
+  hasAttackAnytime() {
+    return this.playerConfig.combatArts.some(id => CombatArtDatabase[id].attackAnytime);
   }
 
-  startResolving(callback) {
-    if (this.turnState === "game_over") {
-      if (callback) callback();
-      return;
+  isSwordChain(chainKey) {
+    const weapon = this.playerConfig.weapon;
+    if (!weapon) return false;
+    // 大剑和双刀的攻击链视为剑攻击
+    return (weapon === "greatsword" || weapon === "dualBlades") && ["A", "S", "D"].includes(chainKey);
+  }
+
+  triggerDefenseQTE(defenseId) {
+    let defense = DefenseDatabase[defenseId];
+    if (!defense) return;
+
+    // 东方剑术：格挡窗口额外放宽
+    if (this.hasCombatArt("eastern")) {
+      defense = JSON.parse(JSON.stringify(defense));
+      for (const node of defense.nodes) {
+        if (node.window) {
+          node.window = {
+            start: Math.max(0, node.window.start - CombatArtDatabase.eastern.guardWindowBonus),
+            end: node.window.end + CombatArtDatabase.eastern.guardWindowBonus
+          };
+        }
+      }
     }
-    this.turnState = "resolving";
-    this.resolveTimer = this.resolveDuration;
-    this.resolveCallback = callback;
-    this.qteRunner = null;
+
+    this.playerState.currentState = "shield";
+    this.turnState = "qte_running";
+    this.qteRunner = new QTEChainRunner(defense, {
+      source: "enemy",
+      onNodeEffect: (node, outcome, transition) => {
+        if (transition.message) this.setMessage(transition.message);
+      }
+    });
+
+    this.setMessage(`${defense.name} — ${this.qteRunner.currentNodeName()}`);
   }
 
   setMessage(text) {
     this.message = text;
     this.messageTimer = 0;
-  }
-
-  flashMessage(text, duration = 1.5) {
-    this.flashMessage = text;
-    this.messageTimer = duration;
-    this.message = text;
-  }
-
-  getCurrentWeaponName() {
-    return WeaponDatabase[this.currentWeapon]?.name || "";
-  }
-
-  getCurrentWeaponKey() {
-    return WeaponDatabase[this.currentWeapon]?.key || "";
   }
 }

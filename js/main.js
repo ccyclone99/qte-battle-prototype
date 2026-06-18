@@ -24,7 +24,9 @@ function updateUI() {
   enemyHpText.textContent = `${battle.enemyHp}/${battle.enemyMaxHp}`;
 
   let turnText = "";
-  if (battle.turnState === "weapon_select") turnText = "选择武器";
+  if (battle.turnState === "select_weapon") turnText = "选择武器";
+  else if (battle.turnState === "select_spells") turnText = "选择咒术";
+  else if (battle.turnState === "select_arts") turnText = "选择战技";
   else if (battle.turnState === "player_turn") turnText = "玩家回合";
   else if (battle.turnState === "enemy_turn") turnText = "敌方回合";
   else if (battle.turnState === "qte_running") turnText = "QTE 进行中";

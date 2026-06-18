@@ -236,6 +236,7 @@ class QTEChainRunner {
 
     for (const entry of this.resultLog) {
       const t = entry.transition;
+      if (entry.outcome === "perfect") effects.perfectHit = true;
       if (t.chargeMul !== undefined) currentMul *= t.chargeMul;
       if (t.damage !== undefined) effects.damage += Math.floor(t.damage * currentMul);
       if (t.selfStun !== undefined) effects.selfStun = Math.max(effects.selfStun, t.selfStun);
