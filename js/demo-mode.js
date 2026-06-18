@@ -577,19 +577,19 @@ class DemoMode {
     });
 
     if (this.manualMode) {
-      this.qteRunner.forcedDelay = 0;
+      this.qteRunner.timeScale = 1;
       this.qteRunner.postNodePause = 0;
       this.message = `${item.name} — 手动试玩：请在判定窗口内按键`;
     } else {
-      // 自动演示：放慢节奏，节点间稍作停顿
-      this.qteRunner.forcedDelay = 0.55;
-      this.qteRunner.postNodePause = 0.25;
+      // 自动演示：时间放慢到 0.45 倍，节点结算后停顿 0.6s
+      this.qteRunner.timeScale = 0.45;
+      this.qteRunner.postNodePause = 0.6;
       if (item.forceOutcome) {
         this.qteRunner.forceOutcome(item.forceOutcome);
       } else {
         this.qteRunner.forceOutcome("perfect");
       }
-      this.message = `${item.name} — 自动演示中`;
+      this.message = `${item.name} — 自动演示中（慢放）`;
     }
   }
 

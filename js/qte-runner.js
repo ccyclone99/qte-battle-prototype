@@ -17,10 +17,11 @@ class QTEChainRunner {
     // 当前节点是否已经结算过（防止一帧多次判定）
     this.resolvedThisFrame = false;
 
-    // 演示模式强制结果
+    // 演示模式强制结果与时间缩放
     this.forcedOutcome = null;
     this.forcedDelay = 0.18;
     this.postNodePause = 0;
+    this.timeScale = 1;
 
     const firstNode = this.currentNode();
     if (firstNode && firstNode.input.type === "rhythm") {
@@ -83,7 +84,14 @@ class QTEChainRunner {
       return;
     }
 
-    this.nodeTimer += dt;
+    this.nodeTimer += dt * this.timeScale;
+
+    // 节点间停顿（自动演示用）
+    if (this.nodeTimer < 0) {
+      this.nodeTimer += dt * this.timeScale;
+      if (this.nodeTimer < 0) return;
+      this.nodeTimer = 0;
+    }
 
     // 节奏节点需要特殊处理 miss
     if (node.input.type === "rhythm") {
@@ -96,10 +104,31 @@ class QTEChainRunner {
       this.resolveNode("timeout");
     }
 
-    // 演示/自动模式：强制结果（持续到链结束）
-    if (this.forcedOutcome && this.nodeTimer > 0.18) {
-      this.resolveNode(this.forcedOutcome);
+    // 演示/自动模式：强制结果，按 outcome 选择合适的时间点结算
+    if (this.forcedOutcome && this.nodeTimer >= this.computeAutoResolveTime(node)) {
+      const outcome = this.forcedOutcome;
+      this.forcedOutcome = null;
+      this.resolveNode(outcome);
     }
+  }
+
+  computeAutoResolveTime(node) {
+    const win = this.getEffectiveWindow(node);
+    const outcome = this.forcedOutcome;
+    if (!outcome) return 0.18;
+    if (outcome === "perfect" && win.perfect !== null && win.perfect !== undefined) {
+      return Math.min(node.duration - 0.05, win.perfect + 0.08);
+    }
+    if (outcome === "success") {
+      return Math.min(node.duration - 0.05, (win.start + win.end) / 2);
+    }
+    if (outcome === "early") {
+      return Math.max(0.05, win.start - 0.05);
+    }
+    if (outcome === "fail" || outcome === "late") {
+      return Math.min(node.duration + 0.25, node.duration + 0.25);
+    }
+    return 0.18;
   }
 
   updateRhythm(node) {
