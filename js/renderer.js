@@ -272,9 +272,9 @@ class CanvasRenderer {
     ctx.textBaseline = "top";
     ctx.fillText("选择你的武器", this.width / 2, 80);
 
-    const cardW = 200;
-    const cardH = 250;
-    const gap = 30;
+    const cardW = 150;
+    const cardH = 210;
+    const gap = 24;
     const totalW = cardW * 3 + gap * 2;
     const startX = (this.width - totalW) / 2;
     const y = 150;
@@ -298,34 +298,34 @@ class CanvasRenderer {
       ctx.font = "bold 28px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(`[${weapon.key}]`, x + cardW / 2, y + 16);
+      ctx.fillText(`[${weapon.key}]`, x + cardW / 2, y + 14);
 
       // 图标
       ctx.fillStyle = weapon.color;
-      ctx.font = "bold 56px sans-serif";
+      ctx.font = "bold 44px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(weapon.icon || weapon.name[0], x + cardW / 2, y + 78);
+      ctx.fillText(weapon.icon || weapon.name[0], x + cardW / 2, y + 62);
 
       // 武器名
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 22px sans-serif";
+      ctx.font = "bold 18px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(weapon.name, x + cardW / 2, y + 130);
+      ctx.fillText(weapon.name, x + cardW / 2, y + 102);
 
       // 描述
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "13px sans-serif";
+      ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const words = weapon.description || "";
-      ctx.fillText(words, x + cardW / 2, y + 160);
+      ctx.fillText(words, x + cardW / 2, y + 128);
 
       // 链列表
       ctx.fillStyle = "#cccccc";
-      ctx.font = "12px sans-serif";
-      let chainY = y + 188;
+      ctx.font = "11px sans-serif";
+      let chainY = y + 152;
       for (const [ckey, chain] of Object.entries(weapon.chains)) {
         ctx.fillText(`${ckey}: ${chain.name}`, x + cardW / 2, chainY);
         chainY += 20;
@@ -417,12 +417,12 @@ class CanvasRenderer {
     ctx.textBaseline = "top";
     ctx.fillText(config.title, this.width / 2, 70);
 
-    const cardW = 260;
-    const cardH = 320;
-    const gap = 30;
+    const cardW = 180;
+    const cardH = 270;
+    const gap = 20;
     const totalW = cardW * config.options.length + gap * (config.options.length - 1);
     const startX = (this.width - totalW) / 2;
-    const y = 140;
+    const y = 150;
 
     config.options.forEach((opt, idx) => {
       const x = startX + idx * (cardW + gap);
@@ -439,35 +439,35 @@ class CanvasRenderer {
       ctx.font = "bold 22px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(`[${opt.key}]`, x + cardW / 2, y + 15);
+      ctx.fillText(`[${opt.key}]`, x + cardW / 2, y + 12);
 
-      ctx.font = "bold 56px sans-serif";
+      ctx.font = "bold 44px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(opt.icon, x + cardW / 2, y + 90);
+      ctx.fillText(opt.icon, x + cardW / 2, y + 72);
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 22px sans-serif";
+      ctx.font = "bold 18px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(opt.name, x + cardW / 2, y + 145);
+      ctx.fillText(opt.name, x + cardW / 2, y + 118);
 
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "13px sans-serif";
-      this.wrapText(ctx, opt.description, x + cardW / 2, y + 185, cardW - 30, 20);
+      ctx.font = "12px sans-serif";
+      this.wrapText(ctx, opt.description, x + cardW / 2, y + 150, cardW - 24, 18);
 
       if (opt.selected) {
         ctx.fillStyle = opt.color;
-        ctx.font = "bold 16px sans-serif";
-        ctx.fillText("✓ 已选择", x + cardW / 2, y + cardH - 30);
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("✓ 已选择", x + cardW / 2, y + cardH - 24);
       }
     });
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px sans-serif";
+    ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(config.confirmHint, this.width / 2, y + cardH + 25);
+    ctx.fillText(config.confirmHint, this.width / 2, y + cardH + 20);
   }
 
   wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -876,12 +876,12 @@ class CanvasRenderer {
     ctx.fillText(`敌人 HP: ${scene.enemyHp}/${scene.enemyMaxHp}  |  效果会实时扣减 HP 条`, infoX, infoY + 44);
 
     const categories = scene.categories;
-    const cardW = 200;
-    const cardH = 130;
-    const gap = 30;
+    const cardW = 160;
+    const cardH = 120;
+    const gap = 24;
     const totalW = cardW * categories.length + gap * (categories.length - 1);
     const startX = (this.width - totalW) / 2;
-    const y = 195;
+    const y = 190;
 
     categories.forEach((cat, idx) => {
       const x = startX + idx * (cardW + gap);
@@ -936,9 +936,9 @@ class CanvasRenderer {
     ctx.fillText(`当前武器: ${weapon ? weapon.name : "无"}  |  共 ${totalItems} 项效果  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 90);
 
     const cols = 3;
-    const cardW = 280;
-    const cardH = 88;
-    const gapX = 20;
+    const cardW = 220;
+    const cardH = 80;
+    const gapX = 16;
     const gapY = 12;
     const totalW = cardW * cols + gapX * (cols - 1);
     const startX = Math.floor((this.width - totalW) / 2);
@@ -1015,7 +1015,7 @@ class CanvasRenderer {
     // 特效状态指示器
     let fxY = infoY;
     ctx.textAlign = "right";
-    const fxX = this.width - 80;
+    const fxX = 220;
     if (scene.playerState.shieldEnchanted) {
       ctx.fillStyle = "#9b59b6";
       ctx.fillText("盾牌附魔", fxX, fxY);
