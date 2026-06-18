@@ -84,13 +84,13 @@ class QTEChainRunner {
       return;
     }
 
-    this.nodeTimer += dt * this.timeScale;
-
     // 节点间停顿（自动演示用）
     if (this.nodeTimer < 0) {
       this.nodeTimer += dt * this.timeScale;
       if (this.nodeTimer < 0) return;
       this.nodeTimer = 0;
+    } else {
+      this.nodeTimer += dt * this.timeScale;
     }
 
     // 节奏节点需要特殊处理 miss
@@ -106,9 +106,7 @@ class QTEChainRunner {
 
     // 演示/自动模式：强制结果，按 outcome 选择合适的时间点结算
     if (this.forcedOutcome && this.nodeTimer >= this.computeAutoResolveTime(node)) {
-      const outcome = this.forcedOutcome;
-      this.forcedOutcome = null;
-      this.resolveNode(outcome);
+      this.resolveNode(this.forcedOutcome);
     }
   }
 
@@ -132,9 +130,8 @@ class QTEChainRunner {
   }
 
   updateRhythm(node) {
-    // 演示/自动模式：强制结果
-    if (this.forcedOutcome && this.nodeTimer > 0.18) {
-      this.resolveNode(this.forcedOutcome);
+    if (this.forcedOutcome) {
+      this.updateForcedRhythm(node);
       return;
     }
 
@@ -168,6 +165,38 @@ class QTEChainRunner {
     }
   }
 
+  updateForcedRhythm(node) {
+    const beats = node.input.beats;
+    const tolerance = (node.rhythmTolerance || 0.15) + 0.04;
+    const outcome = this.forcedOutcome;
+
+    if (outcome === "fail" || outcome === "early" || outcome === "late") {
+      const firstBeat = beats[0] || 0.2;
+      if (this.nodeTimer >= firstBeat + tolerance) {
+        this.rhythmState.missCount = beats.length;
+        this.rhythmState.beatIndex = beats.length;
+        this.resolveNode("fail");
+      }
+      return;
+    }
+
+    while (this.rhythmState.beatIndex < beats.length) {
+      const idx = this.rhythmState.beatIndex;
+      const beatTime = beats[idx];
+      if (this.nodeTimer >= beatTime) {
+        this.rhythmState.hitCount++;
+        this.rhythmState.beatIndex++;
+        this.context.onRhythmHit && this.context.onRhythmHit(idx, 0);
+      } else {
+        break;
+      }
+    }
+
+    if (this.rhythmState.beatIndex >= beats.length) {
+      this.resolveNode(outcome === "success" ? "success" : "perfect");
+    }
+  }
+
   handleInput(event, heldKeys) {
     if (this.state !== "running") return;
     if (this.resolvedThisFrame) return;
@@ -178,9 +207,7 @@ class QTEChainRunner {
     // 演示/自动模式：强制结果
     if (this.forcedOutcome) {
       if (node.input.type === "rhythm" || Utils.inputMatches(node.input, event)) {
-        const outcome = this.forcedOutcome;
-        this.forcedOutcome = null;
-        this.resolveNode(outcome);
+        this.resolveNode(this.forcedOutcome);
       }
       return;
     }

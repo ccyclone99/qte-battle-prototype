@@ -41,6 +41,141 @@ body {
   pointer-events: none;
 }
 
+.demo-ui-layer {
+  position: absolute;
+  inset: 0;
+  display: none;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.demo-panel {
+  position: absolute;
+  background: rgba(9, 10, 16, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+.demo-status-panel {
+  top: 14px;
+  left: 14px;
+  width: 330px;
+}
+
+.demo-detail-panel {
+  top: 132px;
+  left: 14px;
+  width: 330px;
+  max-height: 390px;
+}
+
+.demo-inspector-panel {
+  top: 104px;
+  right: 14px;
+  width: 348px;
+  max-height: 310px;
+}
+
+.demo-result-panel {
+  right: 14px;
+  bottom: 170px;
+  width: 348px;
+  max-height: 176px;
+}
+
+.demo-ui-layer[data-demo-state="main"] .demo-detail-panel,
+.demo-ui-layer[data-demo-state="main"] .demo-inspector-panel,
+.demo-ui-layer[data-demo-state="main"] .demo-result-panel,
+.demo-ui-layer[data-demo-state="main"] .demo-controls-panel,
+.demo-ui-layer[data-demo-state="list"] .demo-detail-panel,
+.demo-ui-layer[data-demo-state="list"] .demo-inspector-panel,
+.demo-ui-layer[data-demo-state="list"] .demo-result-panel,
+.demo-ui-layer[data-demo-state="list"] .demo-controls-panel,
+.demo-ui-layer[data-demo-state="qte"] .demo-result-panel {
+  display: none;
+}
+
+.demo-controls-panel {
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  min-width: 560px;
+  max-width: 900px;
+  padding: 9px 18px;
+  text-align: center;
+}
+
+.demo-kicker {
+  color: #7eb6ff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-bottom: 4px;
+}
+
+.demo-title {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 5px;
+}
+
+.demo-section-title {
+  color: #f1c40f;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+
+.demo-item-title {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-bottom: 7px;
+  overflow-wrap: anywhere;
+}
+
+.demo-line,
+.demo-lines div,
+#demo-controls-text {
+  color: #cbd2df;
+  font-size: 12px;
+  line-height: 1.48;
+  overflow-wrap: anywhere;
+}
+
+.demo-line + .demo-line {
+  margin-top: 3px;
+}
+
+.demo-lines {
+  max-height: inherit;
+  overflow: hidden;
+}
+
+.demo-lines div {
+  margin-bottom: 4px;
+}
+
+.demo-lines div:first-child {
+  color: #ffffff;
+}
+
+.demo-result-panel .demo-lines div {
+  color: #e9edf6;
+}
+
+#demo-controls-text {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .panel {
   position: absolute;
   background: rgba(10, 10, 16, 0.88);

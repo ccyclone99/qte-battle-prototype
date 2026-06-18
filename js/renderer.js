@@ -234,6 +234,8 @@ class CanvasRenderer {
   drawHUD(scene) {
     const ctx = this.ctx;
 
+    if (scene.turnState && scene.turnState.startsWith("demo_")) return;
+
     // 当前状态提示（大字体，选择界面由选择画面自己渲染）
     if (!scene.turnState.startsWith("select_")) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
@@ -947,7 +949,6 @@ class CanvasRenderer {
       ctx.font = "15px sans-serif";
       ctx.fillText(modeText, this.width / 2, 82);
 
-      this.drawDemoInspector(scene);
       this.drawDemoQTEBar(scene);
     }
   }
@@ -979,8 +980,8 @@ class CanvasRenderer {
     ctx.fillText(`难度：${Difficulty.get().name}（按 6 切换） | 敌人 HP：${scene.enemyHp}/${scene.enemyMaxHp}`, this.width / 2, infoY + 26);
 
     const categories = scene.categories;
-    const cardW = 220;
-    const cardH = 150;
+    const cardW = 210;
+    const cardH = 118;
     const gap = 30;
     const row1Count = 2;
     const row2Count = 2;
@@ -988,7 +989,7 @@ class CanvasRenderer {
     const row2W = cardW * row2Count + gap * (row2Count - 1);
     const row1X = (this.width - row1W) / 2;
     const row2X = (this.width - row2W) / 2;
-    const row1Y = 175;
+    const row1Y = 160;
     const row2Y = row1Y + cardH + gap;
 
     categories.forEach((cat, idx) => {
@@ -1006,24 +1007,24 @@ class CanvasRenderer {
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 40px sans-serif";
+      ctx.font = "bold 34px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(cat.icon, x + cardW / 2, y + 48);
+      ctx.fillText(cat.icon, x + cardW / 2, y + 38);
 
-      ctx.font = "bold 22px sans-serif";
-      ctx.fillText(cat.name, x + cardW / 2, y + 102);
+      ctx.font = "bold 20px sans-serif";
+      ctx.fillText(cat.name, x + cardW / 2, y + 78);
 
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "14px sans-serif";
-      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 130);
+      ctx.font = "13px sans-serif";
+      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 102);
     });
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
-    ctx.fillText(`按 1-4 选择分类 | W 切换风格 | M 切换${modeText} | 6 切换难度 | ESC 返回`, this.width / 2, this.height - 55);
+    ctx.fillText(`当前：${modeText} | 1-4 选择分类 | W 切换风格 | M 切换模式 | 6 切换难度 | ESC 返回`, this.width / 2, this.height - 55);
   }
 
   drawDemoList(scene) {
@@ -1090,7 +1091,7 @@ class CanvasRenderer {
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`按 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换${modeText} | ESC 返回`, this.width / 2, this.height - 50);
+    ctx.fillText(`当前：${modeText} | 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换模式 | ESC 返回`, this.width / 2, this.height - 50);
   }
 
   drawDemoPreview(scene) {
@@ -1136,15 +1137,6 @@ class CanvasRenderer {
       ctx.fillText(`法术能量：${Math.floor(scene.playerState.spellEnergy)}`, infoX, infoY + 130);
     }
 
-    // 右侧详情
-    this.drawDemoDetails(scene, this.width - 400, 200, 340, 280);
-
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#aaaaaa";
-    ctx.font = "bold 16px sans-serif";
-    const pulse = 1 + Math.sin(performance.now() / 500) * 0.3;
-    ctx.globalAlpha = 0.6 + pulse * 0.4;
-    ctx.fillText("按任意键继续", this.width / 2, this.height - 45);
     ctx.globalAlpha = 1;
   }
 
@@ -1152,9 +1144,9 @@ class CanvasRenderer {
     const ctx = this.ctx;
     const lines = scene.getQTEInspectorLines();
     const x = this.width - 390;
-    const y = 70;
+    const y = 100;
     const w = 350;
-    const h = 230;
+    const h = 270;
 
     ctx.save();
     ctx.fillStyle = "rgba(10, 10, 16, 0.9)";
@@ -1174,9 +1166,9 @@ class CanvasRenderer {
     let lineY = y + 38;
     ctx.fillStyle = "#d8d8e8";
     ctx.font = "13px sans-serif";
-    for (const line of lines.slice(0, 8)) {
+    for (const line of lines.slice(0, 10)) {
       ctx.fillText(this.truncateText(ctx, line, w - 28), x + 14, lineY);
-      lineY += 20;
+      lineY += 21;
     }
     ctx.restore();
   }

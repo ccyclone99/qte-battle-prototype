@@ -14,6 +14,7 @@ class DemoMode {
     this.detailLines = [];
     this.resultLines = [];
     this.currentItem = null;
+    this.currentCategoryName = "";
     this.listPage = 0;
     this.pageSize = 6;
 
@@ -52,10 +53,10 @@ class DemoMode {
     this.actionBarMax = 5;
 
     this.categories = [
-      { key: "weapons", name: "风格链", icon: "⚔" },
-      { key: "spells", name: "咒术", icon: "🔥" },
-      { key: "arts", name: "战技", icon: "🗡" },
-      { key: "defenses", name: "防御反击", icon: "🛡" }
+      { key: "weapons", name: "风格链", icon: "⚔", description: "展示当前风格武器的 QTE 链、输入节点和伤害分支。" },
+      { key: "spells", name: "咒术", icon: "🔥", description: "展示蓄力、反伤、破甲、咒还吸收和能量过载。" },
+      { key: "arts", name: "战技", icon: "🗡", description: "展示反击、必暴、闪避取消、追加攻击和打断。" },
+      { key: "defenses", name: "防御反击", icon: "🛡", description: "展示闪避、格挡、弹反等敌方回合应对链路。" }
     ];
   }
 
@@ -148,6 +149,7 @@ class DemoMode {
         this.input.consume();
         this.state = "list";
         this.resetHP();
+        this.input.clear();
         this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
         return;
       }
@@ -155,6 +157,7 @@ class DemoMode {
       this.input.consume();
       this.state = "list";
       this.resetHP();
+      this.input.clear();
       this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
       return;
     }
@@ -276,6 +279,10 @@ class DemoMode {
     this.listPage = Utils.clamp(this.listPage, 0, totalPages - 1);
     const start = this.listPage * this.pageSize;
     return items.slice(start, start + this.pageSize);
+  }
+
+  currentStyle() {
+    return this.playerConfig.style ? StyleDatabase[this.playerConfig.style] : null;
   }
 
   // ========== 演示项构造 ==========
@@ -540,6 +547,7 @@ class DemoMode {
 
   playItem(item) {
     this.currentItem = item;
+    this.currentCategoryName = this.getCategoryName();
     this.previewTitle = item.name;
     this.previewText = item.preview || item.description;
     this.previewTimer = 3.0;
@@ -551,6 +559,7 @@ class DemoMode {
       const msg = item.action();
       if (msg) this.log(msg);
       this.resultLines = this.buildActionResultLines(item, msg);
+      this.input.clear();
       this.state = "preview";
       this.message = `${item.name} — 按任意键返回列表`;
       return;
@@ -564,6 +573,7 @@ class DemoMode {
   startQTE(item) {
     this.state = "qte";
     this.currentItem = item;
+    this.input.clear();
     const scaled = Difficulty.scaleChain(item.chain);
     this.qteRunner = new QTEChainRunner(scaled, {
       source: item.source || "player",
@@ -601,20 +611,20 @@ class DemoMode {
       return;
     }
 
-    // 手动试玩：消费输入交给 QTE Runner
-    if (this.manualMode) {
-      while (true) {
-        const ev = this.input.peek();
-        if (!ev) break;
-        if (ev.type === "press" && ev.key.toUpperCase() === "ESCAPE") {
-          this.input.consume();
-          this.qteRunner = null;
-          this.state = "list";
-          this.resetHP();
-          this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
-          return;
-        }
+    while (true) {
+      const ev = this.input.peek();
+      if (!ev) break;
+      if (ev.type === "press" && ev.key.toUpperCase() === "ESCAPE") {
         this.input.consume();
+        this.qteRunner = null;
+        this.state = "list";
+        this.resetHP();
+        this.input.clear();
+        this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
+        return;
+      }
+      this.input.consume();
+      if (this.manualMode) {
         this.qteRunner.handleInput(ev, this.input.heldKeys);
       }
     }
@@ -680,7 +690,7 @@ class DemoMode {
       this.log("敌方回合发动反击");
     }
 
-    this.resultLines = this.buildQTEResultLines(effects, ctx, dealtDamage, isCrit);
+    this.resultLines = this.buildQTEResultLines(effects, ctx, dealtDamage, isCrit, runner.resultLog);
     // 检查敌人是否死亡
     if (this.enemyHp <= 0) {
       this.spawnFloatingText("击败！", ex, ey - 100, "crit");
@@ -693,6 +703,7 @@ class DemoMode {
     }
 
     this.qteRunner = null;
+    this.input.clear();
     this.state = "preview";
     this.previewTimer = 4.0;
     this.message = `${this.previewTitle} — 按任意键返回列表`;
@@ -728,15 +739,24 @@ class DemoMode {
 
   buildItemDetailLines(item) {
     const lines = [];
+    const style = this.currentStyle();
+
+    if (style) {
+      const loadout = this.describeLoadout();
+      lines.push(`风格：${style.name}${loadout ? `（${loadout}）` : ""}`);
+    }
+
+    lines.push(`分类：${this.currentCategoryName || this.getCategoryName() || "未分类"}`);
+    lines.push(`模式：${this.manualMode ? "手动试玩" : "自动慢放"}`);
 
     if (item.description) {
-      lines.push(`说明：${item.description}`);
+      lines.push(`机制：${item.description}`);
     }
 
     if (item.chain) {
       const nodes = item.chain.nodes || [];
-      lines.push(`链路：${item.chain.name}，${nodes.length} 个节点`);
-      lines.push(`输入：${nodes.map(node => this.describeNodeInput(node)).join(" -> ")}`);
+      lines.push(`链路：${item.chain.name} / ${nodes.length} 个节点`);
+      lines.push(`输入流程：${nodes.map(node => this.describeNodeInput(node)).join(" -> ")}`);
 
       const successDamage = this.estimateChainDamage(item.chain, "success");
       const perfectDamage = this.estimateChainDamage(item.chain, "perfect");
@@ -749,7 +769,9 @@ class DemoMode {
         lines.push(`附加效果：${status}`);
       }
 
-      lines.push(`本次演示判定：${this.formatOutcome(item.forceOutcome || "perfect")}`);
+      lines.push(`演示判定：${this.manualMode ? "由玩家输入决定" : this.formatOutcome(item.forceOutcome || "perfect")}`);
+    } else {
+      lines.push("演示类型：即时效果预览");
     }
 
     if (item.context?.counterAttack) lines.push("战斗语境：敌方回合反击，会中断敌人本次攻击。");
@@ -771,7 +793,7 @@ class DemoMode {
     return lines;
   }
 
-  buildQTEResultLines(effects, ctx, dealtDamage, isCrit) {
+  buildQTEResultLines(effects, ctx, dealtDamage, isCrit, resultLog = []) {
     const lines = [];
     lines.push(`本次结果：${this.previewTitle}`);
     lines.push(`伤害：${dealtDamage}${isCrit ? "（暴击）" : ""}`);
@@ -782,7 +804,24 @@ class DemoMode {
     if (ctx.counterAttack) lines.push("敌方回合反击：敌人攻击被打断。");
     if (ctx.followUp) lines.push("追加攻击：用于追击，成功时可衔接打断效果。");
     if (effects.messages.length > 0) lines.push(`关键反馈：${effects.messages.slice(-2).join(" / ")}`);
+    if (resultLog.length > 0) {
+      lines.push(`判定记录：${resultLog.map(entry => `${entry.nodeName}:${this.formatOutcome(entry.outcome)}`).join(" -> ")}`);
+    }
     return lines;
+  }
+
+  describeLoadout() {
+    const parts = [];
+    if (this.playerConfig.weapon && WeaponDatabase[this.playerConfig.weapon]) {
+      parts.push(WeaponDatabase[this.playerConfig.weapon].name);
+    }
+    for (const id of this.playerConfig.spells || []) {
+      if (SpellDatabase[id]) parts.push(SpellDatabase[id].name);
+    }
+    for (const id of this.playerConfig.combatArts || []) {
+      if (CombatArtDatabase[id]) parts.push(CombatArtDatabase[id].name);
+    }
+    return parts.join(" / ");
   }
 
   describeNodeInput(node) {
@@ -842,20 +881,129 @@ class DemoMode {
     return labels[outcome] || outcome;
   }
 
+  getPhaseTitle() {
+    if (this.state === "main") return "选择演示分类";
+    if (this.state === "list") return `${this.getCategoryName()} / 第 ${this.listPage + 1}/${this.getTotalPages()} 页`;
+    if (this.state === "qte") return "QTE 链播放中";
+    if (this.state === "preview") return "演示结算预览";
+    return "效果演示";
+  }
+
+  getCurrentItemTitle() {
+    if (this.state === "main") return "选择分类查看机制";
+    if (this.state === "list") return `${this.getCategoryName()} 条目列表`;
+    return this.previewTitle || "当前演示项";
+  }
+
+  getControlHint() {
+    if (this.state === "main") {
+      return "1-4 选择分类 | W/5 切换风格 | M 自动/手动 | 6 难度 | ESC 返回";
+    }
+    if (this.state === "list") {
+      const count = this.getCurrentPageItems().length;
+      return `1-${count} 播放条目 | A/← 上页 | D/→ 下页 | M 自动/手动 | ESC 返回分类`;
+    }
+    if (this.state === "qte") {
+      return this.manualMode ? "按 QTE 提示输入 | ESC 中止" : "自动慢放中：观察判定窗、节点推进和结算记录 | ESC 中止";
+    }
+    if (this.state === "preview") {
+      return "任意键返回列表 | ESC 返回列表";
+    }
+    return "ESC 返回";
+  }
+
+  getStatusLines() {
+    const lines = [];
+    const style = this.currentStyle();
+
+    if (style) {
+      lines.push(`当前风格：${style.name} [${style.key}]`);
+      const loadout = this.describeLoadout();
+      if (loadout) lines.push(`装配：${loadout}`);
+    }
+
+    if (this.state === "main") {
+      lines.push("选择分类后，会进入条目列表；每个条目会展示机制、输入流程、判定窗和结算。");
+      this.categories.forEach((cat, idx) => {
+        lines.push(`${idx + 1}. ${cat.name}：${cat.description}`);
+      });
+      return lines;
+    }
+
+    if (this.state === "list") {
+      const items = this.getCurrentPageItems();
+      const total = this.getItems(this.category).length;
+      lines.push(`分类：${this.getCategoryName()} / 共 ${total} 项 / 当前第 ${this.listPage + 1}/${this.getTotalPages()} 页`);
+      items.forEach((item, idx) => {
+        lines.push(`${idx + 1}. ${item.name}（${item.chain ? "QTE 链" : "即时预览"}）`);
+      });
+      return lines;
+    }
+
+    if (this.state === "qte") {
+      return this.getQTEInspectorLines();
+    }
+
+    if (this.state === "preview") {
+      lines.push(this.previewText || "演示完成。");
+      if (this.resultLines.length > 0) lines.push(...this.resultLines);
+      return lines;
+    }
+
+    return lines.length > 0 ? lines : [this.message];
+  }
+
+  getPlaybackLines() {
+    const lines = [
+      `阶段：${this.getPhaseTitle()}`,
+      `模式：${this.manualMode ? "手动试玩" : "自动慢放"}`,
+      `玩家 HP：${this.playerHp}/${this.playerMaxHp}`,
+      `敌人 HP：${this.enemyHp}/${this.enemyMaxHp}`
+    ];
+
+    if (this.playerState.spellEnergy > 0) {
+      lines.push(`法术能量：${Math.floor(this.playerState.spellEnergy)}/${this.playerState.maxSpellEnergy}`);
+    }
+    if (this.enemyStunTimer > 0) {
+      lines.push(`敌人眩晕：${this.enemyStunTimer.toFixed(1)} 秒`);
+    }
+    if (this.armorBreakActive) {
+      lines.push(`破甲：剩余 ${this.armorBreakTurns} 回合`);
+    }
+    if (this.playerState.shieldEnchanted) {
+      lines.push("盾牌状态：咒还附魔");
+    }
+
+    return lines.concat(this.getTimelineLines(4));
+  }
+
+  getTimelineLines(limit = 8) {
+    if (this.logs.length === 0) return ["暂无日志记录。"];
+    return this.logs
+      .slice(0, limit)
+      .map((entry, idx) => `${idx === 0 ? "最新" : "日志"}：${entry.text}`);
+  }
+
   getQTEInspectorLines() {
     if (!this.qteRunner) return this.detailLines;
     const node = this.qteRunner.currentNode();
     if (!node) return this.detailLines;
     const bounds = this.qteRunner.getWindowBounds();
-    const forced = this.currentItem?.forceOutcome || "perfect";
+    const forced = this.manualMode ? null : (this.currentItem?.forceOutcome || "perfect");
+    const completed = this.qteRunner.resultLog
+      .map(entry => `${entry.nodeName}:${this.formatOutcome(entry.outcome)}`)
+      .join(" -> ") || "无";
     return [
       `演示项：${this.previewTitle}`,
+      `风格：${this.currentStyle()?.name || "无"}`,
       `链路：${this.qteRunner.chain.name}`,
       `节点：${this.qteRunner.nodeIndex + 1}/${this.qteRunner.chain.nodes.length} ${node.name}`,
       `输入：${this.describeNodeInput(node)}`,
+      `计时：${Math.max(0, this.qteRunner.nodeTimer).toFixed(2)}s / ${node.duration.toFixed(2)}s`,
       `判定窗：${bounds.start.toFixed(2)}s - ${bounds.end.toFixed(2)}s`,
       `Perfect 点：${bounds.perfect === null || bounds.perfect === undefined ? "无" : bounds.perfect.toFixed(2) + "s"}`,
-      `自动判定：${this.formatOutcome(forced)}`
+      `判定方式：${forced ? this.formatOutcome(forced) : "手动输入"}`,
+      `已完成：${completed}`
     ];
   }
 }
