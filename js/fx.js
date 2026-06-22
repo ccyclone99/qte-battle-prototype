@@ -137,9 +137,9 @@ class FloatingTextManager {
       y: targetY - 30,
       type,
       time: 0,
-      maxTime: type === "status" ? 1.2 : 0.9,
-      vy: type === "crit" ? -90 : -60,
-      vx: (Math.random() - 0.5) * 30,
+      maxTime: type === "status" ? 1.2 : (type === "popup" ? 0.7 : 0.9),
+      vy: type === "crit" ? -90 : (type === "popup" ? -30 : -60),
+      vx: type === "popup" ? 0 : (Math.random() - 0.5) * 30,
       scale: type === "crit" ? 1.4 : 1.0
     };
     this.texts.push(text);
@@ -152,6 +152,10 @@ class FloatingTextManager {
       t.y += t.vy * dt;
       t.vy += 80 * dt; // gravity
       if (t.type === "crit") t.scale = 1.4 + Math.sin(t.time * 10) * 0.15;
+      if (t.type === "popup") {
+        const popupProgress = t.time / t.maxTime;
+        t.scale = 1 + Math.sin(popupProgress * Math.PI) * 0.45;
+      }
     }
     this.texts = this.texts.filter(t => t.time < t.maxTime);
   }
@@ -182,6 +186,14 @@ class FloatingTextManager {
         color = "#ffffff";
         font = "bold 18px sans-serif";
         shadow = "rgba(0,0,0,0.6)";
+      } else if (t.type === "popup") {
+        const val = String(t.value).toUpperCase();
+        if (val.startsWith("PERFECT")) color = "#f1c40f";
+        else if (val.startsWith("SUCCESS")) color = "#2ecc71";
+        else if (val.startsWith("EARLY") || val.startsWith("LATE")) color = "#e67e22";
+        else color = "#e74c3c"; // FAIL / TIMEOUT
+        font = "bold 42px sans-serif";
+        shadow = color;
       }
 
       ctx.save();

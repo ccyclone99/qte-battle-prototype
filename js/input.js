@@ -8,7 +8,7 @@ class InputBuffer {
       let key = e.key.toUpperCase();
       if (key === " " || key === "SPACEBAR") key = "SPACE";
 
-      const gameKeys = ["A", "S", "D", "SPACE", "F"];
+      const gameKeys = ["A", "S", "D", "SPACE", "F", "ESCAPE", "H", "L", "I", "W", "M", "1", "2", "3", "4", "5", "6", "ARROWLEFT", "ARROWRIGHT", "ARROWUP", "ARROWDOWN"];
       if (gameKeys.includes(key)) {
         e.preventDefault();
       }
@@ -40,6 +40,22 @@ class InputBuffer {
 
   clear() {
     this.events = [];
+  }
+
+  injectKey(key, type = "press") {
+    const k = key.toUpperCase();
+    if (type === "press") {
+      if (!this.heldKeys.has(k)) {
+        this.heldKeys.add(k);
+        this.lastPressed[k] = Utils.now();
+        this.events.push({ type: "press", key: k, time: Utils.now() });
+      }
+    } else if (type === "release") {
+      if (this.heldKeys.has(k)) {
+        this.heldKeys.delete(k);
+        this.events.push({ type: "release", key: k, time: Utils.now() });
+      }
+    }
   }
 
   update() {

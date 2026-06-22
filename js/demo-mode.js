@@ -3,7 +3,7 @@ class DemoMode {
     this.input = input;
     this.onLog = onLog || (() => {});
 
-    this.state = "main"; // main | list | qte | preview
+    this._state = "main"; // main | list | qte | preview
     this.category = null;
     this.qteRunner = null;
 
@@ -51,6 +51,28 @@ class DemoMode {
     this.enemyStunTimer = 0;
     this.actionBar = 0;
     this.actionBarMax = 5;
+
+    // 演示速度参数
+    this.normalDemoTimeScale = 0.45;
+    this.normalPostNodePause = 0.6;
+    this.defenseTimeScale = 0.30;
+    this.windupTimeScale = 0.35;
+
+    // 防御演示专用：模拟敌方回合
+    this.enemyAttack = null;
+    this.enemyAttackTimer = 0;
+    this.enemyAttackPhase = "none";
+    this.pendingDefenseItem = null;
+    this.demoDefenseKey = null;
+    this.freezeTimer = 0;
+    this.actionSequence = null;
+    this.demoCounterAttack = false;
+
+    // 演出镜头 / 冲击帧 / 过场卡片
+    this.cameraZoom = 1;
+    this.cameraZoomTimer = 0;
+    this.impactFrames = 0;
+    this.transition = null;
 
     this.categories = [
       { key: "weapons", name: "风格链", icon: "⚔", description: "展示当前风格武器的 QTE 链、输入节点和伤害分支。" },
@@ -113,6 +135,14 @@ class DemoMode {
       if (this.screenShake < 0) this.screenShake = 0;
     }
 
+    if (this.freezeTimer > 0) {
+      this.freezeTimer -= dt;
+      if (this.freezeTimer < 0) this.freezeTimer = 0;
+      this.particles.update(dt);
+      this.floatingTexts.update(dt);
+      return;
+    }
+
     if (this.turnBanner) {
       this.turnBanner.timer -= dt;
       if (this.turnBanner.timer <= 0) this.turnBanner = null;
@@ -123,11 +153,29 @@ class DemoMode {
       if (this.screenFlash.timer <= 0) this.screenFlash = null;
     }
 
+    if (this.cameraZoomTimer > 0) {
+      this.cameraZoomTimer -= dt;
+      if (this.cameraZoomTimer <= 0) this.cameraZoom = 1;
+    }
+
+    if (this.impactFrames > 0) {
+      this.impactFrames--;
+    }
+
+    if (this.transition) {
+      this.transition.timer -= dt;
+      if (this.transition.timer <= 0) this.transition = null;
+    }
+
     this.particles.update(dt);
     this.floatingTexts.update(dt);
 
     if (this.state === "qte") {
       this.updateQTE(dt);
+    } else if (this.state === "enemy_windup") {
+      this.updateEnemyWindup(dt);
+    } else if (this.state === "action_sequence") {
+      this.updateActionSequence(dt);
     } else if (this.state === "preview") {
       if (this.previewTimer > 0) this.previewTimer -= dt;
       this.consumePreviewInput();
@@ -147,7 +195,7 @@ class DemoMode {
       const key = ev.key.toUpperCase();
       if (key === "ESCAPE") {
         this.input.consume();
-        this.state = "list";
+        this.setState("list");
         this.resetHP();
         this.input.clear();
         this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
@@ -155,7 +203,7 @@ class DemoMode {
       }
       // 任意其他键也返回列表
       this.input.consume();
-      this.state = "list";
+      this.setState("list");
       this.resetHP();
       this.input.clear();
       this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
@@ -181,7 +229,7 @@ class DemoMode {
           this.returnToMenu = true;
           return;
         } else {
-          this.state = "main";
+          this.setState("main");
           this.listPage = 0;
           this.resetHP();
           this.message = "效果演示模式 — 选择分类查看每一种实现效果";
@@ -194,7 +242,7 @@ class DemoMode {
         if (idx >= 1 && idx <= this.categories.length) {
           this.input.consume();
           this.category = this.categories[idx - 1].key;
-          this.state = "list";
+          this.setState("list");
           this.listPage = 0;
           this.resetHP();
           this.message = `${this.categories[idx - 1].name} — 按数字选择效果，ESC 返回`;
@@ -420,6 +468,99 @@ class DemoMode {
       const weaponChains = weapon.chains;
       const chainA = weaponChains.A;
       const followUpChain = CombatArtDatabase.desolo.chainOverrides[weaponId]?.followUp;
+
+      // 即时动作序列：让玩家看清机制触发的完整时机
+      const castDodgeSequence = [
+        { duration: 0.7, label: "① 施法中…", effect: (demo) => {
+          demo.spawnFloatingText("咏唱中…", 220, 220, "status");
+          demo.spawnParticles("magic", 220, 280, 0.6);
+          demo.playerState.currentState = "casting";
+          demo.log("德斯洛开始咏唱");
+        } },
+        { duration: 0.6, label: "② 敌人攻击来袭", effect: (demo) => {
+          demo.spawnFloatingText("敌人火球！", 740, 180, "status");
+          demo.spawnParticles("fireball", 740, 260, 1.2);
+          demo.enemyAttackPhase = "hit";
+          demo.log("敌方攻击来袭");
+        } },
+        { duration: 0.5, label: "③ 按 SPACE 闪避", effect: (demo) => {
+          demo.spawnFloatingText("SPACE", 220, 300, "popup");
+          demo.spawnParticles("magic", 220, 280, 0.5);
+          SFX.sfxAlert();
+        } },
+        { duration: 1.0, label: "④ 施法中闪避成功", effect: (demo) => {
+          demo.spawnFloatingText("施法中闪避！", 220, 220, "status");
+          demo.spawnParticles("magic", 220, 280, 1.5);
+          demo.spawnParticles("guard", 220, 300, 0.8);
+          demo.shakeScreen(0.2);
+          demo.flashScreen("#3498db", 0.25);
+          demo.enemyAttackPhase = "none";
+          demo.playerState.currentState = "idle";
+          demo.log("施法过程中成功闪避");
+        } }
+      ];
+
+      const guardDodgeSequence = [
+        { duration: 0.7, label: "① 持盾架势", effect: (demo) => {
+          demo.spawnFloatingText("架盾", 220, 220, "status");
+          demo.spawnParticles("guard", 220, 300, 0.8);
+          demo.playerState.currentState = "shield";
+          demo.log("进入格挡架势");
+        } },
+        { duration: 0.6, label: "② 敌人重击落下", effect: (demo) => {
+          demo.spawnFloatingText("敌人重击！", 740, 180, "status");
+          demo.spawnParticles("hit", 740, 260, 1.2);
+          demo.enemyAttackPhase = "hit";
+          demo.log("敌方重击袭来");
+        } },
+        { duration: 0.5, label: "③ 按 SPACE 闪避", effect: (demo) => {
+          demo.spawnFloatingText("SPACE", 220, 300, "popup");
+          demo.spawnParticles("guard", 220, 300, 0.6);
+          SFX.sfxAlert();
+        } },
+        { duration: 1.0, label: "④ 持盾中闪避成功", effect: (demo) => {
+          demo.spawnFloatingText("持盾中闪避！", 220, 220, "status");
+          demo.spawnParticles("guard", 220, 300, 1.5);
+          demo.spawnParticles("magic", 220, 280, 0.6);
+          demo.shakeScreen(0.2);
+          demo.flashScreen("#f1c40f", 0.2);
+          demo.enemyAttackPhase = "none";
+          demo.playerState.currentState = "idle";
+          demo.log("持盾时成功闪避");
+        } }
+      ];
+
+      const resolveSequence = [
+        { duration: 0.6, label: "① 出剑", effect: (demo) => {
+          demo.spawnFloatingText("出剑！", 220, 220, "status");
+          demo.spawnParticles("slash", 220, 280, 1);
+          demo.playerState.currentState = "swordAttack";
+          demo.log("东方出剑");
+        } },
+        { duration: 0.6, label: "② 敌人反击袭来", effect: (demo) => {
+          demo.spawnFloatingText("敌人反击！", 740, 180, "status");
+          demo.spawnParticles("slash", 740, 260, 1.2);
+          demo.enemyAttackPhase = "hit";
+          demo.log("敌方反击来袭");
+        } },
+        { duration: 0.5, label: "③ 按 F 格挡化解", effect: (demo) => {
+          demo.spawnFloatingText("F", 220, 300, "popup");
+          demo.spawnParticles("guard", 220, 300, 0.6);
+          demo.playerState.currentState = "shield";
+          SFX.sfxAlert();
+        } },
+        { duration: 1.0, label: "④ 化解一切攻击", effect: (demo) => {
+          demo.spawnFloatingText("化解！", 220, 220, "status");
+          demo.spawnFloatingText("免疫", 220, 260, "popup");
+          demo.spawnParticles("guard", 220, 300, 2);
+          demo.shakeScreen(0.25);
+          demo.flashScreen("#2ecc71", 0.3);
+          demo.enemyAttackPhase = "none";
+          demo.playerState.currentState = "idle";
+          demo.log("出剑后格挡化解敌人攻击");
+        } }
+      ];
+
       items.push(
         {
           name: "德斯洛 · 随时发动攻击",
@@ -441,22 +582,14 @@ class DemoMode {
         {
           name: "德斯洛 · 施法中闪避",
           description: "咏唱时按 SPACE 中断施法并闪避",
-          action: () => {
-            this.spawnFloatingText("施法中闪避！", 220, 220, "status");
-            this.spawnParticles("magic", 220, 280, 1);
-            this.shakeScreen(0.15);
-            return "德斯洛：施法过程中成功闪避";
-          }
+          actionSequence: castDodgeSequence,
+          preview: "咏唱时按 SPACE 中断施法并闪避"
         },
         {
           name: "德斯洛 · 持盾中闪避",
           description: "格挡架势中按 SPACE 闪避",
-          action: () => {
-            this.spawnFloatingText("格挡中闪避！", 220, 220, "status");
-            this.spawnParticles("guard", 220, 300, 1);
-            this.shakeScreen(0.1);
-            return "德斯洛：持盾时成功闪避";
-          }
+          actionSequence: guardDodgeSequence,
+          preview: "格挡架势中按 SPACE 闪避"
         },
         {
           name: "东方 · 连续闪避后必暴",
@@ -469,12 +602,8 @@ class DemoMode {
         {
           name: "东方 · 出剑后化解",
           description: "出剑后短时间内格挡可化解一切攻击",
-          action: () => {
-            this.spawnFloatingText("化解！", 220, 220, "status");
-            this.spawnParticles("guard", 220, 300, 1.5);
-            this.flashScreen("#2ecc71", 0.2);
-            return "东方：出剑后格挡化解敌人攻击";
-          }
+          actionSequence: resolveSequence,
+          preview: "出剑后短时间内格挡可化解一切攻击"
         },
         {
           name: "东方 · 全方位闪避",
@@ -560,29 +689,282 @@ class DemoMode {
       if (msg) this.log(msg);
       this.resultLines = this.buildActionResultLines(item, msg);
       this.input.clear();
-      this.state = "preview";
+      this.setState("preview");
       this.message = `${item.name} — 按任意键返回列表`;
       return;
     }
 
-    if (item.chain) {
+    if (item.actionSequence) {
+      this.startActionSequence(item.actionSequence, item.preview || item.description);
+      return;
+    }
+
+    if (item.chain && item.source === "enemy") {
+      this.startEnemyWindup(item);
+    } else if (item.chain) {
       this.startQTE(item);
     }
   }
 
-  startQTE(item) {
-    this.state = "qte";
+  // ========== 即时动作序列演示 ==========
+
+  startActionSequence(phases, resultMessage) {
+    this.setState("action_sequence");
+    this.actionSequence = {
+      phases,
+      phaseIndex: 0,
+      timer: 0,
+      resultMessage,
+      finished: false
+    };
+    const first = phases[0];
+    this.message = first.label || "";
+    if (first.effect) first.effect(this);
+  }
+
+  updateActionSequence(dt) {
+    // ESC 跳过
+    while (true) {
+      const ev = this.input.peek();
+      if (!ev) break;
+      if (ev.type === "press" && ev.key.toUpperCase() === "ESCAPE") {
+        this.input.consume();
+        this.actionSequence = null;
+        this.playerState.currentState = "idle";
+        this.enemyAttackPhase = "none";
+        this.returnToList();
+        return;
+      }
+      this.input.consume();
+    }
+
+    const seq = this.actionSequence;
+    if (!seq) return;
+
+    seq.timer += dt;
+    const phase = seq.phases[seq.phaseIndex];
+    if (seq.timer >= phase.duration) {
+      seq.timer -= phase.duration;
+      seq.phaseIndex++;
+      if (seq.phaseIndex >= seq.phases.length) {
+        this.finishActionSequence();
+        return;
+      }
+      const next = seq.phases[seq.phaseIndex];
+      this.message = next.label || "";
+      if (next.effect) next.effect(this);
+    }
+  }
+
+  finishActionSequence() {
+    const msg = this.actionSequence ? this.actionSequence.resultMessage : "";
+    this.actionSequence = null;
+    this.playerState.currentState = "idle";
+    this.enemyAttackPhase = "none";
+    this.resultLines = this.buildActionResultLines(null, msg);
+    if (msg) this.log(msg);
+    this.freezeTimer = 0.5;
+    this.setCameraZoom(1.12, 0.35);
+    this.triggerImpactFrames(1);
+    this.input.clear();
+    this.setState("preview");
+    this.previewTimer = 4.0;
+    this.message = `${this.previewTitle} — 按任意键返回列表`;
+  }
+
+  // ========== 敌方回合防御演示 ==========
+
+  startEnemyWindup(item) {
+    this.setState("enemy_windup");
+    this.currentItem = item;
+    this.pendingDefenseItem = item;
+    this.input.clear();
+    this.enemyAttackTimer = 0;
+    this.enemyAttackPhase = "windup";
+    this.defenseTriggered = false;
+
+    const defenseId = this.getDefenseIdFromItem(item);
+    const defense = DefenseDatabase[defenseId];
+    this.demoDefenseKey = defense ? defense.key : "SPACE";
+
+    const attackId = this.pickAttackForDefense(defenseId);
+    const baseAttack = EnemyDatabase.attacks[attackId];
+    this.enemyAttack = Difficulty.scaleAttack({ id: attackId, ...baseAttack });
+
+    this.showTurnBanner("敌方回合", "#e74c3c");
+    this.log(`演示：敌人准备 ${this.enemyAttack.name}，${this.enemyAttack.hint}`);
+    this.message = `${item.name} — 观察敌人攻击预警，命中后进入 QTE 再按键`;
+    this.previewTitle = item.name;
+    this.previewText = item.preview || item.description;
+    this.detailLines = this.buildItemDetailLines(item);
+    this.resultLines = [];
+  }
+
+  updateEnemyWindup(dt) {
+    // 快捷键：M 切换模式，ESC 返回列表
+    while (true) {
+      const ev = this.input.peek();
+      if (!ev) break;
+      if (ev.type !== "press") { this.input.consume(); continue; }
+      const key = ev.key.toUpperCase();
+      if (key === "ESCAPE") {
+        this.input.consume();
+        this.returnToList();
+        return;
+      }
+      if (key === "M") {
+        this.input.consume();
+        this.manualMode = !this.manualMode;
+        this.message = `${this.previewTitle} — 已切换为${this.manualMode ? "手动试玩" : "自动演示"}`;
+        continue;
+      }
+      this.input.consume();
+    }
+
+    const attack = this.enemyAttack;
+    if (!attack) {
+      this.startDefenseQTE(this.pendingDefenseItem);
+      return;
+    }
+
+    this.enemyAttackTimer += dt * this.windupTimeScale;
+
+    const responseDuration = attack.responseDuration || Difficulty.responseDuration();
+    const responseStart = Math.max(0, attack.windup - responseDuration);
+
+    if (this.enemyAttackPhase === "windup" && this.enemyAttackTimer >= responseStart) {
+      this.enemyAttackPhase = "response";
+      this.log(`绿色窗口出现：命中后按 [${this.demoDefenseKey}]`);
+    }
+
+    if (this.enemyAttackTimer >= attack.windup && this.enemyAttackPhase !== "hit") {
+      this.enemyAttackPhase = "hit";
+      this.freezeTimer = 0.5;
+      this.log(`敌人 ${attack.name} 即将命中！`);
+      this.startDefenseQTE(this.pendingDefenseItem);
+    }
+  }
+
+  startDefenseQTE(item) {
+    this.setState("qte");
     this.currentItem = item;
     this.input.clear();
+
+    let scaled = Difficulty.scaleChain(item.chain);
+    // 演示专用：非 Fail 的判定也进入下一段，让玩家看清完整输入流程
+    scaled = this.patchDemoDefenseChain(scaled);
+    this.qteRunner = new QTEChainRunner(scaled, {
+      source: item.source || "enemy",
+      ...(item.context || {}),
+      onNodeEffect: (node, outcome, transition) => {
+        this.freezeTimer = item.source === "enemy" ? 0.35 : 0.12;
+        if (transition.message) this.log(transition.message);
+        this.showOutcomeFeedback(outcome);
+      },
+      onRhythmHit: (idx) => {
+        this.log(`节拍 ${idx + 1} 命中`);
+        SFX.sfxSuccess();
+      }
+    });
+
+    this.qteRunner.timeScale = this.defenseTimeScale;
+    this.qteRunner.postNodePause = 0.8;
+
+    const forceOutcome = item.forceOutcome || null;
+    if (this.manualMode && !forceOutcome) {
+      this.qteRunner.forceOutcome(null);
+      this.message = `${item.name} — 手动试玩：按提示按键`;
+    } else {
+      this.qteRunner.forceOutcome(forceOutcome || "perfect");
+      this.message = `${item.name} — 自动演示中（${forceOutcome ? this.formatOutcome(forceOutcome) : "Perfect"}）`;
+    }
+  }
+
+  patchDemoDefenseChain(chain) {
+    for (const node of chain.nodes) {
+      const perfect = node.onPerfect;
+      if (!perfect || !perfect.next) continue;
+      for (const key of ['onSuccess', 'onEarly', 'onLate']) {
+        const trans = node[key];
+        if (trans && !trans.next) {
+          trans.next = perfect.next;
+          if (trans.message) {
+            trans.message = `${trans.message}（演示：继续追击）`;
+          }
+        }
+      }
+    }
+    return chain;
+  }
+
+  getDefenseIdFromItem(item) {
+    for (const id of Object.keys(DefenseDatabase)) {
+      if (item.name.includes(DefenseDatabase[id].name)) return id;
+    }
+    return "dodge";
+  }
+
+  pickAttackForDefense(defenseId) {
+    const candidates = Object.entries(EnemyDatabase.attacks)
+      .filter(([id, atk]) => (atk.allowedResponses || []).includes(defenseId))
+      .map(([id]) => id);
+    if (candidates.length > 0) {
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+    return "thrust";
+  }
+
+  returnToList() {
+    this.setState("list");
+    this.qteRunner = null;
+    this.enemyAttack = null;
+    this.enemyAttackPhase = "none";
+    this.pendingDefenseItem = null;
+    this.actionSequence = null;
+    this.demoCounterAttack = false;
+    this.resetHP();
+    this.input.clear();
+    this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
+  }
+
+  showTurnBanner(text, color) {
+    this.turnBanner = { text, color, timer: 1.2, maxTime: 1.2 };
+  }
+
+  setCameraZoom(zoom, duration) {
+    this.cameraZoom = zoom;
+    this.cameraZoomTimer = duration;
+  }
+
+  triggerImpactFrames(count) {
+    this.impactFrames = count;
+  }
+
+  setTransition(label, color = "#f1c40f", duration = 0.4) {
+    this.transition = { label, color, timer: duration, maxTime: duration };
+  }
+
+  startQTE(item) {
+    this.setState("qte");
+    this.currentItem = item;
+    this.input.clear();
+    this.demoCounterAttack = !!(item.context && item.context.counterAttack);
+    if (this.demoCounterAttack) {
+      this.log("敌方回合中发动反击！");
+      this.showTurnBanner("敌方回合", "#e74c3c");
+    }
     const scaled = Difficulty.scaleChain(item.chain);
     this.qteRunner = new QTEChainRunner(scaled, {
       source: item.source || "player",
       ...(item.context || {}),
       onNodeEffect: (node, outcome, transition) => {
+        this.freezeTimer = 0.12;
         if (transition.message) this.log(transition.message);
+        this.showOutcomeFeedback(outcome);
       },
       onRhythmHit: (idx) => {
         this.log(`节拍 ${idx + 1} 命中`);
+        SFX.sfxSuccess();
       }
     });
 
@@ -592,8 +974,8 @@ class DemoMode {
       this.message = `${item.name} — 手动试玩：请在判定窗口内按键`;
     } else {
       // 自动演示：时间放慢到 0.45 倍，节点结算后停顿 0.6s
-      this.qteRunner.timeScale = 0.45;
-      this.qteRunner.postNodePause = 0.6;
+      this.qteRunner.timeScale = this.normalDemoTimeScale;
+      this.qteRunner.postNodePause = this.normalPostNodePause;
       if (item.forceOutcome) {
         this.qteRunner.forceOutcome(item.forceOutcome);
       } else {
@@ -605,7 +987,7 @@ class DemoMode {
 
   updateQTE(dt) {
     if (!this.qteRunner) {
-      this.state = "preview";
+      this.setState("preview");
       this.previewTimer = 3.0;
       this.message = `${this.previewTitle} — 按任意键返回列表`;
       return;
@@ -617,11 +999,33 @@ class DemoMode {
       if (ev.type === "press" && ev.key.toUpperCase() === "ESCAPE") {
         this.input.consume();
         this.qteRunner = null;
-        this.state = "list";
+        this.setState("list");
+        this.enemyAttack = null;
+        this.enemyAttackPhase = "none";
+        this.pendingDefenseItem = null;
         this.resetHP();
         this.input.clear();
         this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
         return;
+      }
+      if (ev.type === "press" && ev.key.toUpperCase() === "M") {
+        this.input.consume();
+        this.manualMode = !this.manualMode;
+        if (this.qteRunner) {
+          const isDefense = this.currentItem && this.currentItem.source === "enemy";
+          if (this.manualMode) {
+            this.qteRunner.timeScale = isDefense ? this.defenseTimeScale : 1;
+            this.qteRunner.postNodePause = isDefense ? 0.8 : 0;
+            this.qteRunner.forcedOutcome = null;
+            this.message = `${this.previewTitle} — 手动试玩`;
+          } else {
+            this.qteRunner.timeScale = isDefense ? this.defenseTimeScale : this.normalDemoTimeScale;
+            this.qteRunner.postNodePause = isDefense ? 0.8 : this.normalPostNodePause;
+            this.qteRunner.forceOutcome(this.currentItem?.forceOutcome || "perfect");
+            this.message = `${this.previewTitle} — 自动演示中`;
+          }
+        }
+        continue;
       }
       this.input.consume();
       if (this.manualMode) {
@@ -686,7 +1090,10 @@ class DemoMode {
     }
 
     if (ctx.counterAttack) {
+      this.spawnFloatingText("敌方回合反击！", ex, ey - 90, "popup");
       this.spawnFloatingText("反击！", ex, ey - 60, "status");
+      this.shakeScreen(0.2);
+      this.flashScreen("#e74c3c", 0.15);
       this.log("敌方回合发动反击");
     }
 
@@ -702,9 +1109,10 @@ class DemoMode {
       this.log("敌人已复活（演示模式）");
     }
 
+    this.freezeTimer = 0.8;
     this.qteRunner = null;
     this.input.clear();
-    this.state = "preview";
+    this.setState("preview");
     this.previewTimer = 4.0;
     this.message = `${this.previewTitle} — 按任意键返回列表`;
   }
@@ -721,6 +1129,20 @@ class DemoMode {
     this.floatingTexts.add(text, x, y, type);
   }
 
+  showOutcomeFeedback(outcome, x = 480, y = 360) {
+    const label = (outcome || "fail").toUpperCase();
+    this.spawnFloatingText(label, x, y, "popup");
+    if (outcome === "perfect") {
+      SFX.sfxPerfect();
+      this.setCameraZoom(1.12, 0.3);
+      this.triggerImpactFrames(1);
+    } else if (outcome === "success") {
+      SFX.sfxSuccess();
+    } else {
+      SFX.sfxFail();
+    }
+  }
+
   spawnParticles(type, x, y, intensity) {
     this.particles.emit(type, x, y, intensity);
   }
@@ -733,8 +1155,44 @@ class DemoMode {
     this.screenFlash = { color, timer: duration, maxTime: duration };
   }
 
+  get state() {
+    return this._state;
+  }
+
+  setState(newState) {
+    if (this._state === newState) return;
+    const oldState = this._state;
+
+    // 进入播放态时显示过场卡片
+    const playbackStates = ["qte", "enemy_windup", "action_sequence", "preview"];
+    if (oldState === "list" && playbackStates.includes(newState)) {
+      this.setTransition(this.previewTitle || "演示开始", "#f1c40f", 0.35);
+    } else if (oldState === "main" && newState === "list") {
+      this.setTransition(this.getCategoryName() || "效果演示", "#f1c40f", 0.3);
+    }
+
+    this.onStateExit(oldState);
+    this._state = newState;
+    this.onStateEnter(newState);
+  }
+
+  onStateExit(state) {
+    // 清理旧状态
+  }
+
+  onStateEnter(state) {
+    // 进入新状态提示音
+    if (state === "qte" || state === "enemy_windup") {
+      SFX.sfxAlert();
+    }
+    // 返回静态界面时清理残留粒子，避免覆盖菜单/列表
+    if (state === "main" || state === "list" || state === "preview") {
+      this.particles.clear();
+    }
+  }
+
   get turnState() {
-    return "demo_" + this.state;
+    return "demo_" + this._state;
   }
 
   buildItemDetailLines(item) {
@@ -884,6 +1342,7 @@ class DemoMode {
   getPhaseTitle() {
     if (this.state === "main") return "选择演示分类";
     if (this.state === "list") return `${this.getCategoryName()} / 第 ${this.listPage + 1}/${this.getTotalPages()} 页`;
+    if (this.state === "enemy_windup") return "敌方攻击预警";
     if (this.state === "qte") return "QTE 链播放中";
     if (this.state === "preview") return "演示结算预览";
     return "效果演示";
@@ -903,8 +1362,11 @@ class DemoMode {
       const count = this.getCurrentPageItems().length;
       return `1-${count} 播放条目 | A/← 上页 | D/→ 下页 | M 自动/手动 | ESC 返回分类`;
     }
+    if (this.state === "enemy_windup") {
+      return "观察敌人攻击条和绿色窗口 | 命中前会进入 QTE | M 切换自动/手动 | ESC 返回列表";
+    }
     if (this.state === "qte") {
-      return this.manualMode ? "按 QTE 提示输入 | ESC 中止" : "自动慢放中：观察判定窗、节点推进和结算记录 | ESC 中止";
+      return this.manualMode ? "按 QTE 提示按键输入 | M 切换模式 | ESC 中止" : "自动慢放中：观察判定窗、节点推进和结算记录 | M 切换模式 | ESC 中止";
     }
     if (this.state === "preview") {
       return "任意键返回列表 | ESC 返回列表";
@@ -937,6 +1399,16 @@ class DemoMode {
       items.forEach((item, idx) => {
         lines.push(`${idx + 1}. ${item.name}（${item.chain ? "QTE 链" : "即时预览"}）`);
       });
+      return lines;
+    }
+
+    if (this.state === "enemy_windup") {
+      const lines = [this.previewText || "敌方攻击预警"];
+      if (this.enemyAttack) {
+        lines.push(`敌人攻击：${this.enemyAttack.name}`);
+        lines.push(`提示：${this.enemyAttack.hint}`);
+        lines.push(`准备按键：[${this.demoDefenseKey || "?"}]`);
+      }
       return lines;
     }
 

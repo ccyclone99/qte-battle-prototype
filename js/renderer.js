@@ -3,9 +3,14 @@ class CanvasRenderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
 
-    // 逻辑分辨率 960×540，物理分辨率 1280×720，保证 720p 清晰且不改动全部坐标
+    // 逻辑分辨率 960×540，按 DPR 放大 canvas 实际像素，CSS 仍显示为 1280×720
     this.width = 960;
     this.height = 540;
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = 1280;
+    const displayHeight = 720;
+    canvas.width = Math.floor(displayWidth * dpr);
+    canvas.height = Math.floor(displayHeight * dpr);
     const scaleX = canvas.width / this.width;
     const scaleY = canvas.height / this.height;
     this.ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
@@ -14,16 +19,38 @@ class CanvasRenderer {
   renderBlank() {
     const ctx = this.ctx;
     ctx.save();
+    this.drawBackground(ctx);
+    ctx.restore();
+  }
+
+  drawBackground(ctx) {
     const grad = ctx.createLinearGradient(0, 0, 0, this.height);
     grad.addColorStop(0, "#12121a");
     grad.addColorStop(1, "#1a1a25");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, this.width, this.height);
-    ctx.restore();
+
+    // 远景网格线
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+    ctx.lineWidth = 1;
+    const horizon = this.height - 150;
+    ctx.beginPath();
+    ctx.moveTo(0, horizon);
+    ctx.lineTo(this.width, horizon);
+    ctx.stroke();
+
+    for (let x = 0; x <= this.width; x += 80) {
+      ctx.beginPath();
+      ctx.moveTo(x, horizon);
+      ctx.lineTo(x + (x - this.width / 2) * 0.4, this.height);
+      ctx.stroke();
+    }
   }
 
   render(scene) {
     const ctx = this.ctx;
+    const now = performance.now();
+    const t = now / 1000;
 
     ctx.save();
 
@@ -35,22 +62,21 @@ class CanvasRenderer {
       ctx.translate(dx, dy);
     }
 
-    // 背景
-    const grad = ctx.createLinearGradient(0, 0, 0, this.height);
-    grad.addColorStop(0, "#12121a");
-    grad.addColorStop(1, "#1a1a25");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, this.width, this.height);
+    // 镜头缩放（特写）
+    if (scene.cameraZoom && scene.cameraZoom !== 1) {
+      const cx = this.width / 2;
+      const cy = this.height / 2;
+      ctx.translate(cx, cy);
+      ctx.scale(scene.cameraZoom, scene.cameraZoom);
+      ctx.translate(-cx, -cy);
+    }
 
-    // 地面
-    ctx.fillStyle = "#232330";
-    ctx.fillRect(0, this.height - 80, this.width, 80);
-
-    this.drawCharacters(scene);
-    this.drawHUD(scene);
+    this.drawBackground(ctx);
+    this.drawCharacters(scene, t);
+    this.drawAttackEffects(scene, t);
 
     if (scene.turnState.startsWith("demo_")) {
-      this.drawDemo(scene);
+      this.drawDemo(scene, t);
     } else if (scene.turnState === "select_weapon") {
       this.drawWeaponSelection(scene);
     } else if (scene.turnState === "select_spells") {
@@ -58,22 +84,33 @@ class CanvasRenderer {
     } else if (scene.turnState === "select_arts") {
       this.drawArtSelection(scene);
     } else if (scene.turnState === "player_turn") {
+      this.drawPlayerState(scene);
+      this.drawStatusIcons(scene);
       this.drawActionBar(scene);
       this.drawChainHints(scene);
-      this.drawPlayerState(scene);
-      this.drawStatusIcons(scene);
     } else if (scene.turnState === "enemy_turn") {
+      this.drawPlayerState(scene);
+      this.drawStatusIcons(scene);
       this.drawEnemyAttackBar(scene);
-      this.drawPlayerState(scene);
-      this.drawStatusIcons(scene);
+      if (scene.enemyAttack) {
+        this.drawBigKeyPrompt(scene, scene.enemyAttack.responseKey, scene.enemyAttack.hint, 435, t);
+      }
     } else if (scene.turnState === "qte_running" && scene.qteRunner) {
-      this.drawQTEBar(scene);
       this.drawPlayerState(scene);
       this.drawStatusIcons(scene);
+      this.drawQTEBar(scene);
+      const node = scene.qteRunner.currentNode();
+      if (node) {
+        const key = node.input.type === "hold_release" ? `松开 ${node.input.key}` : node.input.key;
+        this.drawBigKeyPrompt(scene, key, node.name);
+      }
+    } else if (scene.turnState === "game_over") {
+      this.drawGameOver(scene);
     }
 
-    if (scene.turnState === "game_over") {
-      this.drawGameOver(scene);
+    // 通用浮层提示（选择/演示/结束界面各自处理）
+    if (!scene.turnState.startsWith("demo_") && !scene.turnState.startsWith("select_") && scene.turnState !== "game_over") {
+      this.drawFloatingMessage(scene);
     }
 
     // 屏幕闪白/闪红
@@ -84,20 +121,108 @@ class CanvasRenderer {
     // 粒子与浮动文字
     if (scene.particles) scene.particles.render(ctx);
     if (scene.floatingTexts) scene.floatingTexts.render(ctx);
-    else this.drawDamageNumbers(scene);
 
     // 回合横幅
     if (scene.turnBanner) {
       this.drawTurnBanner(scene);
     }
 
+    // 暗角：聚焦中央舞台
+    this.drawVignette();
+
+    // 冲击帧（高对比闪屏）
+    if (scene.impactFrames > 0) {
+      this.drawImpactFrames(scene);
+    }
+
+    // Demo 过场卡片
+    if (scene.transition) {
+      this.drawDemoTransition(scene);
+    }
+
+    // Battle 连击 UI
+    if (scene.comboCount > 0) {
+      this.drawComboUI(scene);
+    }
+
+    ctx.restore();
+  }
+
+  drawVignette() {
+    const ctx = this.ctx;
+    const grad = ctx.createRadialGradient(
+      this.width / 2, this.height / 2, this.height * 0.35,
+      this.width / 2, this.height / 2, this.height * 0.85
+    );
+    grad.addColorStop(0, "rgba(0, 0, 0, 0)");
+    grad.addColorStop(1, "rgba(0, 0, 0, 0.55)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.width, this.height);
+  }
+
+  drawImpactFrames(scene) {
+    const ctx = this.ctx;
+    // 极轻微高亮，几乎不察觉
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.restore();
+  }
+
+  drawDemoTransition(scene) {
+    const ctx = this.ctx;
+    const trans = scene.transition;
+    if (!trans) return;
+
+    const progress = 1 - trans.timer / trans.maxTime;
+    const alpha = Math.sin(progress * Math.PI);
+    const y = this.height / 2 - 20 + (1 - alpha) * 30;
+
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.65 * alpha})`;
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = trans.color || "#f1c40f";
+    ctx.font = "bold 42px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = trans.color;
+    ctx.shadowBlur = 20;
+    ctx.fillText(trans.label, this.width / 2, y);
+    ctx.restore();
+  }
+
+  drawComboUI(scene) {
+    const ctx = this.ctx;
+    const combo = scene.comboCount || 0;
+    if (combo <= 0) return;
+
+    const x = this.width - 40;
+    const y = 110;
+    const pulse = 1 + Math.sin(performance.now() / 100) * 0.08;
+    const color = combo >= 5 ? "#e74c3c" : (combo >= 3 ? "#f39c12" : "#f1c40f");
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = color;
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    ctx.fillText(`×${combo}`, 0, 0);
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("COMBO", 0, 34);
     ctx.restore();
   }
 
   drawPlayerState(battle) {
     const ctx = this.ctx;
     const x = 20;
-    const y = this.height - 260;
+    const y = 70;
     const barW = 160;
     const barH = 12;
 
@@ -167,14 +292,108 @@ class CanvasRenderer {
     }
   }
 
-  drawCharacters(scene) {
+  drawAttackEffects(scene, t) {
+    const ctx = this.ctx;
+    const px = 220;
+    const py = this.height - 190;
+    const ex = this.width - 220;
+    const ey = this.height - 190;
+    const pState = scene.playerState ? scene.playerState.currentState : "idle";
+
+    // 剑攻击轨迹
+    if (pState === "swordAttack") {
+      const weapon = scene.playerConfig && scene.playerConfig.weapon ? WeaponDatabase[scene.playerConfig.weapon] : null;
+      const color = weapon ? weapon.color : "#f1c40f";
+      const progress = (t * 6) % 1;
+      const startAngle = -Math.PI / 4;
+      const endAngle = Math.PI / 4;
+      const angle = startAngle + (endAngle - startAngle) * progress;
+      const r = 60 + progress * 40;
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(angle);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = 0.7 * (1 - progress);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, -0.4, 0.4);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 施法/蓄力光环
+    if (pState === "casting" || pState === "charge") {
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.strokeStyle = pState === "casting" ? "#9b59b6" : "#f39c12";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.5 + Math.sin(t * 5) * 0.2;
+      ctx.shadowColor = ctx.strokeStyle;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(0, 0, 48 + Math.sin(t * 4) * 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 盾反/格挡火花
+    if (pState === "shield") {
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.fillStyle = "#f1c40f";
+      ctx.globalAlpha = 0.6 + Math.sin(t * 15) * 0.3;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + t * 4;
+        const r = 42 + Math.sin(t * 10 + i) * 4;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // 敌人受击闪烁
+    if (scene.enemyAttackPhase === "hit") {
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.fillStyle = "rgba(231, 76, 60, 0.25)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 60, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  drawCharacters(scene, t) {
     const ctx = this.ctx;
 
+    // 地面
+    ctx.fillStyle = "#1e1e2a";
+    ctx.fillRect(0, this.height - 150, this.width, 150);
+    ctx.fillStyle = "#2a2a3a";
+    ctx.fillRect(0, this.height - 150, this.width, 4);
+
     // 玩家
-    const px = 220;
-    const py = this.height - 160;
+    const basePx = 220;
+    const basePy = this.height - 190;
     const weaponId = scene.playerConfig ? scene.playerConfig.weapon : null;
     const weapon = weaponId ? WeaponDatabase[weaponId] : null;
+
+    // 待机呼吸
+    let bob = Math.sin(t * 2) * 2;
+    let px = basePx;
+    let py = basePy + bob;
+
+    // 架势位移
+    const pState = scene.playerState ? scene.playerState.currentState : "idle";
+    let stanceOffset = 0;
+    if (pState === "swordAttack") stanceOffset = 40;
+    else if (pState === "casting" || pState === "charge") stanceOffset = 15;
+    else if (pState === "shield") stanceOffset = 10;
+    px += stanceOffset;
 
     // 玩家身体
     ctx.fillStyle = "#3498db";
@@ -200,12 +419,31 @@ class CanvasRenderer {
     // 玩家脚下标识
     ctx.fillStyle = "rgba(52, 152, 219, 0.3)";
     ctx.beginPath();
-    ctx.ellipse(px, py + 45, 40, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(basePx + stanceOffset, basePy + 45, 40, 10, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // 弹反/格挡光环
+    if (pState === "shield" || pState === "swordAttack") {
+      const pulse = 1 + Math.sin(t * 8) * 0.08;
+      ctx.strokeStyle = pState === "shield" ? "rgba(149, 165, 166, 0.4)" : "rgba(241, 196, 15, 0.35)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(px, py, 42 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // 敌人
-    const ex = this.width - 220;
-    const ey = this.height - 160;
+    const baseEx = this.width - 220;
+    const baseEy = this.height - 190;
+    const eBob = Math.sin(t * 2 + 1) * 2;
+    let ex = baseEx;
+    let ey = baseEy + eBob;
+
+    // 敌方蓄力前冲
+    let enemyForward = 0;
+    if (scene.enemyAttackPhase === "response") enemyForward = -25;
+    else if (scene.enemyAttackPhase === "hit") enemyForward = -40;
+    ex += enemyForward;
 
     ctx.fillStyle = scene.enemyStunTimer > 0 ? "#f1c40f" : EnemyDatabase.base.color;
     ctx.beginPath();
@@ -220,7 +458,7 @@ class CanvasRenderer {
 
     ctx.fillStyle = "rgba(192, 57, 43, 0.3)";
     ctx.beginPath();
-    ctx.ellipse(ex, ey + 55, 55, 12, 0, 0, Math.PI * 2);
+    ctx.ellipse(baseEx + enemyForward, baseEy + 55, 55, 12, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // 敌人眩晕提示
@@ -229,35 +467,119 @@ class CanvasRenderer {
       ctx.font = "bold 18px sans-serif";
       ctx.fillText(`眩晕 ${scene.enemyStunTimer.toFixed(1)}s`, ex, ey - 70);
     }
+
+    // 敌方攻击意图图标
+    if (scene.enemyAttack && scene.enemyAttack.icon) {
+      const iconScale = scene.enemyAttackPhase === "windup"
+        ? 0.8 + (scene.enemyAttackTimer / scene.enemyAttack.windup) * 0.4
+        : (scene.enemyAttackPhase === "response" ? 1.25 : 1.0);
+      ctx.save();
+      ctx.translate(ex, ey - 78);
+      ctx.scale(iconScale, iconScale);
+      ctx.fillStyle = scene.enemyAttack.color || "#e74c3c";
+      ctx.font = "bold 26px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = scene.enemyAttack.color || "#e74c3c";
+      ctx.shadowBlur = 12;
+      ctx.fillText(scene.enemyAttack.icon, 0, 0);
+      ctx.restore();
+    }
   }
 
-  drawHUD(scene) {
+  drawFloatingMessage(scene, y = 380) {
     const ctx = this.ctx;
+    const message = scene.message || "";
+    if (!message) return;
 
-    if (scene.turnState && scene.turnState.startsWith("demo_")) return;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
-    // 当前状态提示（大字体，选择界面由选择画面自己渲染）
-    if (!scene.turnState.startsWith("select_")) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-      ctx.font = "bold 22px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText(scene.message, this.width / 2, 70);
+    // 半透背影
+    ctx.font = "bold 18px sans-serif";
+    const textWidth = Math.min(ctx.measureText(message).width + 40, 760);
+    const rx = this.width / 2 - textWidth / 2;
+    const ry = y - 18;
+    ctx.fillStyle = "rgba(10, 10, 16, 0.55)";
+    ctx.beginPath();
+    ctx.roundRect(rx, ry, textWidth, 36, 8);
+    ctx.fill();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "rgba(0,0,0,0.9)";
+    ctx.shadowBlur = 6;
+    ctx.fillText(message, this.width / 2, y);
+    ctx.restore();
+  }
+
+  drawExpectedInputMarker(runner, barY, barW = 760, barH = 30) {
+    const ctx = this.ctx;
+    const node = runner.currentNode();
+    if (!node) return;
+    const t = runner.getExpectedInputTime();
+    if (t === null || t === undefined) return;
+
+    const x = (this.width - barW) / 2 + barW * Utils.clamp(t / node.duration, 0, 1);
+    const y = barY + barH + 10;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - 6, y + 10);
+    ctx.lineTo(x + 6, y + 10);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 10);
+    ctx.lineTo(x, barY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawBigKeyPrompt(scene, key, subtext, y = 435, t = performance.now() / 1000) {
+    const ctx = this.ctx;
+    if (!key) return;
+
+    const x = this.width / 2;
+    const pulse = 1 + Math.sin(t * 1000 / 120) * 0.12;
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // 外发光圆
+    ctx.fillStyle = "rgba(241, 196, 64, 0.12)";
+    ctx.beginPath();
+    ctx.arc(x, y, 64 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(241, 196, 64, 0.35)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 54, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 按键文字
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 52px sans-serif";
+    ctx.shadowColor = "rgba(241, 196, 64, 0.65)";
+    ctx.shadowBlur = 18 * pulse;
+    ctx.fillText(`[${key}]`, x, y);
+    ctx.shadowBlur = 0;
+
+    // 副标题
+    if (subtext) {
+      ctx.fillStyle = "#e8e8e8";
+      ctx.font = "bold 16px sans-serif";
+      ctx.fillText(subtext, x, y + 46);
     }
 
-    // 武器选择提示（仅在非选择界面显示）
-    if (!scene.turnState.startsWith("select_")) {
-      const weaponY = 110;
-      ctx.font = "16px sans-serif";
-      let xOffset = this.width / 2 - 180;
-      const selectedWeaponId = scene.playerConfig ? scene.playerConfig.weapon : null;
-      for (const [id, weapon] of Object.entries(WeaponDatabase)) {
-        const isSelected = id === selectedWeaponId;
-        ctx.fillStyle = isSelected ? weapon.color : "#666";
-        ctx.fillText(`${isSelected ? "▶ " : ""}[${weapon.key}] ${weapon.name}`, xOffset, weaponY);
-        xOffset += 140;
-      }
-    }
+    ctx.restore();
   }
 
   drawWeaponSelection(battle) {
@@ -275,8 +597,8 @@ class CanvasRenderer {
     ctx.fillText("选择你的战斗风格", this.width / 2, 70);
 
     const styles = Object.entries(StyleDatabase);
-    const cardW = 150;
-    const cardH = 200;
+    const cardW = 140;
+    const cardH = 180;
     const gap = 24;
 
     // 两行布局：3 + 2
@@ -286,7 +608,7 @@ class CanvasRenderer {
     const row2W = cardW * row2Count + gap * (row2Count - 1);
     const row1X = (this.width - row1W) / 2;
     const row2X = (this.width - row2W) / 2;
-    const row1Y = 145;
+    const row1Y = 90;
     const row2Y = row1Y + cardH + gap;
 
     styles.forEach(([id, style], idx) => {
@@ -316,19 +638,19 @@ class CanvasRenderer {
       ctx.font = "bold 40px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(style.icon, x + cardW / 2, y + 52);
+      ctx.fillText(style.icon, x + cardW / 2, y + 46);
 
       // 名称
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 16px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      this.drawWrappedLine(ctx, style.name, x + cardW / 2, y + 84, cardW - 16, 18, 2);
+      this.drawWrappedLine(ctx, style.name, x + cardW / 2, y + 78, cardW - 16, 18, 2);
 
       // 描述
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "11px sans-serif";
-      this.drawWrappedLine(ctx, style.description, x + cardW / 2, y + 120, cardW - 12, 15, 4);
+      this.drawWrappedLine(ctx, style.description, x + cardW / 2, y + 112, cardW - 12, 15, 4);
 
       // 底层配置提示
       const tags = [];
@@ -337,7 +659,7 @@ class CanvasRenderer {
       for (const aid of style.combatArts || []) tags.push(CombatArtDatabase[aid].name);
       ctx.fillStyle = "#888899";
       ctx.font = "10px sans-serif";
-      ctx.fillText(tags.join(" / "), x + cardW / 2, y + cardH - 16);
+      ctx.fillText(tags.join(" / "), x + cardW / 2, y + cardH - 14);
     });
   }
 
@@ -348,12 +670,12 @@ class CanvasRenderer {
 
     const weapon = WeaponDatabase[weaponId];
     const chains = Object.entries(weapon.chains);
-    const cardW = 180;
-    const cardH = 60;
-    const gap = 20;
+    const cardW = 170;
+    const cardH = 50;
+    const gap = 16;
     const totalW = cardW * chains.length + gap * (chains.length - 1);
     const startX = (this.width - totalW) / 2;
-    const y = this.height - 210;
+    const y = 430;
 
     let idx = 0;
     for (const [key, chain] of chains) {
@@ -371,11 +693,11 @@ class CanvasRenderer {
       ctx.font = "bold 18px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`[${key}] ${chain.name}`, x + cardW / 2, y + cardH / 2 - 8);
+      ctx.fillText(`[${key}] ${chain.name}`, x + cardW / 2, y + cardH / 2 - 7);
 
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "11px sans-serif";
-      ctx.fillText(chain.description, x + cardW / 2, y + cardH / 2 + 12);
+      ctx.fillText(chain.description, x + cardW / 2, y + cardH / 2 + 10);
 
       idx++;
     }
@@ -539,9 +861,9 @@ class CanvasRenderer {
   drawActionBar(scene) {
     const ctx = this.ctx;
     const barW = 600;
-    const barH = 28;
+    const barH = 18;
     const x = (this.width - barW) / 2;
-    const y = this.height - 130;
+    const y = 510;
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
@@ -579,10 +901,10 @@ class CanvasRenderer {
     if (!scene.enemyAttack) return;
 
     const attack = scene.enemyAttack;
-    const barW = 600;
-    const barH = 28;
+    const barW = 760;
+    const barH = 30;
     const x = (this.width - barW) / 2;
-    const y = this.height - 130;
+    const y = 510;
 
     const totalTime = attack.windup + attack.hitTime;
     const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
@@ -626,12 +948,31 @@ class CanvasRenderer {
     ctx.font = "bold 14px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${attack.name} 预警`, x + barW / 2, y + barH / 2);
+    ctx.fillText(`${attack.name}`, x + barW / 2, y + barH / 2);
 
-    // 提示
-    ctx.fillStyle = "#f1c40f";
-    ctx.font = "14px sans-serif";
-    ctx.fillText(attack.hint, this.width / 2, y - 25);
+    // 敌人意图：图标 + 名称（响应窗口打开时脉冲放大）
+    const inResponse = scene.enemyAttackPhase === "response";
+    const pulse = inResponse ? 1 + Math.sin(performance.now() / 100) * 0.12 : 1;
+    const iconX = x + barW / 2;
+    const iconY = y - 28;
+
+    ctx.save();
+    ctx.translate(iconX, iconY);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = attack.color;
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = attack.color;
+    ctx.shadowBlur = inResponse ? 14 : 0;
+    ctx.fillText(attack.icon || "⚔", 0, 0);
+    ctx.restore();
+
+    ctx.fillStyle = inResponse ? "#2ecc71" : "#aaaaaa";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(inResponse ? `${attack.name} · 可输入` : attack.name, iconX, iconY + 16);
   }
 
   drawQTEBar(scene) {
@@ -642,10 +983,10 @@ class CanvasRenderer {
     const node = runner.currentNode();
     if (!node) return;
 
-    const barW = 600;
-    const barH = 36;
+    const barW = 760;
+    const barH = 30;
     const x = (this.width - barW) / 2;
-    const y = this.height - 145;
+    const y = 510;
     const bounds = runner.getWindowBounds();
 
     // 背景
@@ -671,8 +1012,8 @@ class CanvasRenderer {
       ctx.shadowColor = "#f1c40f";
       ctx.shadowBlur = 10 * pulse;
       ctx.beginPath();
-      ctx.moveTo(perfectX, y - 8);
-      ctx.lineTo(perfectX, y + barH + 8);
+      ctx.moveTo(perfectX, y - 6);
+      ctx.lineTo(perfectX, y + barH + 6);
       ctx.stroke();
       ctx.shadowBlur = 0;
     }
@@ -683,7 +1024,7 @@ class CanvasRenderer {
       for (const beat of node.input.beats) {
         const beatX = x + barW * (beat / bounds.duration);
         ctx.beginPath();
-        ctx.arc(beatX, y + barH / 2, 9, 0, Math.PI * 2);
+        ctx.arc(beatX, y + barH / 2, 8, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -698,9 +1039,9 @@ class CanvasRenderer {
     ctx.shadowColor = "rgba(255,255,255,0.8)";
     ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.moveTo(pointerX, y - 10);
-    ctx.lineTo(pointerX - 9, y - 22);
-    ctx.lineTo(pointerX + 9, y - 22);
+    ctx.moveTo(pointerX, y - 8);
+    ctx.lineTo(pointerX - 8, y - 20);
+    ctx.lineTo(pointerX + 8, y - 20);
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -709,23 +1050,12 @@ class CanvasRenderer {
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, barW, barH);
 
-    // 节点名称与按键提示
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 16px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    let inputHint = "";
-    if (node.input.type === "press") inputHint = `按 [${node.input.key}]`;
-    else if (node.input.type === "hold_release") inputHint = `松开 [${node.input.key}]`;
-    else if (node.input.type === "rhythm") inputHint = `跟随节奏按 [${node.input.key}]`;
-
-    ctx.fillText(`${node.name} — ${inputHint}`, x + barW / 2, y + barH / 2);
-
     // 链标题
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 18px sans-serif";
-    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 35);
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 8);
   }
 
   drawDemoQTEBar(scene) {
@@ -737,9 +1067,9 @@ class CanvasRenderer {
     if (!node) return;
 
     const barW = 760;
-    const barH = 44;
+    const barH = 30;
     const x = (this.width - barW) / 2;
-    const y = this.height - 130;
+    const y = 510;
     const bounds = runner.getWindowBounds();
 
     // 背景
@@ -792,9 +1122,9 @@ class CanvasRenderer {
     ctx.shadowColor = "rgba(255,255,255,0.8)";
     ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.moveTo(pointerX, y - 12);
-    ctx.lineTo(pointerX - 11, y - 26);
-    ctx.lineTo(pointerX + 11, y - 26);
+    ctx.moveTo(pointerX, y - 8);
+    ctx.lineTo(pointerX - 8, y - 20);
+    ctx.lineTo(pointerX + 8, y - 20);
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -803,47 +1133,12 @@ class CanvasRenderer {
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, barW, barH);
 
-    // 节点名称与按键提示
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    let inputHint = "";
-    if (node.input.type === "press") inputHint = `按 [${node.input.key}]`;
-    else if (node.input.type === "hold_release") inputHint = `松开 [${node.input.key}]`;
-    else if (node.input.type === "rhythm") inputHint = `跟随节奏按 [${node.input.key}]`;
-
-    ctx.fillText(`${node.name} — ${inputHint}`, x + barW / 2, y + barH / 2);
-
     // 链标题
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 42);
-  }
-
-  drawDamageNumbers(battle) {
-    if (!battle.lastDamageNumber) return;
-
-    const dn = battle.lastDamageNumber;
-    dn.time -= 0.016;
-    if (dn.time <= 0) {
-      battle.lastDamageNumber = null;
-      return;
-    }
-
-    const ctx = this.ctx;
-    const x = dn.target === "enemy" ? this.width - 220 : 220;
-    const y = this.height - 220 - (1 - dn.time) * 40;
-
-    ctx.save();
-    ctx.fillStyle = dn.target === "enemy" ? "#e74c3c" : "#e74c3c";
-    ctx.font = "bold 32px sans-serif";
+    ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
-    ctx.shadowColor = "rgba(0,0,0,0.8)";
-    ctx.shadowBlur = 6;
-    ctx.fillText(`-${dn.value}`, x, y);
-    ctx.restore();
+    ctx.textBaseline = "bottom";
+    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 8);
   }
 
   drawStatusIcons(scene) {
@@ -863,7 +1158,7 @@ class CanvasRenderer {
     if (icons.length === 0) return;
 
     const startX = 20;
-    let y = 85;
+    let y = 200;
     const size = 22;
     const gap = 6;
 
@@ -923,7 +1218,7 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawDemo(scene) {
+  drawDemo(scene, t) {
     const ctx = this.ctx;
 
     if (scene.turnState === "demo_main") {
@@ -932,25 +1227,217 @@ class CanvasRenderer {
       this.drawDemoList(scene);
     } else if (scene.turnState === "demo_preview") {
       this.drawDemoPreview(scene);
+    } else if (scene.turnState === "demo_enemy_windup") {
+      this.drawDemoEnemyWindup(scene);
+    } else if (scene.turnState === "demo_action_sequence") {
+      this.drawDemoActionSequence(scene, t);
     } else if (scene.turnState === "demo_qte") {
-      // 演示 QTE 播放中 — 全屏剧场布局
+      // 演示 QTE 播放中 — 中央舞台，底部操作区
       const ctx = this.ctx;
       ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
       ctx.fillRect(0, 0, this.width, this.height);
 
       ctx.fillStyle = "#f1c40f";
-      ctx.font = "bold 28px sans-serif";
+      ctx.font = "bold 26px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(scene.previewTitle, this.width / 2, 45);
+      ctx.fillText(scene.previewTitle, this.width / 2, 55);
 
-      const modeText = scene.manualMode ? "手动试玩：请在判定窗口内按下对应按键" : "自动演示中";
+      const modeText = scene.manualMode ? "手动试玩：请在判定窗口内按键" : "自动演示中";
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "15px sans-serif";
-      ctx.fillText(modeText, this.width / 2, 82);
+      ctx.font = "14px sans-serif";
+      ctx.fillText(modeText, this.width / 2, 88);
+
+      if (scene.demoCounterAttack) {
+        this.drawDemoCounterAttackIndicator(ctx);
+      }
 
       this.drawDemoQTEBar(scene);
+
+      const node = scene.qteRunner ? scene.qteRunner.currentNode() : null;
+      if (node) {
+        const key = node.input.type === "hold_release" ? `松开 ${node.input.key}` : node.input.key;
+        this.drawBigKeyPrompt(scene, key, node.name, 435, t);
+      }
+
+      if (!scene.manualMode && scene.qteRunner) {
+        this.drawExpectedInputMarker(scene.qteRunner, 510);
+      }
     }
+  }
+
+  drawDemoCounterAttackIndicator(ctx) {
+    // 敌方回合反击：在顶部显示红色预警和敌人意图
+    const cx = this.width / 2;
+    const pulse = 1 + Math.sin(performance.now() / 120) * 0.15;
+
+    ctx.save();
+    ctx.fillStyle = "#e74c3c";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.shadowColor = "#e74c3c";
+    ctx.shadowBlur = 12 * pulse;
+    ctx.fillText("⚠ 敌方回合中发动反击", cx, 115);
+    ctx.shadowBlur = 0;
+
+    // 敌方意图图标
+    ctx.fillStyle = "rgba(231, 76, 60, 0.2)";
+    ctx.beginPath();
+    ctx.arc(this.width - 160, 125, 26 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#e74c3c";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(this.width - 160, 125, 26 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#e74c3c";
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("🗡", this.width - 160, 125);
+    ctx.restore();
+  }
+
+  drawDemoActionSequence(scene, t) {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(scene.previewTitle, this.width / 2, 45);
+
+    const seq = scene.actionSequence;
+    if (!seq) return;
+
+    const phase = seq.phases[seq.phaseIndex];
+    const total = seq.phases.length;
+    const completed = seq.phaseIndex;
+
+    // 当前阶段大字说明
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 36px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(phase.label || "", this.width / 2, this.height / 2 - 30);
+
+    // 阶段进度点
+    const dotY = this.height / 2 + 30;
+    const startX = this.width / 2 - (total - 1) * 20;
+    for (let i = 0; i < total; i++) {
+      const x = startX + i * 40;
+      ctx.beginPath();
+      ctx.arc(x, dotY, 6, 0, Math.PI * 2);
+      ctx.fillStyle = i <= completed ? "#f1c40f" : "#5a5a6a";
+      ctx.fill();
+      if (i === completed) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    // 当前按键提示（如果阶段标签包含按键）
+    const keyMatch = (phase.label || "").match(/按 ([A-Z]+)/);
+    if (keyMatch) {
+      this.drawBigKeyPrompt(scene, keyMatch[1], "", 380, t);
+    }
+  }
+
+  drawDemoEnemyWindup(scene) {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 26px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(scene.previewTitle, this.width / 2, 55);
+
+    const modeText = scene.manualMode ? "手动试玩" : "自动演示";
+    ctx.fillStyle = "#aaaaaa";
+    ctx.font = "14px sans-serif";
+    ctx.fillText(`${modeText} — ${scene.message}`, this.width / 2, 88);
+
+    this.drawDemoEnemyAttackBar(scene);
+
+    const key = scene.demoDefenseKey || "?";
+    this.drawBigKeyPrompt(scene, key, "命中后按");
+
+    // 阶段说明（简洁版，避免遮挡）
+    const steps = [
+      "1. 红色进度条推进",
+      "2. 绿色窗口出现",
+      "3. 命中红线 = 进入防御 QTE"
+    ];
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = "#ccccdd";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    const stepX = 40;
+    let stepY = 340;
+    for (const step of steps) {
+      ctx.fillText(step, stepX, stepY);
+      stepY += 20;
+    }
+  }
+
+  drawDemoEnemyAttackBar(scene) {
+    const ctx = this.ctx;
+    if (!scene.enemyAttack) return;
+
+    const attack = scene.enemyAttack;
+    const barW = 760;
+    const barH = 30;
+    const x = (this.width - barW) / 2;
+    const y = 510;
+
+    const totalTime = attack.windup + attack.hitTime;
+    const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
+
+    // 背景
+    ctx.fillStyle = "#2a2a3a";
+    ctx.fillRect(x, y, barW, barH);
+
+    // 响应窗口区域
+    const responseDuration = attack.responseDuration || Difficulty.responseDuration();
+    const responseStartRatio = Utils.clamp(Math.max(0, attack.windup - responseDuration) / totalTime, 0, 1);
+    const windupEndRatio = Utils.clamp(attack.windup / totalTime, 0, 1);
+
+    ctx.fillStyle = "rgba(46, 204, 113, 0.25)";
+    ctx.fillRect(x + barW * responseStartRatio, y, barW * (windupEndRatio - responseStartRatio), barH);
+
+    // 进度条
+    const grad = ctx.createLinearGradient(x, y, x + barW * progress, y);
+    grad.addColorStop(0, attack.color);
+    grad.addColorStop(1, "#e74c3c");
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, barW * progress, barH);
+
+    ctx.shadowColor = attack.color;
+    ctx.shadowBlur = 14;
+    ctx.fillRect(x, y, barW * progress, 2);
+    ctx.shadowBlur = 0;
+
+    // 命中点标记
+    ctx.fillStyle = "#e74c3c";
+    ctx.fillRect(x + barW * windupEndRatio - 2, y - 4, 4, barH + 8);
+
+    // 边框
+    ctx.strokeStyle = "#5a5a6a";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, barW, barH);
+
+    // 文字
+    ctx.fillStyle = progress < windupEndRatio ? "#ffffff" : "#000000";
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${attack.name}`, x + barW / 2, y + barH / 2);
   }
 
   drawDemoMenu(scene) {
@@ -959,37 +1446,22 @@ class CanvasRenderer {
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 44px sans-serif";
+    ctx.font = "bold 40px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("效果演示模式", this.width / 2, 45);
-
-    // 当前风格与难度信息
-    const style = scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "18px sans-serif";
-    ctx.textAlign = "center";
-    const infoY = 105;
-    if (style) {
-      ctx.fillStyle = style.color;
-      ctx.font = "bold 18px sans-serif";
-      ctx.fillText(`当前风格：${style.name} [${style.key}]`, this.width / 2, infoY);
-    }
-    ctx.fillStyle = "#aaaaaa";
-    ctx.font = "14px sans-serif";
-    ctx.fillText(`难度：${Difficulty.get().name}（按 6 切换） | 敌人 HP：${scene.enemyHp}/${scene.enemyMaxHp}`, this.width / 2, infoY + 26);
+    ctx.fillText("效果演示模式", this.width / 2, 55);
 
     const categories = scene.categories;
     const cardW = 210;
-    const cardH = 118;
-    const gap = 30;
+    const cardH = 110;
+    const gap = 28;
     const row1Count = 2;
     const row2Count = 2;
     const row1W = cardW * row1Count + gap * (row1Count - 1);
     const row2W = cardW * row2Count + gap * (row2Count - 1);
     const row1X = (this.width - row1W) / 2;
     const row2X = (this.width - row2W) / 2;
-    const row1Y = 160;
+    const row1Y = 120;
     const row2Y = row1Y + cardH + gap;
 
     categories.forEach((cat, idx) => {
@@ -1010,21 +1482,21 @@ class CanvasRenderer {
       ctx.font = "bold 34px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(cat.icon, x + cardW / 2, y + 38);
+      ctx.fillText(cat.icon, x + cardW / 2, y + 36);
 
       ctx.font = "bold 20px sans-serif";
-      ctx.fillText(cat.name, x + cardW / 2, y + 78);
+      ctx.fillText(cat.name, x + cardW / 2, y + 76);
 
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "13px sans-serif";
-      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 102);
+      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 100);
     });
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 16px sans-serif";
+    ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
-    ctx.fillText(`当前：${modeText} | 1-4 选择分类 | W 切换风格 | M 切换模式 | 6 切换难度 | ESC 返回`, this.width / 2, this.height - 55);
+    ctx.fillText(`当前：${modeText} | 1-4 选择分类 | W 切换风格 | M 切换模式 | 6 切换难度 | ESC 返回`, this.width / 2, 500);
   }
 
   drawDemoList(scene) {
@@ -1038,25 +1510,23 @@ class CanvasRenderer {
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 32px sans-serif";
+    ctx.font = "bold 30px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 40);
+    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 55);
 
-    // 当前风格提示
-    const style = scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
-    ctx.fillText(`当前风格：${style ? style.name : "无"}  |  共 ${totalItems} 项  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 78);
+    ctx.fillText(`共 ${totalItems} 项  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 90);
 
     const cols = 2;
     const cardW = 360;
-    const cardH = 110;
+    const cardH = 100;
     const gapX = 24;
-    const gapY = 16;
+    const gapY = 14;
     const totalW = cardW * cols + gapX * (cols - 1);
     const startX = Math.floor((this.width - totalW) / 2);
-    const startY = 115;
+    const startY = 120;
 
     items.forEach((item, idx) => {
       const col = idx % cols;
@@ -1076,22 +1546,22 @@ class CanvasRenderer {
       ctx.font = "bold 16px sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(this.truncateText(ctx, `${idx + 1}. ${item.name}`, cardW - 20), x + 12, y + 12);
+      ctx.fillText(this.truncateText(ctx, `${idx + 1}. ${item.name}`, cardW - 20), x + 12, y + 10);
 
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "13px sans-serif";
-      this.drawWrappedLine(ctx, item.description, x + 12, y + 38, cardW - 24, 19, 3);
+      this.drawWrappedLine(ctx, item.description, x + 12, y + 34, cardW - 24, 18, 3);
 
       ctx.fillStyle = "#666f85";
       ctx.font = "12px sans-serif";
-      ctx.fillText(item.chain ? "QTE 链演示" : "即时效果预览", x + 12, y + cardH - 20);
+      ctx.fillText(item.chain ? "QTE 链演示" : "即时效果预览", x + 12, y + cardH - 18);
     });
 
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 16px sans-serif";
+    ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`当前：${modeText} | 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换模式 | ESC 返回`, this.width / 2, this.height - 50);
+    ctx.fillText(`当前：${modeText} | 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换模式 | ESC 返回`, this.width / 2, 500);
   }
 
   drawDemoPreview(scene) {
@@ -1101,7 +1571,7 @@ class CanvasRenderer {
 
     // 大标题
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 34px sans-serif";
+    ctx.font = "bold 32px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillText(scene.previewTitle, this.width / 2, 55);
@@ -1111,99 +1581,14 @@ class CanvasRenderer {
     ctx.font = "18px sans-serif";
     this.wrapText(ctx, scene.previewText, this.width / 2, 110, 720, 28);
 
-    // 左侧状态
-    ctx.font = "bold 15px sans-serif";
-    ctx.textAlign = "left";
-    const infoX = 60;
-    const infoY = 205;
-    ctx.fillStyle = "#3498db";
-    ctx.fillText(`玩家 HP：${scene.playerHp}/${scene.playerMaxHp}`, infoX, infoY);
-    ctx.fillStyle = "#c0392b";
-    ctx.fillText(`敌人 HP：${scene.enemyHp}/${scene.enemyMaxHp}`, infoX, infoY + 26);
-    if (scene.enemyStunTimer > 0) {
+    // 结算/结果摘要
+    if (scene.resultLines && scene.resultLines.length > 0) {
       ctx.fillStyle = "#f1c40f";
-      ctx.fillText(`敌人眩晕：${scene.enemyStunTimer.toFixed(1)}s`, infoX, infoY + 52);
+      ctx.font = "bold 16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(scene.resultLines[scene.resultLines.length - 1], this.width / 2, 340);
     }
-    if (scene.armorBreakActive) {
-      ctx.fillStyle = "#e74c3c";
-      ctx.fillText(`破甲生效中：${scene.armorBreakTurns} 回合`, infoX, infoY + 78);
-    }
-    if (scene.playerState.shieldEnchanted) {
-      ctx.fillStyle = "#9b59b6";
-      ctx.fillText("盾牌：咒还附魔", infoX, infoY + 104);
-    }
-    if (scene.playerState.spellEnergy > 0) {
-      ctx.fillStyle = scene.playerState.spellEnergy > 100 ? "#e74c3c" : "#9b59b6";
-      ctx.fillText(`法术能量：${Math.floor(scene.playerState.spellEnergy)}`, infoX, infoY + 130);
-    }
-
-    ctx.globalAlpha = 1;
-  }
-
-  drawDemoInspector(scene) {
-    const ctx = this.ctx;
-    const lines = scene.getQTEInspectorLines();
-    const x = this.width - 390;
-    const y = 100;
-    const w = 350;
-    const h = 270;
-
-    ctx.save();
-    ctx.fillStyle = "rgba(10, 10, 16, 0.9)";
-    ctx.strokeStyle = "#4a4a5a";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 10);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 15px sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText("当前演示", x + 14, y + 12);
-
-    let lineY = y + 38;
-    ctx.fillStyle = "#d8d8e8";
-    ctx.font = "13px sans-serif";
-    for (const line of lines.slice(0, 10)) {
-      ctx.fillText(this.truncateText(ctx, line, w - 28), x + 14, lineY);
-      lineY += 21;
-    }
-    ctx.restore();
-  }
-
-  drawDemoDetails(scene, x, y, w, h) {
-    const ctx = this.ctx;
-    const detailLines = scene.detailLines || [];
-    const resultLines = scene.resultLines || [];
-    const lines = [...detailLines, ...resultLines];
-    if (lines.length === 0) return;
-
-    ctx.save();
-    ctx.fillStyle = "rgba(10, 10, 16, 0.82)";
-    ctx.strokeStyle = "#4a4a5a";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 8);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 14px sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText("具体情况", x + 14, y + 12);
-
-    let lineY = y + 36;
-    const maxY = y + h - 12;
-    ctx.font = "12px sans-serif";
-    for (const line of lines) {
-      if (lineY >= maxY) break;
-      ctx.fillStyle = resultLines.includes(line) ? "#ffffff" : "#c8c8d8";
-      lineY = this.drawWrappedLine(ctx, line, x + 14, lineY, w - 28, 17, 2);
-    }
-    ctx.restore();
   }
 
   drawGameOver(battle) {

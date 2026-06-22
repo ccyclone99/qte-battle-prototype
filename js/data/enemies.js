@@ -9,6 +9,7 @@ const EnemyDatabase = {
   attacks: {
     thrust: {
       name: "直刺",
+      icon: "🡲",
       windup: 1.0,
       hitTime: 0.25,
       allowedResponses: ["dodge", "parry"],
@@ -18,6 +19,7 @@ const EnemyDatabase = {
     },
     slash: {
       name: "横扫",
+      icon: "⚔",
       windup: 0.9,
       hitTime: 0.35,
       allowedResponses: ["dodge", "guard"],
@@ -27,6 +29,7 @@ const EnemyDatabase = {
     },
     heavySmash: {
       name: "重砸",
+      icon: "⤓",
       windup: 1.5,
       hitTime: 0.5,
       allowedResponses: ["dodge"],
@@ -37,6 +40,7 @@ const EnemyDatabase = {
     },
     spellCast: {
       name: "法术咏唱",
+      icon: "✦",
       windup: 1.8,
       hitTime: 0.2,
       allowedResponses: ["parry"],

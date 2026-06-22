@@ -129,6 +129,21 @@ class QTEChainRunner {
     return 0.18;
   }
 
+  getExpectedInputTime() {
+    const node = this.currentNode();
+    if (!node) return null;
+    if (node.input.type === "rhythm") {
+      const beats = node.input.beats;
+      const idx = this.rhythmState.beatIndex;
+      if (idx < beats.length) return beats[idx];
+      return null;
+    }
+    if (this.forcedOutcome) return this.computeAutoResolveTime(node);
+    if (node.perfect !== null && node.perfect !== undefined) return node.perfect;
+    const win = this.getEffectiveWindow(node);
+    return (win.start + win.end) / 2;
+  }
+
   updateRhythm(node) {
     if (this.forcedOutcome) {
       this.updateForcedRhythm(node);

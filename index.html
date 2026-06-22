@@ -14,13 +14,14 @@
       <h1>QTE 战斗原型</h1>
       <div class="menu-buttons">
         <button id="btn-start">开始战斗</button>
+        <button id="btn-practice">练习模式</button>
         <button id="btn-demo">效果演示</button>
       </div>
       <div class="difficulty-row">
         <label for="difficulty-select">难度：</label>
         <select id="difficulty-select">
-          <option value="easy">简单</option>
-          <option value="normal" selected>普通</option>
+          <option value="easy" selected>简单</option>
+          <option value="normal">普通</option>
           <option value="hard">困难</option>
           <option value="extreme">极难</option>
         </select>
@@ -28,75 +29,80 @@
       <div class="menu-hint">战斗中按 ESC 可返回此菜单</div>
     </div>
 
-    <div id="ui-layer">
-      <div class="panel top-left">
-        <div class="bar-row">
-          <span class="label">玩家 HP</span>
-          <div class="bar"><div id="player-hp-fill" class="fill hp"></div></div>
-          <span id="player-hp-text">100/100</span>
-        </div>
-        <div class="bar-row">
-          <span class="label">敌人 HP</span>
-          <div class="bar"><div id="enemy-hp-fill" class="fill hp enemy"></div></div>
+    <!-- 游戏结束 / 练习结束弹窗 -->
+    <div id="game-over" class="overlay" style="display: none;">
+      <h1 id="game-over-title">战斗结束</h1>
+      <p id="game-over-subtitle"></p>
+      <div class="menu-buttons">
+        <button id="btn-restart">再来一局</button>
+        <button id="btn-back-menu">返回菜单</button>
+      </div>
+    </div>
+
+    <!-- 顶部状态条 -->
+    <div id="top-bar">
+      <div class="hp-group player">
+        <span class="hp-label">玩家</span>
+        <div class="hp-bar"><div id="player-hp-fill" class="hp-fill"></div></div>
+        <span id="player-hp-text">100/100</span>
+      </div>
+
+      <div class="top-center">
+        <div id="turn-indicator" class="turn-pill">玩家回合</div>
+      </div>
+
+      <div class="top-right-group">
+        <div class="hp-group enemy">
           <span id="enemy-hp-text">200/200</span>
+          <div class="hp-bar"><div id="enemy-hp-fill" class="hp-fill enemy"></div></div>
+          <span class="hp-label">敌人</span>
         </div>
-      </div>
-
-      <div class="panel top-right">
-        <div id="turn-indicator">玩家回合</div>
-        <div id="weapon-info">当前武器：未选择</div>
-        <div id="chain-info">—</div>
-      </div>
-
-      <div class="help-panel" id="help-panel">
-        <div class="help-title">操作说明</div>
-        <div>开局：A/S/D 选武器 → 1/2 选咒术 → 1/2/3 选战技</div>
-        <div>我方回合：[A/S/D] 触发对应 QTE 链</div>
-        <div>敌方回合：[SPACE] 闪避/弹反　[F] 格挡　[A/S/D] 战技反击</div>
-      </div>
-
-      <div class="panel bottom-center" id="message-panel">
-        <div id="message-text">按 A / S / D 选择武器，开始战斗</div>
-      </div>
-
-      <div id="battle-log" class="panel">
-        <div class="log-title">战斗日志</div>
-        <div id="log-content"></div>
+        <div id="difficulty-badge" class="difficulty-badge">普通</div>
+        <button id="btn-menu" class="top-menu-btn">菜单</button>
       </div>
     </div>
 
-    <div id="demo-ui-layer" class="demo-ui-layer">
-      <div class="demo-panel demo-status-panel">
-        <div class="demo-kicker">效果演示</div>
-        <div id="demo-phase-title" class="demo-title">选择演示分类</div>
-        <div id="demo-style-line" class="demo-line">风格：—</div>
-        <div id="demo-mode-line" class="demo-line">模式：—</div>
+    <!-- 侧抽屉 -->
+    <div id="help-drawer" class="drawer left-drawer hidden">
+      <div class="drawer-header">
+        <span class="drawer-title">操作说明</span>
+        <span class="drawer-hint">H</span>
       </div>
-
-      <div class="demo-panel demo-detail-panel">
-        <div class="demo-section-title">当前机制</div>
-        <div id="demo-item-title" class="demo-item-title">选择演示项</div>
-        <div id="demo-detail-lines" class="demo-lines"></div>
-      </div>
-
-      <div class="demo-panel demo-inspector-panel">
-        <div class="demo-section-title">播放状态</div>
-        <div id="demo-inspector-lines" class="demo-lines"></div>
-      </div>
-
-      <div class="demo-panel demo-result-panel">
-        <div class="demo-section-title">结算 / 记录</div>
-        <div id="demo-result-lines" class="demo-lines"></div>
-      </div>
-
-      <div class="demo-panel demo-controls-panel">
-        <span id="demo-controls-text">1-4 选择分类 | W 切换风格 | ESC 返回</span>
-      </div>
+      <div id="help-content" class="drawer-content"></div>
     </div>
+
+    <div id="log-drawer" class="drawer right-drawer hidden">
+      <div class="drawer-header">
+        <span class="drawer-title">战斗日志</span>
+        <span class="drawer-hint">L</span>
+      </div>
+      <div id="log-content" class="drawer-content"></div>
+    </div>
+
+    <div id="demo-detail-drawer" class="drawer right-drawer hidden">
+      <div class="drawer-header">
+        <span class="drawer-title">演示详情</span>
+        <span class="drawer-hint">I</span>
+      </div>
+      <div id="demo-detail-content" class="drawer-content"></div>
+    </div>
+
+    <!-- 触屏/鼠标虚拟按键（默认隐藏，按 V 切换） -->
+    <div id="touch-controls" class="touch-controls hidden">
+      <button data-key="A">A</button>
+      <button data-key="S">S</button>
+      <button data-key="D">D</button>
+      <button data-key="SPACE" class="wide">SPACE</button>
+      <button data-key="F">F</button>
+      <button data-key="M">M</button>
+      <button data-key="ESCAPE">ESC</button>
+    </div>
+    <button id="touch-toggle" class="touch-toggle" title="虚拟按键 V">⌨</button>
   </div>
 
   <script src="js/utils.js"></script>
   <script src="js/difficulty.js"></script>
+  <script src="js/audio.js"></script>
   <script src="js/fx.js"></script>
   <script src="js/input.js"></script>
   <script src="js/data/weapons.js"></script>
