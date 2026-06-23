@@ -11,7 +11,8 @@ class QTEChainRunner {
     this.rhythmState = {
       beatIndex: 0,
       hitCount: 0,
-      missCount: 0
+      missCount: 0,
+      wrongKeyMissed: false
     };
 
     // 当前节点是否已经结算过（防止一帧多次判定）
@@ -99,6 +100,7 @@ class QTEChainRunner {
       return;
     }
 
+
     // 普通节点超时判定
     if (this.nodeTimer > node.duration + 0.3) {
       this.resolveNode("timeout");
@@ -151,14 +153,17 @@ class QTEChainRunner {
     }
 
     const beats = node.input.beats;
-    const tolerance = (node.rhythmTolerance || 0.15) + 0.04;
+    const tolerance = (node.rhythmTolerance || 0.18) + 0.05;
 
-    // 检查是否错过当前节拍
+    // 检查是否错过当前节拍（若已因乱按记过 miss，则只推进不重复计数）
     while (this.rhythmState.beatIndex < beats.length) {
       const beatTime = beats[this.rhythmState.beatIndex];
       if (this.nodeTimer > beatTime + tolerance) {
-        this.rhythmState.missCount++;
+        if (!this.rhythmState.wrongKeyMissed) {
+          this.rhythmState.missCount++;
+        }
         this.rhythmState.beatIndex++;
+        this.rhythmState.wrongKeyMissed = false;
       } else {
         break;
       }
@@ -182,7 +187,7 @@ class QTEChainRunner {
 
   updateForcedRhythm(node) {
     const beats = node.input.beats;
-    const tolerance = (node.rhythmTolerance || 0.15) + 0.04;
+    const tolerance = (node.rhythmTolerance || 0.18) + 0.05;
     const outcome = this.forcedOutcome;
 
     if (outcome === "fail" || outcome === "early" || outcome === "late") {
@@ -251,13 +256,22 @@ class QTEChainRunner {
 
   handleRhythmInput(node, event) {
     if (event.type !== "press") return;
-    if (event.key.toUpperCase() !== node.input.key.toUpperCase()) return;
 
     const beats = node.input.beats;
-    const tolerance = (node.rhythmTolerance || 0.15) + 0.04;
+    const tolerance = (node.rhythmTolerance || 0.18) + 0.05;
     const idx = this.rhythmState.beatIndex;
 
     if (idx >= beats.length) return;
+
+    // 防连打/乱按：按错键只记 miss，不跳过当前拍子，仍可在判定时间内按对
+    if (event.key.toUpperCase() !== node.input.key.toUpperCase()) {
+      if (!this.rhythmState.wrongKeyMissed) {
+        this.rhythmState.missCount++;
+        this.rhythmState.wrongKeyMissed = true;
+      }
+      this.context.onRhythmMiss && this.context.onRhythmMiss(-1);
+      return;
+    }
 
     const beatTime = beats[idx];
     const diff = Math.abs(this.nodeTimer - beatTime);
@@ -265,12 +279,15 @@ class QTEChainRunner {
     if (diff <= tolerance) {
       this.rhythmState.hitCount++;
       this.rhythmState.beatIndex++;
+      this.rhythmState.wrongKeyMissed = false;
       // 节奏节点即时反馈，但不单独结算，等全部节拍完成
       this.context.onRhythmHit && this.context.onRhythmHit(idx, diff);
     } else {
       // 按错拍子算失败
       this.rhythmState.missCount++;
       this.rhythmState.beatIndex++;
+      this.rhythmState.wrongKeyMissed = false;
+      this.context.onRhythmMiss && this.context.onRhythmMiss(idx);
     }
   }
 
@@ -307,7 +324,7 @@ class QTEChainRunner {
       if (nextIndex >= 0) {
         this.nodeIndex = nextIndex;
         this.nodeTimer = -this.postNodePause;
-        this.rhythmState = { beatIndex: 0, hitCount: 0, missCount: 0 };
+        this.rhythmState = { beatIndex: 0, hitCount: 0, missCount: 0, wrongKeyMissed: false };
         const nextNode = this.currentNode();
         if (nextNode && nextNode.input.type === "rhythm") {
           this.rhythmState.beatIndex = 0;

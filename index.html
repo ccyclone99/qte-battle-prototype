@@ -33,9 +33,26 @@
     <div id="game-over" class="overlay" style="display: none;">
       <h1 id="game-over-title">战斗结束</h1>
       <p id="game-over-subtitle"></p>
+      <div id="game-over-stats" class="game-over-stats"></div>
       <div class="menu-buttons">
         <button id="btn-restart">再来一局</button>
         <button id="btn-back-menu">返回菜单</button>
+      </div>
+    </div>
+
+    <!-- 新手引导弹窗 -->
+    <div id="tutorial-overlay" class="overlay" style="display: none;">
+      <div class="tutorial-card">
+        <h2>快速上手</h2>
+        <ul>
+          <li>开局按 <b>1-5</b> 选择战斗风格</li>
+          <li>我方回合：按 <b>A / S / D</b> 发动对应 QTE 链（精准按键 / 按住蓄力 / 节奏连击）</li>
+          <li>敌方回合：绿色窗口出现时按 <b>SPACE</b> 闪避/弹反，<b>F</b> 格挡；命中后进入第二段 QTE</li>
+          <li>QTE 条：在绿色窗口内按键，金色竖线 = Perfect</li>
+          <li>节奏节点：按对应键踩紫色拍子，乱按记 miss 但不跳过拍子</li>
+          <li>连击：每次成功命中都会提高后续伤害，受击会打断</li>
+        </ul>
+        <button id="btn-tutorial-ok">知道了</button>
       </div>
     </div>
 
@@ -105,6 +122,7 @@
   <script src="js/audio.js"></script>
   <script src="js/fx.js"></script>
   <script src="js/input.js"></script>
+  <script src="js/data/chains.js"></script>
   <script src="js/data/weapons.js"></script>
   <script src="js/data/spells.js"></script>
   <script src="js/data/combatArts.js"></script>

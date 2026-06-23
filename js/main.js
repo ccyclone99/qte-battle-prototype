@@ -20,8 +20,11 @@ const difficultySelect = document.getElementById("difficulty-select");
 const gameOverOverlay = document.getElementById("game-over");
 const gameOverTitle = document.getElementById("game-over-title");
 const gameOverSubtitle = document.getElementById("game-over-subtitle");
+const gameOverStats = document.getElementById("game-over-stats");
 const btnRestart = document.getElementById("btn-restart");
 const btnBackMenu = document.getElementById("btn-back-menu");
+const tutorialOverlay = document.getElementById("tutorial-overlay");
+const btnTutorialOk = document.getElementById("btn-tutorial-ok");
 
 const helpDrawer = document.getElementById("help-drawer");
 const logDrawer = document.getElementById("log-drawer");
@@ -34,8 +37,10 @@ const touchToggle = document.getElementById("touch-toggle");
 
 const battleHelpHtml = `
   <div><b>开局</b>：按 1-5 选择战斗风格</div>
-  <div><b>我方回合</b>：按 A/S/D 触发对应 QTE 链</div>
-  <div><b>敌方回合</b>：按 SPACE 闪避/弹反，F 格挡</div>
+  <div><b>我方回合</b>：按 A/S/D 触发对应 QTE 链（精准按键 / 按住蓄力 / 节奏连击）</div>
+  <div><b>敌方回合</b>：绿色窗口按 SPACE 闪避/弹反，F 格挡；命中后进入第二段 QTE</div>
+  <div><b>连击</b>：每次成功命中增加连击，伤害随连击提升，受击会打断</div>
+  <div><b>追加</b>：荒芜之地等战技在剑攻击后按 A 触发追加攻击窗口</div>
   <div><b>通用</b>：H 帮助，L 日志，ESC 返回菜单</div>
 `;
 
@@ -81,6 +86,18 @@ let appState = "menu";
 let battle = null;
 let demo = null;
 let lastTime = performance.now();
+let tutorialShownThisSession = false;
+
+function showTutorialIfNeeded() {
+  if (tutorialShownThisSession) return;
+  tutorialShownThisSession = true;
+  tutorialOverlay.style.display = "flex";
+}
+
+function hideTutorial() {
+  tutorialOverlay.style.display = "none";
+  input.clear();
+}
 
 function logClassFor(msg) {
   const text = String(msg);
@@ -197,6 +214,7 @@ function showMenu() {
   appState = "menu";
   mainMenu.style.display = "flex";
   gameOverOverlay.style.display = "none";
+  hideTutorial();
   setTopBarVisible(false);
   hideAllDrawers();
   input.clear();
@@ -219,6 +237,7 @@ function startBattle() {
   resetUICache();
   addLog(`战斗开始 — 难度：${Difficulty.get().name}`);
   setHelpContent(battleHelpHtml);
+  showTutorialIfNeeded();
 }
 
 function startPractice() {
@@ -237,14 +256,31 @@ function startPractice() {
   resetUICache();
   addLog(`练习模式开始 — 敌人无限血量`);
   setHelpContent(battleHelpHtml);
+  showTutorialIfNeeded();
 }
 
-function showGameOver(won, isPractice) {
+function showGameOver(won, isPractice, stats = null) {
   gameOverTitle.textContent = isPractice ? "练习结束" : (won ? "胜利" : "战败");
   gameOverSubtitle.textContent = isPractice
     ? "敌人无限血量，继续挑战或返回菜单"
     : (won ? "敌人已被击败" : "玩家生命值耗尽");
   btnRestart.textContent = isPractice ? "继续练习" : "再来一局";
+
+  if (stats) {
+    const lines = [
+      `造成伤害：${stats.damageDealt}`,
+      `最大连击：×${stats.maxCombo}`,
+      `Perfect：${stats.perfectCount}`,
+      `受击次数：${stats.hitsTaken}`,
+      `命中率：${stats.accuracy}%`
+    ];
+    gameOverStats.innerHTML = lines.map(line => `<div>${line}</div>`).join("");
+    gameOverStats.style.display = "flex";
+  } else {
+    gameOverStats.innerHTML = "";
+    gameOverStats.style.display = "none";
+  }
+
   gameOverOverlay.style.display = "flex";
 }
 
@@ -263,6 +299,7 @@ function restartCurrentMode() {
 function startDemo() {
   SFX.enable();
   input.clear();
+  touchControls.classList.add("hidden");
   demo = new DemoMode(input, addLog);
   battle = null;
   appState = "demo";
@@ -274,6 +311,7 @@ function startDemo() {
   resetUICache();
   addLog("进入效果演示模式 — 按 W 切换风格，1-4 选择分类");
   setHelpContent(demoHelpMain);
+  showTutorialIfNeeded();
 }
 
 function updateBattleUI() {
@@ -313,9 +351,9 @@ function updateBattleUI() {
   setDifficultyBadge(`${Difficulty.get().name}${battle.practiceMode ? " · 练习" : ""}`);
   if (helpHtml) setHelpContent(helpHtml);
 
-  if (battle.turnState === "game_over") {
+  if (battle.turnState === "game_over" && gameOverOverlay.style.display === "none") {
     const won = battle.enemyHp <= 0;
-    showGameOver(won, battle.practiceMode);
+    showGameOver(won, battle.practiceMode, battle.getBattleStats());
   }
 }
 
@@ -431,6 +469,10 @@ btnDemo.addEventListener("click", startDemo);
 btnMenu.addEventListener("click", showMenu);
 btnRestart.addEventListener("click", restartCurrentMode);
 btnBackMenu.addEventListener("click", showMenu);
+btnTutorialOk.addEventListener("click", hideTutorial);
+tutorialOverlay.addEventListener("click", (e) => {
+  if (e.target === tutorialOverlay) hideTutorial();
+});
 difficultySelect.addEventListener("change", () => {
   Difficulty.set(difficultySelect.value);
 });
@@ -441,10 +483,18 @@ function toggleTouchControls() {
 
 window.addEventListener("keydown", (e) => {
   SFX.enable();
+  if (tutorialOverlay.style.display !== "none") {
+    hideTutorial();
+    return;
+  }
   const key = e.key.toUpperCase();
   if (key === "ESCAPE") {
     e.preventDefault();
-    if (appState === "battle") showMenu();
+    if (gameOverOverlay.style.display !== "none") {
+      showMenu();
+    } else if (appState === "battle") {
+      showMenu();
+    }
     return;
   }
   if (key === "H") {

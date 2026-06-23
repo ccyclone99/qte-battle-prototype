@@ -342,14 +342,17 @@ class DemoMode {
 
     if (category === "weapons") {
       const style = StyleDatabase[this.playerConfig.style];
-      // 当前风格武器的所有链
-      for (const [chainKey, chain] of Object.entries(weapon.chains)) {
+      // 当前配置实际生效的链（含咒术覆盖、战技追加）
+      const effectiveChains = Utils.getEffectiveChains(this.playerConfig);
+      for (const [chainKey, chainId] of Object.entries(effectiveChains)) {
+        const chainConfig = ChainDatabase[chainId];
+        if (!chainConfig) continue;
         items.push({
-          name: `${weapon.name} · ${chain.name} [${chainKey}]`,
-          description: chain.description,
-          chain,
+          name: `${weapon.name} · ${chainConfig.name} [${chainKey}]`,
+          description: chainConfig.description,
+          chain: chainConfig,
           source: "player",
-          preview: `${style ? style.name : weapon.name} — ${chain.name}`
+          preview: `${style ? style.name : weapon.name} — ${chainConfig.name}`
         });
       }
       // 普通攻击
@@ -371,7 +374,8 @@ class DemoMode {
     }
 
     if (category === "spells") {
-      const fireChain = SpellDatabase.fire.chainOverrides.staff.A;
+      const effectiveChains = Utils.getEffectiveChains(this.playerConfig);
+      const fireChain = ChainDatabase[effectiveChains.A] || ChainDatabase[SpellDatabase.fire.chainMap.staff.A];
       items.push(
         {
           name: "烈火重重 · 小火球",
@@ -465,9 +469,9 @@ class DemoMode {
     }
 
     if (category === "arts") {
-      const weaponChains = weapon.chains;
-      const chainA = weaponChains.A;
-      const followUpChain = CombatArtDatabase.desolo.chainOverrides[weaponId]?.followUp;
+      const effectiveChains = Utils.getEffectiveChains(this.playerConfig);
+      const chainA = ChainDatabase[effectiveChains.A];
+      const followUpChain = ChainDatabase[effectiveChains.followUp];
 
       // 即时动作序列：让玩家看清机制触发的完整时机
       const castDodgeSequence = [
@@ -649,11 +653,13 @@ class DemoMode {
 
     if (category === "defenses") {
       for (const [id, defense] of Object.entries(DefenseDatabase)) {
+        const chainConfig = ChainDatabase[defense.chainId];
+        if (!chainConfig) continue;
         // 完美版
         items.push({
           name: `${defense.name} · Perfect`,
-          description: `完美执行 ${defense.name} 全部节点`,
-          chain: defense,
+          description: `完美执行 ${defense.name}`,
+          chain: chainConfig,
           source: "enemy",
           preview: `完美 ${defense.name}：完全规避 + 反击`
         });
@@ -661,7 +667,7 @@ class DemoMode {
         items.push({
           name: `${defense.name} · 失败`,
           description: `${defense.name} 失败时的效果`,
-          chain: defense,
+          chain: chainConfig,
           source: "enemy",
           forceOutcome: "fail",
           preview: `${defense.name} 失败：受击减伤/反击失败`
@@ -850,9 +856,7 @@ class DemoMode {
     this.currentItem = item;
     this.input.clear();
 
-    let scaled = Difficulty.scaleChain(item.chain);
-    // 演示专用：非 Fail 的判定也进入下一段，让玩家看清完整输入流程
-    scaled = this.patchDemoDefenseChain(scaled);
+    const scaled = Difficulty.scaleChain(item.chain);
     this.qteRunner = new QTEChainRunner(scaled, {
       source: item.source || "enemy",
       ...(item.context || {}),
@@ -864,6 +868,10 @@ class DemoMode {
       onRhythmHit: (idx) => {
         this.log(`节拍 ${idx + 1} 命中`);
         SFX.sfxSuccess();
+      },
+      onRhythmMiss: (idx) => {
+        this.log(idx >= 0 ? `节拍 ${idx + 1} 没踩准` : "按错键了");
+        SFX.sfxFail();
       }
     });
 
@@ -878,23 +886,6 @@ class DemoMode {
       this.qteRunner.forceOutcome(forceOutcome || "perfect");
       this.message = `${item.name} — 自动演示中（${forceOutcome ? this.formatOutcome(forceOutcome) : "Perfect"}）`;
     }
-  }
-
-  patchDemoDefenseChain(chain) {
-    for (const node of chain.nodes) {
-      const perfect = node.onPerfect;
-      if (!perfect || !perfect.next) continue;
-      for (const key of ['onSuccess', 'onEarly', 'onLate']) {
-        const trans = node[key];
-        if (trans && !trans.next) {
-          trans.next = perfect.next;
-          if (trans.message) {
-            trans.message = `${trans.message}（演示：继续追击）`;
-          }
-        }
-      }
-    }
-    return chain;
   }
 
   getDefenseIdFromItem(item) {
@@ -965,6 +956,10 @@ class DemoMode {
       onRhythmHit: (idx) => {
         this.log(`节拍 ${idx + 1} 命中`);
         SFX.sfxSuccess();
+      },
+      onRhythmMiss: (idx) => {
+        this.log(idx >= 0 ? `节拍 ${idx + 1} 没踩准` : "按错键了");
+        SFX.sfxFail();
       }
     });
 

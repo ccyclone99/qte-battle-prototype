@@ -93,7 +93,7 @@ class CanvasRenderer {
       this.drawStatusIcons(scene);
       this.drawEnemyAttackBar(scene);
       if (scene.enemyAttack) {
-        this.drawBigKeyPrompt(scene, scene.enemyAttack.responseKey, scene.enemyAttack.hint, 435, t);
+        this.drawBigKeyPrompt(scene, scene.enemyAttack.responseKey, scene.enemyAttack.hint, 300, t);
       }
     } else if (scene.turnState === "qte_running" && scene.qteRunner) {
       this.drawPlayerState(scene);
@@ -102,7 +102,7 @@ class CanvasRenderer {
       const node = scene.qteRunner.currentNode();
       if (node) {
         const key = node.input.type === "hold_release" ? `松开 ${node.input.key}` : node.input.key;
-        this.drawBigKeyPrompt(scene, key, node.name);
+        this.drawBigKeyPrompt(scene, key, node.name, 300, t);
       }
     } else if (scene.turnState === "game_over") {
       this.drawGameOver(scene);
@@ -199,7 +199,7 @@ class CanvasRenderer {
     const combo = scene.comboCount || 0;
     if (combo <= 0) return;
 
-    const x = this.width - 40;
+    const x = this.width - 90;
     const y = 110;
     const pulse = 1 + Math.sin(performance.now() / 100) * 0.08;
     const color = combo >= 5 ? "#e74c3c" : (combo >= 3 ? "#f39c12" : "#f1c40f");
@@ -324,6 +324,16 @@ class CanvasRenderer {
       ctx.restore();
     }
 
+    // 火球蓄力特效：蓄力越久，火球越大越烈
+    if (scene.qteRunner) {
+      const runner = scene.qteRunner;
+      const node = runner.currentNode();
+      if (node && node.id === "charge" && node.input.type === "hold_release" && runner.chain && runner.chain.name.includes("火球")) {
+        const ratio = Utils.clamp(runner.nodeTimer / node.duration, 0, 1);
+        this.drawFireballCharge(scene, px + 50, py - 30, ratio, t);
+      }
+    }
+
     // 施法/蓄力光环
     if (pState === "casting" || pState === "charge") {
       ctx.save();
@@ -364,6 +374,52 @@ class CanvasRenderer {
       ctx.arc(0, 0, 60, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+    }
+  }
+
+  drawFireballCharge(scene, x, y, ratio, t) {
+    const ctx = this.ctx;
+    const radius = 12 + ratio * 38;
+    const glow = radius * (1.7 + Math.sin(t * 10) * 0.15);
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 外层光晕
+    const grad = ctx.createRadialGradient(0, 0, radius * 0.3, 0, 0, glow);
+    grad.addColorStop(0, "rgba(241, 196, 15, 0.95)");
+    grad.addColorStop(0.45, `rgba(231, 76, 60, ${0.45 + ratio * 0.45})`);
+    grad.addColorStop(1, "rgba(231, 76, 60, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, glow, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 核心火球
+    ctx.fillStyle = ratio > 0.7 ? "#f1c40f" : "#e67e22";
+    ctx.shadowColor = "#e74c3c";
+    ctx.shadowBlur = 20 + ratio * 25;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 内核白热点
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(-radius * 0.25, -radius * 0.25, radius * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // 持续迸发火星
+    if (scene.particles && Math.random() < 0.6 + ratio * 0.4) {
+      const spread = radius * 0.8;
+      scene.particles.emit("fireball",
+        x + (Math.random() - 0.5) * spread,
+        y + (Math.random() - 0.5) * spread,
+        0.4 + ratio * 1.2
+      );
     }
   }
 
@@ -665,11 +721,15 @@ class CanvasRenderer {
 
   drawChainHints(scene) {
     const ctx = this.ctx;
-    const weaponId = scene.playerConfig ? scene.playerConfig.weapon : null;
-    if (!weaponId) return;
+    const config = scene.playerConfig;
+    if (!config || !config.weapon) return;
 
-    const weapon = WeaponDatabase[weaponId];
-    const chains = Object.entries(weapon.chains);
+    const effective = Utils.getEffectiveChains(config);
+    const entries = Object.entries(effective)
+      .filter(([key]) => key !== "followUp")
+      .map(([key, chainId]) => ({ key, chain: ChainDatabase[chainId] }))
+      .filter(({ chain }) => chain);
+    const chains = entries;
     const cardW = 170;
     const cardH = 50;
     const gap = 16;
@@ -678,7 +738,7 @@ class CanvasRenderer {
     const y = 430;
 
     let idx = 0;
-    for (const [key, chain] of chains) {
+    for (const { key, chain } of chains) {
       const x = startX + idx * (cardW + gap);
 
       ctx.fillStyle = "rgba(20, 20, 30, 0.85)";
@@ -864,6 +924,7 @@ class CanvasRenderer {
     const barH = 18;
     const x = (this.width - barW) / 2;
     const y = 510;
+    const pendingFollowUp = scene.pendingFollowUp;
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
@@ -872,19 +933,24 @@ class CanvasRenderer {
     // 填充
     const progress = Utils.clamp(scene.actionBar / scene.actionBarMax, 0, 1);
     const grad = ctx.createLinearGradient(x, y, x + barW * progress, y);
-    grad.addColorStop(0, "#2980b9");
-    grad.addColorStop(1, "#3498db");
+    if (pendingFollowUp) {
+      grad.addColorStop(0, "#f39c12");
+      grad.addColorStop(1, "#f1c40f");
+    } else {
+      grad.addColorStop(0, "#2980b9");
+      grad.addColorStop(1, "#3498db");
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(x, y, barW * progress, barH);
 
     // 发光
-    ctx.shadowColor = "rgba(52, 152, 219, 0.5)";
+    ctx.shadowColor = pendingFollowUp ? "rgba(241, 196, 15, 0.6)" : "rgba(52, 152, 219, 0.5)";
     ctx.shadowBlur = 10;
     ctx.fillRect(x, y, barW * progress, 2);
     ctx.shadowBlur = 0;
 
     // 边框
-    ctx.strokeStyle = "#5a5a6a";
+    ctx.strokeStyle = pendingFollowUp ? "#f1c40f" : "#5a5a6a";
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, barW, barH);
 
@@ -893,7 +959,7 @@ class CanvasRenderer {
     ctx.font = "bold 14px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("行动条", x + barW / 2, y + barH / 2);
+    ctx.fillText(pendingFollowUp ? "追加窗口" : "行动条", x + barW / 2, y + barH / 2);
   }
 
   drawEnemyAttackBar(scene) {
@@ -973,6 +1039,13 @@ class CanvasRenderer {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillText(inResponse ? `${attack.name} · 可输入` : attack.name, iconX, iconY + 16);
+
+    // 敌人意图教学提示
+    ctx.fillStyle = "#aaaaaa";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("绿色窗口 = 可防御时机  红线 = 命中时刻", this.width / 2, y - 42);
   }
 
   drawQTEBar(scene) {
@@ -1018,14 +1091,25 @@ class CanvasRenderer {
       ctx.shadowBlur = 0;
     }
 
-    // 节奏节点：拍子标记
+    // 节奏节点：拍子标记（下一个拍子高亮脉冲）
     if (node.input.type === "rhythm") {
-      ctx.fillStyle = "rgba(155, 89, 182, 0.7)";
-      for (const beat of node.input.beats) {
+      const nextIdx = runner.rhythmState ? runner.rhythmState.beatIndex : 0;
+      for (let i = 0; i < node.input.beats.length; i++) {
+        const beat = node.input.beats[i];
         const beatX = x + barW * (beat / bounds.duration);
+        const isNext = i === nextIdx;
         ctx.beginPath();
-        ctx.arc(beatX, y + barH / 2, 8, 0, Math.PI * 2);
+        ctx.arc(beatX, y + barH / 2, isNext ? 10 : 7, 0, Math.PI * 2);
+        ctx.fillStyle = isNext ? "#f1c40f" : "rgba(155, 89, 182, 0.7)";
         ctx.fill();
+        if (isNext) {
+          const pulse = 1 + Math.sin(performance.now() / 100) * 0.3;
+          ctx.beginPath();
+          ctx.arc(beatX, y + barH / 2, 10 * pulse, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(241, 196, 15, 0.6)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
     }
 
@@ -1050,12 +1134,48 @@ class CanvasRenderer {
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, barW, barH);
 
+    // 阶段标题
+    const stageTitle = this.getNodeStageTitle(node);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(stageTitle, this.width / 2, y - 46);
+
     // 链标题
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 8);
+    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 26);
+
+    // 输入提示
+    const hint = this.getNodeInputHint(node);
+    if (hint) {
+      ctx.fillStyle = "#dddddd";
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(hint, this.width / 2, y + barH + 10);
+    }
+  }
+
+  getNodeStageTitle(node) {
+    if (!node || !node.input) return "";
+    const type = node.input.type;
+    if (type === "press") return "精准按键";
+    if (type === "hold_release") return "按住蓄力";
+    if (type === "rhythm") return "节奏连击";
+    return "";
+  }
+
+  getNodeInputHint(node) {
+    if (!node || !node.input) return "";
+    const input = node.input;
+    if (input.type === "press") return `按 ${input.key} · 绿色窗口内判定`;
+    if (input.type === "hold_release") return `按住 ${input.key} · 金色 Perfect 点松开`;
+    if (input.type === "rhythm") return `按 ${input.key} 踩紫色拍子 · 乱按记 miss`;
+    return `按 ${input.key}`;
   }
 
   drawDemoQTEBar(scene) {
@@ -1101,14 +1221,25 @@ class CanvasRenderer {
       ctx.shadowBlur = 0;
     }
 
-    // 节奏节点：拍子标记
+    // 节奏节点：拍子标记（下一个拍子高亮脉冲）
     if (node.input.type === "rhythm") {
-      ctx.fillStyle = "rgba(155, 89, 182, 0.7)";
-      for (const beat of node.input.beats) {
+      const nextIdx = runner.rhythmState ? runner.rhythmState.beatIndex : 0;
+      for (let i = 0; i < node.input.beats.length; i++) {
+        const beat = node.input.beats[i];
         const beatX = x + barW * (beat / bounds.duration);
+        const isNext = i === nextIdx;
         ctx.beginPath();
-        ctx.arc(beatX, y + barH / 2, 11, 0, Math.PI * 2);
+        ctx.arc(beatX, y + barH / 2, isNext ? 12 : 8, 0, Math.PI * 2);
+        ctx.fillStyle = isNext ? "#f1c40f" : "rgba(155, 89, 182, 0.7)";
         ctx.fill();
+        if (isNext) {
+          const pulse = 1 + Math.sin(performance.now() / 100) * 0.3;
+          ctx.beginPath();
+          ctx.arc(beatX, y + barH / 2, 12 * pulse, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(241, 196, 15, 0.6)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
     }
 
@@ -1133,12 +1264,30 @@ class CanvasRenderer {
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, barW, barH);
 
+    // 阶段标题
+    const stageTitle = this.getNodeStageTitle(node);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(stageTitle, this.width / 2, y - 46);
+
     // 链标题
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 8);
+    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 26);
+
+    // 输入提示
+    const hint = this.getNodeInputHint(node);
+    if (hint) {
+      ctx.fillStyle = "#dddddd";
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(hint, this.width / 2, y + barH + 10);
+    }
   }
 
   drawStatusIcons(scene) {
@@ -1158,7 +1307,7 @@ class CanvasRenderer {
     if (icons.length === 0) return;
 
     const startX = 20;
-    let y = 200;
+    let y = 280;
     const size = 22;
     const gap = 6;
 
@@ -1241,12 +1390,12 @@ class CanvasRenderer {
       ctx.font = "bold 26px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(scene.previewTitle, this.width / 2, 55);
+      ctx.fillText(scene.previewTitle, this.width / 2, 70);
 
       const modeText = scene.manualMode ? "手动试玩：请在判定窗口内按键" : "自动演示中";
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "14px sans-serif";
-      ctx.fillText(modeText, this.width / 2, 88);
+      ctx.fillText(modeText, this.width / 2, 103);
 
       if (scene.demoCounterAttack) {
         this.drawDemoCounterAttackIndicator(ctx);
@@ -1257,7 +1406,7 @@ class CanvasRenderer {
       const node = scene.qteRunner ? scene.qteRunner.currentNode() : null;
       if (node) {
         const key = node.input.type === "hold_release" ? `松开 ${node.input.key}` : node.input.key;
-        this.drawBigKeyPrompt(scene, key, node.name, 435, t);
+        this.drawBigKeyPrompt(scene, key, node.name, 360, t);
       }
 
       if (!scene.manualMode && scene.qteRunner) {
@@ -1308,7 +1457,7 @@ class CanvasRenderer {
     ctx.font = "bold 28px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 45);
+    ctx.fillText(scene.previewTitle, this.width / 2, 70);
 
     const seq = scene.actionSequence;
     if (!seq) return;
@@ -1343,7 +1492,7 @@ class CanvasRenderer {
     // 当前按键提示（如果阶段标签包含按键）
     const keyMatch = (phase.label || "").match(/按 ([A-Z]+)/);
     if (keyMatch) {
-      this.drawBigKeyPrompt(scene, keyMatch[1], "", 380, t);
+      this.drawBigKeyPrompt(scene, keyMatch[1], "", 300, t);
     }
   }
 
@@ -1356,17 +1505,17 @@ class CanvasRenderer {
     ctx.font = "bold 26px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 55);
+    ctx.fillText(scene.previewTitle, this.width / 2, 70);
 
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
-    ctx.fillText(`${modeText} — ${scene.message}`, this.width / 2, 88);
+    ctx.fillText(`${modeText} — ${scene.message}`, this.width / 2, 103);
 
     this.drawDemoEnemyAttackBar(scene);
 
     const key = scene.demoDefenseKey || "?";
-    this.drawBigKeyPrompt(scene, key, "命中后按");
+    this.drawBigKeyPrompt(scene, key, "命中后按", 300, t);
 
     // 阶段说明（简洁版，避免遮挡）
     const steps = [
@@ -1449,7 +1598,7 @@ class CanvasRenderer {
     ctx.font = "bold 40px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("效果演示模式", this.width / 2, 55);
+    ctx.fillText("效果演示模式", this.width / 2, 70);
 
     const categories = scene.categories;
     const cardW = 210;
@@ -1513,11 +1662,11 @@ class CanvasRenderer {
     ctx.font = "bold 30px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 55);
+    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 70);
 
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
-    ctx.fillText(`共 ${totalItems} 项  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 90);
+    ctx.fillText(`共 ${totalItems} 项  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 105);
 
     const cols = 2;
     const cardW = 360;
@@ -1574,12 +1723,12 @@ class CanvasRenderer {
     ctx.font = "bold 32px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 55);
+    ctx.fillText(scene.previewTitle, this.width / 2, 70);
 
     // 说明
     ctx.fillStyle = "#ffffff";
     ctx.font = "18px sans-serif";
-    this.wrapText(ctx, scene.previewText, this.width / 2, 110, 720, 28);
+    this.wrapText(ctx, scene.previewText, this.width / 2, 115, 720, 28);
 
     // 结算/结果摘要
     if (scene.resultLines && scene.resultLines.length > 0) {
@@ -1606,6 +1755,6 @@ class CanvasRenderer {
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "20px sans-serif";
-    ctx.fillText("刷新页面重新开始", this.width / 2, this.height / 2 + 30);
+    ctx.fillText("点击按钮继续", this.width / 2, this.height / 2 + 30);
   }
 }

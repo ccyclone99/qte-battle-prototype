@@ -3,20 +3,20 @@ const Difficulty = {
     easy: {
       name: "简单",
       qteDurationMul: 4.0,
-      qteWindowMul: 1.5,
-      enemyWindupMul: 1.5,
-      enemyResponseMul: 1.8,
-      pointerSpeedMul: 0.5,
-      enemyDamageMul: 0.6
+      qteWindowMul: 1.6,
+      enemyWindupMul: 1.6,
+      enemyResponseMul: 2.0,
+      pointerSpeedMul: 0.45,
+      enemyDamageMul: 0.5
     },
     normal: {
       name: "普通",
       qteDurationMul: 1.8,
-      qteWindowMul: 1.25,
-      enemyWindupMul: 1.3,
-      enemyResponseMul: 1.4,
-      pointerSpeedMul: 0.75,
-      enemyDamageMul: 0.8
+      qteWindowMul: 1.3,
+      enemyWindupMul: 1.35,
+      enemyResponseMul: 1.5,
+      pointerSpeedMul: 0.7,
+      enemyDamageMul: 0.75
     },
     hard: {
       name: "困难",
@@ -25,16 +25,16 @@ const Difficulty = {
       enemyWindupMul: 1.0,
       enemyResponseMul: 1.0,
       pointerSpeedMul: 1.0,
-      enemyDamageMul: 1.0
+      enemyDamageMul: 0.95
     },
     extreme: {
       name: "极难",
       qteDurationMul: 1.0,
       qteWindowMul: 0.8,
-      enemyWindupMul: 0.8,
-      enemyResponseMul: 0.8,
+      enemyWindupMul: 0.85,
+      enemyResponseMul: 0.85,
       pointerSpeedMul: 1.25,
-      enemyDamageMul: 1.2
+      enemyDamageMul: 1.15
     }
   },
 
@@ -48,10 +48,12 @@ const Difficulty = {
     return this.presets[this.current];
   },
 
-  // 深拷贝并按难度缩放一条 QTE 链
+  // 深拷贝并按难度缩放一条 QTE 链（支持链对象或 ChainDatabase ID）
   scaleChain(chain) {
     const cfg = this.get();
-    const clone = JSON.parse(JSON.stringify(chain));
+    const source = typeof chain === "string" ? ChainDatabase[chain] : chain;
+    if (!source) return { name: "未知链", nodes: [] };
+    const clone = JSON.parse(JSON.stringify(source));
     for (const node of clone.nodes) {
       node.duration *= cfg.qteDurationMul;
       if (node.window) {

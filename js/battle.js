@@ -69,6 +69,17 @@ class BattleSystem {
     this.comboCount = 0;
     this.comboTimer = 0;
 
+    // 战斗统计
+    this.battleStats = {
+      damageDealt: 0,
+      maxCombo: 0,
+      perfectCount: 0,
+      hitsTaken: 0,
+      attempts: 0,
+      hits: 0,
+      misses: 0
+    };
+
     // 特效
     this.particles = new ParticleSystem();
     this.floatingTexts = new FloatingTextManager();
@@ -247,6 +258,12 @@ class BattleSystem {
     this.actionBar += dt;
     if (this.actionBar >= this.actionBarMax) {
       this.actionBar = this.actionBarMax;
+      // 追加窗口超时未响应，自动执行普攻并打断连击
+      if (this.pendingFollowUp) {
+        this.pendingFollowUp = false;
+        this.resetCombo();
+        this.setMessage("追加机会已错过");
+      }
       this.performNormalAttack();
     }
   }
@@ -264,7 +281,8 @@ class BattleSystem {
 
     if (this.enemyAttackPhase === "windup" && this.enemyAttackTimer >= responseStart) {
       this.enemyAttackPhase = "response";
-      this.setMessage("敌方攻击");
+      this.input.clear(); // 丢弃窗口期前的过早按键
+      this.setMessage("敌方攻击：绿色窗口按 SPACE/F 防御");
       SFX.sfxWindup();
     }
 
@@ -292,11 +310,6 @@ class BattleSystem {
       if (this.checkEnemyDefeated()) return;
       if (this.turnState === "game_over") return;
       this.setMessage(SpellDatabase.fire.shieldThornMessage);
-    }
-
-    // 护甲破坏增伤
-    if (this.armorBreakActive) {
-      damage = Math.floor(damage * (1 + SpellDatabase.fire.armorBreakDamageBonus));
     }
 
     const died = this.applyDamage("player", damage);
@@ -346,10 +359,16 @@ class BattleSystem {
 
       const key = ev.key.toUpperCase();
 
-      // 荒芜之地：追加攻击
-      if (this.pendingFollowUp && key === "A") {
+      // 荒芜之地：追加攻击窗口独占
+      if (this.pendingFollowUp) {
+        if (key === "A") {
+          this.input.consume();
+          this.triggerFollowUpQTE();
+          return;
+        }
+        // 追加窗口期间只响应 A，其他链式按键吞掉并提示
         this.input.consume();
-        this.triggerFollowUpQTE();
+        this.setMessage("按 A 追加");
         return;
       }
 
@@ -456,43 +475,25 @@ class BattleSystem {
   // ========== 动作触发 ==========
 
   getEffectiveChains() {
-    if (!this.playerConfig.weapon) return {};
+    return Utils.getEffectiveChains(this.playerConfig);
+  }
 
-    const weapon = WeaponDatabase[this.playerConfig.weapon];
-    const chains = {};
-
-    // 复制基础链
-    for (const [key, chain] of Object.entries(weapon.chains)) {
-      chains[key] = chain;
-    }
-
-    // 咒术覆盖
-    for (const spellId of this.playerConfig.spells) {
-      const spell = SpellDatabase[spellId];
-      if (spell.chainOverrides && spell.chainOverrides[this.playerConfig.weapon]) {
-        for (const [key, chain] of Object.entries(spell.chainOverrides[this.playerConfig.weapon])) {
-          chains[key] = chain;
-        }
-      }
-    }
-
-    // 战技追加链
-    for (const artId of this.playerConfig.combatArts) {
-      const art = CombatArtDatabase[artId];
-      if (art.chainOverrides && art.chainOverrides[this.playerConfig.weapon]) {
-        for (const [key, chain] of Object.entries(art.chainOverrides[this.playerConfig.weapon])) {
-          chains[key] = chain;
-        }
-      }
-    }
-
-    return chains;
+  getQTEStageMessage(chainConfig) {
+    const firstNode = chainConfig.nodes && chainConfig.nodes[0];
+    const type = firstNode && firstNode.input && firstNode.input.type;
+    const stage =
+      type === "hold_release" ? "按住蓄力" :
+      type === "rhythm" ? "节奏连击" :
+      "精准按键";
+    return `${chainConfig.name} · ${stage}`;
   }
 
   triggerWeaponQTE(chainKey) {
     const chains = this.getEffectiveChains();
-    const chain = chains[chainKey];
-    if (!chain) return;
+    const chainId = chains[chainKey];
+    if (!chainId) return;
+    const chainConfig = ChainDatabase[chainId];
+    if (!chainConfig) return;
 
     this.playerState.currentState = this.isSwordChain(chainKey) ? "swordAttack" : "idle";
     if (chainKey === "S" && this.playerConfig.weapon === "staff") {
@@ -501,9 +502,10 @@ class BattleSystem {
     }
 
     this.setTurnState("qte_running");
-    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chain), {
+    this.input.clear();
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chainId), {
       source: "player",
-      context: { isSwordChain: this.isSwordChain(chainKey) },
+      isSwordChain: this.isSwordChain(chainKey),
       onNodeEffect: (node, outcome, transition) => {
         if (node.input.type === "hold_release" || node.input.type === "rhythm") {
           this.playerState.currentState = "charge";
@@ -511,28 +513,41 @@ class BattleSystem {
         }
         if (transition.message) this.setMessage(transition.message);
         this.showOutcomeFeedback(outcome);
+        // 火球释放时的爆裂粒子
+        if (transition.effect && transition.effect.startsWith("fireball")) {
+          const intensity = transition.effect.includes("big") ? 2.5 : (transition.effect.includes("small") ? 0.8 : 1.5);
+          this.spawnParticles("fireball", 740, 380, intensity);
+        }
       },
       onRhythmHit: (idx, diff) => {
         this.setMessage(`节拍 ${idx + 1} 命中`);
         SFX.sfxSuccess();
+      },
+      onRhythmMiss: (idx) => {
+        this.setMessage(idx >= 0 ? `节拍 ${idx + 1} 没踩准` : "按错键了");
+        SFX.sfxFail();
       }
     });
 
-    this.setMessage(chain.name);
+    this.setMessage(this.getQTEStageMessage(chainConfig));
   }
 
   triggerCounterAttack(chainKey) {
     const chains = this.getEffectiveChains();
-    const chain = chains[chainKey];
-    if (!chain) return;
+    const chainId = chains[chainKey];
+    if (!chainId) return;
+    const chainConfig = ChainDatabase[chainId];
+    if (!chainConfig) return;
 
     this.defenseTriggered = true;
     this.playerState.currentState = "swordAttack";
     SFX.sfxCounter();
     this.setTurnState("qte_running");
-    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chain), {
+    this.input.clear();
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chainId), {
       source: "player",
-      context: { counterAttack: true, isSwordChain: true },
+      counterAttack: true,
+      isSwordChain: true,
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
         this.showOutcomeFeedback(outcome);
@@ -540,32 +555,40 @@ class BattleSystem {
       onRhythmHit: (idx, diff) => {
         this.setMessage(`节拍 ${idx + 1} 命中`);
         SFX.sfxSuccess();
+      },
+      onRhythmMiss: (idx) => {
+        this.setMessage(idx >= 0 ? `节拍 ${idx + 1} 没踩准` : "按错键了");
+        SFX.sfxFail();
       }
     });
 
-    this.setMessage(`反击：${chain.name}`);
+    this.setMessage(`反击 · ${this.getQTEStageMessage(chainConfig)}`);
   }
 
   triggerFollowUpQTE() {
     const chains = this.getEffectiveChains();
-    const chain = chains["followUp"];
-    if (!chain) return;
+    const chainId = chains["followUp"];
+    if (!chainId) return;
 
     this.pendingFollowUp = false;
     this.defenseTriggered = true;
     this.playerState.currentState = "swordAttack";
     SFX.sfxCounter();
     this.setTurnState("qte_running");
-    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chain), {
+    this.input.clear();
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chainId), {
       source: "player",
-      context: { followUp: true, interruptEnemy: true, isSwordChain: true },
+      followUp: true,
+      interruptEnemy: true,
+      isSwordChain: true,
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
         this.showOutcomeFeedback(outcome);
       }
     });
 
-    this.setMessage("追加攻击");
+    const chainConfig = ChainDatabase[chainId];
+    this.setMessage(`追加攻击 · ${chainConfig ? this.getQTEStageMessage(chainConfig) : "精准按键"}`);
   }
 
   // ========== 战技中断类 ==========
@@ -574,6 +597,7 @@ class BattleSystem {
     this.qteRunner = null;
     this.playerState.currentState = "idle";
     this.defenseTriggered = true;
+    this.input.clear();
     SFX.sfxDodge();
     this.setMessage("施法中闪避！");
     this.startResolving(() => this.startPlayerTurn());
@@ -582,6 +606,7 @@ class BattleSystem {
   interruptCastingAndParry() {
     this.qteRunner = null;
     this.playerState.currentState = "idle";
+    this.input.clear();
     if (this.enemyAttack && (this.enemyAttack.allowedResponses || []).includes("parry")) {
       this.triggerDefenseQTE("parry");
     } else {
@@ -594,6 +619,7 @@ class BattleSystem {
     this.qteRunner = null;
     this.playerState.currentState = "idle";
     this.defenseTriggered = true;
+    this.input.clear();
     SFX.sfxDodge();
     this.setMessage("格挡中闪避！");
     this.startResolving(() => this.startPlayerTurn());
@@ -643,9 +669,18 @@ class BattleSystem {
     // 计算最终伤害
     let damage = effects.damage;
 
+    // 连击增伤
+    if (damage > 0) {
+      const comboMul = this.getComboDamageMultiplier();
+      if (comboMul > 1) {
+        damage = Math.floor(damage * comboMul);
+        this.spawnFloatingText(`+${Math.round((comboMul - 1) * 100)}% 连击`, 740, 300, "status");
+      }
+    }
+
     // 护甲破坏增伤
     if (this.armorBreakActive) {
-      damage = Math.floor(damage * 1.3);
+      damage = Math.floor(damage * (1 + SpellDatabase.fire.armorBreakDamageBonus));
     }
 
     // 烈火重重：剑对防御敌人增伤
@@ -718,6 +753,7 @@ class BattleSystem {
     // 荒芜之地：攻击后触发追加攻击机会
     if (this.hasCombatArt("desolo") && context && context.isSwordChain && !context.followUp) {
       this.pendingFollowUp = true;
+      this.actionBar = 0;
       this.setMessage("按 A 追加");
       this.setTurnState("player_turn");
       this.qteRunner = null;
@@ -794,9 +830,16 @@ class BattleSystem {
 
     let damage = weapon.normalAttack || 10;
 
+    // 连击增伤
+    const comboMul = this.getComboDamageMultiplier();
+    if (comboMul > 1) {
+      damage = Math.floor(damage * comboMul);
+      this.spawnFloatingText(`+${Math.round((comboMul - 1) * 100)}% 连击`, 740, 300, "status");
+    }
+
     // 护甲破坏增伤
     if (this.armorBreakActive) {
-      damage = Math.floor(damage * 1.3);
+      damage = Math.floor(damage * (1 + SpellDatabase.fire.armorBreakDamageBonus));
     }
 
     // 东方：连续闪避后暴击
@@ -814,6 +857,16 @@ class BattleSystem {
   }
 
   startEnemyTurn() {
+    // 眩晕跳过敌方回合
+    if (this.enemyStunTimer > 0) {
+      this.enemyStunTimer = 0;
+      this.showTurnBanner("敌方眩晕 · 跳过回合", "#9b59b6");
+      this.setMessage("敌人眩晕，额外回合");
+      this.input.clear();
+      this.startResolving(() => this.startPlayerTurn());
+      return;
+    }
+
     this.setTurnState("enemy_turn");
     this.showTurnBanner("敌方回合", "#e74c3c");
     this.actionBar = 0;
@@ -821,6 +874,7 @@ class BattleSystem {
     this.resetCombo();
     this.pendingFollowUp = false;
     this.playerState.currentState = "idle";
+    this.input.clear();
 
     // 护甲破坏回合衰减
     if (this.armorBreakActive) {
@@ -833,32 +887,38 @@ class BattleSystem {
     const attackIds = EnemyDatabase.base.attacks;
     const attackId = attackIds[Math.floor(Math.random() * attackIds.length)];
     this.enemyAttack = Difficulty.scaleAttack({ id: attackId, ...EnemyDatabase.attacks[attackId] });
-    this.enemyAttack.responseKey = "SPACE";
+    const allowed = this.enemyAttack.allowedResponses || [];
+    const keys = [];
+    if (allowed.includes("dodge") || allowed.includes("parry")) keys.push("SPACE");
+    if (allowed.includes("guard")) keys.push("F");
+    this.enemyAttack.responseKey = keys.join(" / ") || "SPACE";
     this.enemyAttackTimer = 0;
     this.enemyAttackPhase = "windup";
 
-    this.setMessage(`敌方回合`);
+    this.setMessage(`敌方回合：绿色窗口出现按 SPACE/F 防御`);
   }
 
   startPlayerTurn() {
     this.setTurnState("player_turn");
     this.showTurnBanner("玩家回合", "#3498db");
     this.actionBar = 0;
-    this.resetCombo();
+    // 连击由超时或受击重置，额外回合保留
     this.enemyAttack = null;
     this.enemyAttackPhase = "none";
     this.defenseTriggered = false;
     this.qteRunner = null;
     this.pendingFollowUp = false;
     this.playerState.currentState = "idle";
+    this.input.clear();
 
     const weapon = WeaponDatabase[this.playerConfig.weapon];
     const chains = this.getEffectiveChains();
     const chainNames = Object.entries(chains)
-      .map(([key, chain]) => `[${key}]${chain.name}`)
+      .filter(([key]) => key !== "followUp")
+      .map(([key, chainId]) => `[${key}]${ChainDatabase[chainId].name}`)
       .join(" ");
 
-    this.setMessage("玩家回合");
+    this.setMessage(`玩家回合：${chainNames}`);
   }
 
   startResolving(callback) {
@@ -948,6 +1008,7 @@ class BattleSystem {
       this.flashScreen("#e74c3c", 0.15);
       SFX.sfxHit();
       this.resetCombo();
+      this.battleStats.hitsTaken++;
       this.log(`玩家受到 ${amount} 伤害`);
       if (this.playerHp <= 0) {
         this.setTurnState("game_over");
@@ -958,6 +1019,7 @@ class BattleSystem {
       return false;
     } else {
       this.enemyHp = Math.max(0, this.enemyHp - amount);
+      this.battleStats.damageDealt += amount;
       this.screenShake = options.isCrit ? 0.25 : 0.15;
       this.hitStop = options.isCrit ? 0.12 : 0.08;
       const textType = options.isCrit ? "crit" : "damage";
@@ -995,13 +1057,16 @@ class BattleSystem {
   }
 
   triggerDefenseQTE(defenseId, triggerTime) {
-    let defense = DefenseDatabase[defenseId];
+    const defense = DefenseDatabase[defenseId];
     if (!defense) return;
 
+    let chain = ChainDatabase[defense.chainId];
+    if (!chain) return;
+
     // 东方剑术：格挡窗口额外放宽
+    chain = JSON.parse(JSON.stringify(chain));
     if (this.hasCombatArt("eastern")) {
-      defense = JSON.parse(JSON.stringify(defense));
-      for (const node of defense.nodes) {
+      for (const node of chain.nodes) {
         if (node.window) {
           node.window = {
             start: Math.max(0, node.window.start - CombatArtDatabase.eastern.guardWindowBonus),
@@ -1017,7 +1082,8 @@ class BattleSystem {
 
     this.playerState.currentState = "shield";
     this.setTurnState("qte_running");
-    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(defense), {
+    this.input.clear();
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chain), {
       source: "enemy",
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
@@ -1025,13 +1091,13 @@ class BattleSystem {
       }
     });
 
-    // 修复：按一次按键即可触发 press 型防御（闪避/弹反），并根据按下时机判定结果
+    // 防御单节点化：按一次按键即根据时机直接结算
     const firstNode = this.qteRunner.currentNode();
     if (firstNode && firstNode.input.type === "press" && triggerTime !== undefined) {
       const outcome = this.computeDefenseOutcome(triggerTime);
       this.qteRunner.resolveNode(outcome);
     } else {
-      this.setMessage(defense.name);
+      this.setMessage(`${defense.name} · ${this.getQTEStageMessage(chain)}`);
     }
   }
 
@@ -1071,6 +1137,15 @@ class BattleSystem {
   showOutcomeFeedback(outcome, x = 480, y = 360) {
     const label = (outcome || "fail").toUpperCase();
     this.spawnFloatingText(label, x, y, "popup");
+
+    // 统计
+    this.battleStats.attempts++;
+    if (outcome === "perfect" || outcome === "success") {
+      this.battleStats.hits++;
+    } else {
+      this.battleStats.misses++;
+    }
+    if (outcome === "perfect") this.battleStats.perfectCount++;
 
     if (outcome === "perfect") {
       SFX.sfxPerfect();
@@ -1127,6 +1202,19 @@ class BattleSystem {
   addCombo() {
     this.comboCount++;
     this.comboTimer = 2.0;
+    if (this.comboCount > this.battleStats.maxCombo) {
+      this.battleStats.maxCombo = this.comboCount;
+    }
+  }
+
+  getComboDamageMultiplier() {
+    return 1 + Math.min(this.comboCount * 0.05, 0.5);
+  }
+
+  getBattleStats() {
+    const s = this.battleStats;
+    const accuracy = s.attempts > 0 ? Math.round((s.hits / s.attempts) * 100) : 0;
+    return { ...s, accuracy };
   }
 
   checkEnemyDefeated() {

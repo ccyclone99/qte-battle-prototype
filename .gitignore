@@ -3,8 +3,10 @@ qte-battle-prototype.zip
 
 # 临时文件/验证目录
 _verify/
+tmp/
 tmp_*
 *.tmp
+save_screenshot.js
 
 # 编辑器
 .vscode/

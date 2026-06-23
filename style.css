@@ -77,7 +77,18 @@ body {
 #game-over p {
   font-size: 20px;
   color: #cccccc;
+  margin-bottom: 12px;
+}
+
+.game-over-stats {
+  display: none;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 32px;
   margin-bottom: 24px;
+  font-size: 16px;
+  color: #dddddd;
+  text-align: center;
 }
 
 .hp-group {
@@ -321,16 +332,16 @@ body {
 /* ========== 虚拟按键 ========== */
 .touch-controls {
   position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 56px;
+  right: 12px;
   display: flex;
-  gap: 8px;
-  padding: 8px 12px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
   background: rgba(10, 10, 16, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  z-index: 35;
+  z-index: 20;
   pointer-events: auto;
   transition: opacity 0.2s, transform 0.2s;
 }
@@ -338,14 +349,14 @@ body {
 .touch-controls.hidden {
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(20px);
+  transform: translateY(20px);
 }
 
 .touch-controls button {
-  min-width: 44px;
-  height: 44px;
+  min-width: 40px;
+  height: 40px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #f0f0f5;
   background: linear-gradient(180deg, #3a3a4a, #252530);
@@ -358,7 +369,7 @@ body {
 }
 
 .touch-controls button.wide {
-  min-width: 90px;
+  min-width: 100%;
 }
 
 .touch-controls button:active {
@@ -379,7 +390,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   cursor: pointer;
-  z-index: 35;
+  z-index: 20;
   pointer-events: auto;
 }
 
@@ -395,4 +406,68 @@ body {
 .drawer-content::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 2px;
+}
+
+/* ========== 新手引导弹窗 ========== */
+#tutorial-overlay {
+  z-index: 60;
+}
+
+.tutorial-card {
+  background: rgba(20, 20, 30, 0.96);
+  border: 1px solid rgba(241, 196, 15, 0.4);
+  border-radius: 12px;
+  padding: 28px 36px;
+  max-width: 520px;
+  box-shadow: 0 0 30px rgba(241, 196, 15, 0.15);
+}
+
+.tutorial-card h2 {
+  color: #f1c40f;
+  font-size: 28px;
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.tutorial-card ul {
+  list-style: none;
+  margin-bottom: 22px;
+}
+
+.tutorial-card li {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #d0d0e0;
+  padding-left: 18px;
+  position: relative;
+}
+
+.tutorial-card li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #f1c40f;
+}
+
+.tutorial-card li b {
+  color: #ffffff;
+}
+
+.tutorial-card button {
+  display: block;
+  margin: 0 auto;
+  padding: 10px 32px;
+  font-size: 16px;
+  font-family: inherit;
+  color: #12121a;
+  background: #f1c40f;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.tutorial-card button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 16px rgba(241, 196, 15, 0.5);
 }
