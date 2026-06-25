@@ -10,13 +10,21 @@ const SpellDatabase = {
     armorBreakHits: 3,
     armorBreakDamageBonus: 0.3,
     armorBreakTurns: 3,
+    heatDamageBonusPerPoint: 0.003,
+    overheatThreshold: 85,
     // 盾：敌人命中时受到火焰反伤
     shieldThornDamage: 8,
     shieldThornMessage: "火焰反伤！",
     // 法杖 A 链映射为火球进化链
     chainMap: {
       staff: {
-        A: "fireball_evolution"
+        A: "fireball_evolution_v2"
+      },
+      greatsword: {
+        A: "flame_blade"
+      },
+      dualBlades: {
+        A: "flame_blade"
       }
     }
   },
@@ -38,6 +46,20 @@ const SpellDatabase = {
     shieldReflectMul: 1.0,
     shieldEnchantMessage: "盾牌咒还附魔",
     // 杖基础效果
-    staffBaseReflect: true
+    staffBaseReflect: true,
+    // 法杖 S 链映射为主动引流链
+    chainMap: {
+      staff: {
+        S: "absorb_siphon",
+        D: "overflow_burst"
+      },
+      greatsword: {
+        D: "overflow_burst"
+      },
+      dualBlades: {
+        S: "absorb_siphon",
+        D: "overflow_burst"
+      }
+    }
   }
 };

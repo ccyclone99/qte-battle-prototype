@@ -45,7 +45,7 @@
       <div class="tutorial-card">
         <h2>快速上手</h2>
         <ul>
-          <li>开局按 <b>1-5</b> 选择战斗风格</li>
+          <li>开局按 <b>1-7</b> 选择战斗风格</li>
           <li>我方回合：按 <b>A / S / D</b> 发动对应 QTE 链（精准按键 / 按住蓄力 / 节奏连击）</li>
           <li>敌方回合：绿色窗口出现时按 <b>SPACE</b> 闪避/弹反，<b>F</b> 格挡；命中后进入第二段 QTE</li>
           <li>QTE 条：在绿色窗口内按键，金色竖线 = Perfect</li>
@@ -104,15 +104,34 @@
       <div id="demo-detail-content" class="drawer-content"></div>
     </div>
 
+    <div id="qte-debug-drawer" class="drawer qte-debug-drawer hidden">
+      <div class="drawer-header">
+        <span class="drawer-title">QTE 调试</span>
+        <span class="drawer-hint">T</span>
+      </div>
+      <div id="qte-debug-content" class="drawer-content"></div>
+    </div>
+
     <!-- 触屏/鼠标虚拟按键（默认隐藏，按 V 切换） -->
     <div id="touch-controls" class="touch-controls hidden">
-      <button data-key="A">A</button>
-      <button data-key="S">S</button>
-      <button data-key="D">D</button>
-      <button data-key="SPACE" class="wide">SPACE</button>
-      <button data-key="F">F</button>
-      <button data-key="M">M</button>
-      <button data-key="ESCAPE">ESC</button>
+      <div class="touch-row touch-row-numeric" aria-label="数字选择">
+        <button data-key="1">1</button>
+        <button data-key="2">2</button>
+        <button data-key="3">3</button>
+        <button data-key="4">4</button>
+        <button data-key="5">5</button>
+        <button data-key="6">6</button>
+        <button data-key="7">7</button>
+      </div>
+      <div class="touch-row touch-row-action" aria-label="战斗操作">
+        <button data-key="A">A</button>
+        <button data-key="S">S</button>
+        <button data-key="D">D</button>
+        <button data-key="SPACE" class="wide">SPACE</button>
+        <button data-key="F">F</button>
+        <button data-key="M">M</button>
+        <button data-key="ESCAPE">ESC</button>
+      </div>
     </div>
     <button id="touch-toggle" class="touch-toggle" title="虚拟按键 V">⌨</button>
   </div>
@@ -120,8 +139,8 @@
   <script src="js/utils.js"></script>
   <script src="js/difficulty.js"></script>
   <script src="js/audio.js"></script>
-  <script src="js/fx.js"></script>
-  <script src="js/input.js"></script>
+  <script src="js/fx.js?v=r6c"></script>
+  <script src="js/input.js?v=r6d"></script>
   <script src="js/data/chains.js"></script>
   <script src="js/data/weapons.js"></script>
   <script src="js/data/spells.js"></script>
@@ -129,10 +148,16 @@
   <script src="js/data/styles.js"></script>
   <script src="js/data/defenses.js"></script>
   <script src="js/data/enemies.js"></script>
-  <script src="js/demo-mode.js"></script>
+  <script src="js/data/effects.js"></script>
+  <script src="js/systems/effects.js"></script>
+  <script src="js/systems/statuses.js"></script>
+  <script src="js/systems/resources.js"></script>
+  <script src="js/systems/qte-debug.js"></script>
+  <script src="js/systems/chain-effects.js"></script>
+  <script src="js/demo-mode.js?v=r6d"></script>
   <script src="js/qte-runner.js"></script>
   <script src="js/battle.js"></script>
-  <script src="js/renderer.js"></script>
-  <script src="js/main.js"></script>
+  <script src="js/renderer.js?v=r6c"></script>
+  <script src="js/main.js?v=r6g"></script>
 </body>
 </html>

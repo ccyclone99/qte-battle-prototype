@@ -8,7 +8,7 @@ class InputBuffer {
       let key = e.key.toUpperCase();
       if (key === " " || key === "SPACEBAR") key = "SPACE";
 
-      const gameKeys = ["A", "S", "D", "SPACE", "F", "ESCAPE", "H", "L", "I", "W", "M", "1", "2", "3", "4", "5", "6", "ARROWLEFT", "ARROWRIGHT", "ARROWUP", "ARROWDOWN"];
+      const gameKeys = ["A", "S", "D", "SPACE", "F", "ESCAPE", "H", "L", "I", "W", "M", "1", "2", "3", "4", "5", "6", "7", "ARROWLEFT", "ARROWRIGHT", "ARROWUP", "ARROWDOWN"];
       if (gameKeys.includes(key)) {
         e.preventDefault();
       }

@@ -13,6 +13,7 @@ class DemoMode {
     this.previewTimer = 0;
     this.detailLines = [];
     this.resultLines = [];
+    this.lastTimelineRows = [];
     this.currentItem = null;
     this.currentCategoryName = "";
     this.listPage = 0;
@@ -21,7 +22,12 @@ class DemoMode {
     this.manualMode = false;
 
     this.particles = new ParticleSystem();
+    this.effectBursts = new EffectBurstSystem();
+    this.actorReactions = new ActorReactionSystem();
     this.floatingTexts = new FloatingTextManager();
+    this.effectQueue = new EffectEventQueue(this, { mode: "demo" });
+    this.statusSystem = new StatusSystem(this);
+    this.resourceSystem = new ResourceSystem(this);
 
     this.screenShake = 0;
     this.hitStop = 0;
@@ -53,10 +59,10 @@ class DemoMode {
     this.actionBarMax = 5;
 
     // 演示速度参数
-    this.normalDemoTimeScale = 0.45;
-    this.normalPostNodePause = 0.6;
-    this.defenseTimeScale = 0.30;
-    this.windupTimeScale = 0.35;
+    this.normalDemoTimeScale = 0.65;
+    this.normalPostNodePause = 0.35;
+    this.defenseTimeScale = 0.45;
+    this.windupTimeScale = 0.50;
 
     // 防御演示专用：模拟敌方回合
     this.enemyAttack = null;
@@ -73,6 +79,7 @@ class DemoMode {
     this.cameraZoomTimer = 0;
     this.impactFrames = 0;
     this.transition = null;
+    this.chargeFxTimer = 0;
 
     this.categories = [
       { key: "weapons", name: "风格链", icon: "⚔", description: "展示当前风格武器的 QTE 链、输入节点和伤害分支。" },
@@ -119,11 +126,25 @@ class DemoMode {
     this.playerState.shieldEnchanted = false;
     this.playerState.absorbReady = false;
     this.playerState.currentState = "idle";
+    this.statusSystem.clear();
+    this.effectQueue.clear();
+    if (this.effectBursts) this.effectBursts.clear();
+    if (this.actorReactions) this.actorReactions.clear();
+    if (this.resourceSystem) {
+      if (typeof this.resourceSystem.reset === "function") {
+        this.resourceSystem.reset();
+      } else {
+        this.resourceSystem.heat = 0;
+      }
+    }
+    this.lastTimelineRows = [];
   }
 
   // ========== 主更新 ==========
 
   update(dt) {
+    if (this.effectQueue) this.effectQueue.update(dt);
+
     if (this.hitStop > 0) {
       this.hitStop -= dt;
       if (this.hitStop < 0) this.hitStop = 0;
@@ -168,6 +189,8 @@ class DemoMode {
     }
 
     this.particles.update(dt);
+    if (this.effectBursts) this.effectBursts.update(dt);
+    if (this.actorReactions) this.actorReactions.update(dt);
     this.floatingTexts.update(dt);
 
     if (this.state === "qte") {
@@ -199,6 +222,14 @@ class DemoMode {
         this.resetHP();
         this.input.clear();
         this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
+        return;
+      }
+      if (key === "R" && this.currentItem) {
+        const item = this.currentItem;
+        this.input.consume();
+        this.resetHP();
+        this.playItem(item);
+        this.input.clear();
         return;
       }
       // 任意其他键也返回列表
@@ -374,32 +405,90 @@ class DemoMode {
     }
 
     if (category === "spells") {
-      const effectiveChains = Utils.getEffectiveChains(this.playerConfig);
-      const fireChain = ChainDatabase[effectiveChains.A] || ChainDatabase[SpellDatabase.fire.chainMap.staff.A];
+      const fireChain = ChainDatabase[SpellDatabase.fire.chainMap.staff.A];
+      const absorbChain = ChainDatabase[SpellDatabase.absorb.chainMap.staff.S];
+      const flameBladeChain = ChainDatabase.flame_blade;
+      const shieldFlareChain = ChainDatabase.shield_flare;
+      const mirrorGuardChain = ChainDatabase.mirror_guard;
+      const overflowBurstChain = ChainDatabase.overflow_burst;
       items.push(
         {
-          name: "烈火重重 · 小火球",
-          description: "蓄力过早（Early），火球微弱 — 伤害 10",
+          name: "烈火重重 · 火星分支",
+          description: "聚焰过早会切到火星弹，仍保留一次补正输入。",
           chain: fireChain,
           source: "player",
           forceOutcome: "early",
-          preview: "蓄力过早 → 小火球（伤害 10）"
+          preview: "点燃过快 / 聚焰过早 → 火星弹"
         },
         {
-          name: "烈火重重 · 标准火球",
-          description: "正常蓄力（Success）释放标准火球 — 伤害 32",
+          name: "烈火重重 · 标准爆燃",
+          description: "稳定点燃、正常聚焰后释放标准火球。",
           chain: fireChain,
           source: "player",
           forceOutcome: "success",
-          preview: "正常蓄力 → 标准火球（伤害 32）"
+          preview: "点燃 → 聚焰 → 标准火球"
         },
         {
-          name: "烈火重重 · 大火球",
-          description: "完美蓄力（Perfect）火球进化到最大 — 伤害 42",
+          name: "烈火重重 · 临界大火球",
+          description: "完美聚焰会放大火球并附加短暂眩晕与燃烧提示。",
           chain: fireChain,
           source: "player",
           forceOutcome: "perfect",
-          preview: "完美蓄力 → 大火球（伤害 42）"
+          preview: "完美点燃 → 临界聚焰 → 爆燃火球"
+        },
+        {
+          name: "咒还 · 引流刻印",
+          description: "主动刻下咒还印，踩准回流节奏后获得法术能量。",
+          chain: absorbChain,
+          source: "player",
+          forceOutcome: "success",
+          preview: "刻印 → 回流节奏 → 反咒命中"
+        },
+        {
+          name: "咒还 · 完美回流",
+          description: "完美回流可获得更多法术能量，并准备下一次吸收反击。",
+          chain: absorbChain,
+          source: "player",
+          forceOutcome: "perfect",
+          preview: "完美刻印 → 完美回流 → 反咒爆发"
+        },
+        {
+          name: "烈火重重 · 焰刃熔甲",
+          description: "火焰与武器融合，命中会积累热量，Perfect 路线附加破甲与燃烧。",
+          chain: flameBladeChain,
+          source: "player",
+          forceOutcome: "perfect",
+          preview: "引火上刃 → 熔甲压斩 → 爆燃收束"
+        },
+        {
+          name: "烈火重重 · 盾焰格挡",
+          description: "格挡瞬间爆出火环，展示 Fire 的防御反应链。",
+          chain: shieldFlareChain,
+          source: "enemy",
+          attackId: "slash",
+          forceOutcome: "perfect",
+          preview: "敌方横扫 → 盾焰反冲 → 返还燃烧"
+        },
+        {
+          name: "咒还 · 镜咒弹反",
+          description: "用镜面咒还折返法术，展示 Absorb 的防御反应链。",
+          chain: mirrorGuardChain,
+          source: "enemy",
+          attackId: "spellCast",
+          forceOutcome: "perfect",
+          preview: "敌方法术 → 镜面展开 → 法术折返"
+        },
+        {
+          name: "咒还 · 溢流爆发",
+          description: "消耗 60 法术能量，将过载压成高伤爆发。",
+          chain: overflowBurstChain,
+          source: "player",
+          forceOutcome: "perfect",
+          setup: (demo) => {
+            demo.playerState.spellEnergy = 120;
+            demo.resourceSystem.add("spellEnergy", 0);
+          },
+          preview: "压缩溢流 → 裂隙爆发"
         },
         {
           name: "烈火重重 · 盾火反伤",
@@ -686,9 +775,11 @@ class DemoMode {
     this.previewTitle = item.name;
     this.previewText = item.preview || item.description;
     this.previewTimer = 3.0;
-    this.detailLines = this.buildItemDetailLines(item);
     this.resultLines = [];
+    this.lastTimelineRows = [];
     this.log(`演示：${item.name}`);
+    if (item.setup) item.setup(this);
+    this.detailLines = this.buildItemDetailLines(item);
 
     if (item.action) {
       const msg = item.action();
@@ -696,7 +787,7 @@ class DemoMode {
       this.resultLines = this.buildActionResultLines(item, msg);
       this.input.clear();
       this.setState("preview");
-      this.message = `${item.name} — 按任意键返回列表`;
+      this.message = `${item.name} — R 重播，任意键返回列表`;
       return;
     }
 
@@ -775,7 +866,7 @@ class DemoMode {
     this.input.clear();
     this.setState("preview");
     this.previewTimer = 4.0;
-    this.message = `${this.previewTitle} — 按任意键返回列表`;
+    this.message = `${this.previewTitle} — R 重播，任意键返回列表`;
   }
 
   // ========== 敌方回合防御演示 ==========
@@ -793,7 +884,7 @@ class DemoMode {
     const defense = DefenseDatabase[defenseId];
     this.demoDefenseKey = defense ? defense.key : "SPACE";
 
-    const attackId = this.pickAttackForDefense(defenseId);
+    const attackId = item.attackId || this.pickAttackForDefense(defenseId);
     const baseAttack = EnemyDatabase.attacks[attackId];
     this.enemyAttack = Difficulty.scaleAttack({ id: attackId, ...baseAttack });
 
@@ -804,6 +895,7 @@ class DemoMode {
     this.previewText = item.preview || item.description;
     this.detailLines = this.buildItemDetailLines(item);
     this.resultLines = [];
+    this.lastTimelineRows = [];
   }
 
   updateEnemyWindup(dt) {
@@ -859,11 +951,13 @@ class DemoMode {
     const scaled = Difficulty.scaleChain(item.chain);
     this.qteRunner = new QTEChainRunner(scaled, {
       source: item.source || "enemy",
+      chainFamily: item.chain ? item.chain.family : null,
       ...(item.context || {}),
       onNodeEffect: (node, outcome, transition) => {
         this.freezeTimer = item.source === "enemy" ? 0.35 : 0.12;
         if (transition.message) this.log(transition.message);
         this.showOutcomeFeedback(outcome);
+        this.emitTransitionVisual(transition);
       },
       onRhythmHit: (idx) => {
         this.log(`节拍 ${idx + 1} 命中`);
@@ -918,6 +1012,25 @@ class DemoMode {
     this.message = `${this.getCategoryName()} — 按数字选择效果，ESC 返回`;
   }
 
+  handleSystemEscape() {
+    if (this.state === "main") {
+      this.returnToMenu = true;
+      this.input.clear();
+      return;
+    }
+
+    if (this.state === "list" || !this.category) {
+      this.setState("main");
+      this.listPage = 0;
+      this.resetHP();
+      this.input.clear();
+      this.message = "效果演示模式 — 选择分类查看每一种实现效果";
+      return;
+    }
+
+    this.returnToList();
+  }
+
   showTurnBanner(text, color) {
     this.turnBanner = { text, color, timer: 1.2, maxTime: 1.2 };
   }
@@ -947,11 +1060,13 @@ class DemoMode {
     const scaled = Difficulty.scaleChain(item.chain);
     this.qteRunner = new QTEChainRunner(scaled, {
       source: item.source || "player",
+      chainFamily: item.chain ? item.chain.family : null,
       ...(item.context || {}),
       onNodeEffect: (node, outcome, transition) => {
         this.freezeTimer = 0.12;
         if (transition.message) this.log(transition.message);
         this.showOutcomeFeedback(outcome);
+        this.emitTransitionVisual(transition);
       },
       onRhythmHit: (idx) => {
         this.log(`节拍 ${idx + 1} 命中`);
@@ -984,7 +1099,7 @@ class DemoMode {
     if (!this.qteRunner) {
       this.setState("preview");
       this.previewTimer = 3.0;
-      this.message = `${this.previewTitle} — 按任意键返回列表`;
+      this.message = `${this.previewTitle} — R 重播，任意键返回列表`;
       return;
     }
 
@@ -1029,6 +1144,7 @@ class DemoMode {
     }
 
     this.qteRunner.update(dt);
+    this.updateChargeEffects(dt);
 
     if (this.qteRunner.isDone()) {
       this.onQTEComplete();
@@ -1057,6 +1173,9 @@ class DemoMode {
       this.enemyHp = Math.max(0, this.enemyHp - dealtDamage);
       this.spawnFloatingText(`-${dealtDamage}`, ex, ey - 40, isCrit ? "crit" : "damage");
       this.spawnParticles(isCrit ? "slash" : "hit", ex, ey, isCrit ? 1.5 : 1);
+      this.triggerActorReaction("enemy", isCrit ? "crit" : "hit", isCrit ? 1.35 : 1, {
+        color: isCrit ? "#f1c40f" : "#ffffff"
+      });
       this.shakeScreen(isCrit ? 0.25 : 0.15);
       if (isCrit) this.flashScreen("#f1c40f", 0.18);
       this.log(`${isCrit ? "暴击" : "造成"} ${dealtDamage} 伤害`);
@@ -1064,6 +1183,9 @@ class DemoMode {
 
     // 支路节点伤害（如 chargeMul 加成后的实际伤害，这里用 total）
     // damage 已通过 getAccumulatedEffects 累加所有节点
+
+    ChainEffectSystem.applyResources(this, effects, { playerY: py - 60 });
+    ChainEffectSystem.applyStatuses(this, effects, { source: "demo-qte", playerY: 200, enemyY: 180 });
 
     if (effects.stunEnemy > 0) {
       this.enemyStunTimer = effects.stunEnemy;
@@ -1093,6 +1215,7 @@ class DemoMode {
     }
 
     this.resultLines = this.buildQTEResultLines(effects, ctx, dealtDamage, isCrit, runner.resultLog);
+    this.lastTimelineRows = this.buildActualTimelineRows(runner.resultLog);
     // 检查敌人是否死亡
     if (this.enemyHp <= 0) {
       this.spawnFloatingText("击败！", ex, ey - 100, "crit");
@@ -1109,10 +1232,76 @@ class DemoMode {
     this.input.clear();
     this.setState("preview");
     this.previewTimer = 4.0;
-    this.message = `${this.previewTitle} — 按任意键返回列表`;
+    this.message = `${this.previewTitle} — R 重播，任意键返回列表`;
   }
 
   // ========== 工具方法 ==========
+
+  applyStatusResults(results) {
+    ChainEffectSystem.applyStatusResults(this, results, { playerY: 200, enemyY: 180 });
+  }
+
+  emitTransitionVisual(transition) {
+    this.effectQueue.emitTransition(transition);
+  }
+
+  updateChargeEffects(dt) {
+    if (!this.qteRunner) {
+      this.chargeFxTimer = 0;
+      return;
+    }
+
+    const node = this.qteRunner.currentNode();
+    const isFireballCharge = node
+      && node.id === "charge"
+      && node.input
+      && node.input.type === "hold_release"
+      && this.qteRunner.chain
+      && this.qteRunner.chain.name.includes("火球");
+
+    if (!isFireballCharge) {
+      const isGreatswordCharge = node
+        && node.input
+        && node.input.type === "hold_release"
+        && this.qteRunner.chain
+        && this.qteRunner.chain.family === "greatsword";
+
+      if (isGreatswordCharge) {
+        const ratio = Utils.clamp(this.qteRunner.nodeTimer / node.duration, 0, 1);
+        this.chargeFxTimer -= dt;
+        if (this.chargeFxTimer > 0) return;
+
+        this.chargeFxTimer = Math.max(0.06, 0.14 - ratio * 0.05);
+        this.effectQueue.emitCharge("greatsword", ratio);
+        return;
+      }
+
+      const isAbsorbFlow = node
+        && this.qteRunner.chain
+        && this.qteRunner.chain.family === "absorb"
+        && (node.id === "siphon" || node.input.type === "rhythm" || node.input.type === "hold_release");
+
+      if (!isAbsorbFlow) {
+        this.chargeFxTimer = 0;
+        return;
+      }
+
+      const ratio = Utils.clamp(this.qteRunner.nodeTimer / node.duration, 0, 1);
+      this.chargeFxTimer -= dt;
+      if (this.chargeFxTimer > 0) return;
+
+      this.chargeFxTimer = 0.10;
+      this.effectQueue.emitCharge("absorb", ratio);
+      return;
+    }
+
+    const ratio = Utils.clamp(this.qteRunner.nodeTimer / node.duration, 0, 1);
+    this.chargeFxTimer -= dt;
+    if (this.chargeFxTimer > 0) return;
+
+    this.chargeFxTimer = Math.max(0.06, 0.14 - ratio * 0.06);
+    this.effectQueue.emitCharge("fire", ratio);
+  }
 
   log(msg) {
     this.logs.unshift({ text: msg, time: performance.now() });
@@ -1140,6 +1329,12 @@ class DemoMode {
 
   spawnParticles(type, x, y, intensity) {
     this.particles.emit(type, x, y, intensity);
+  }
+
+  triggerActorReaction(target, type, intensity = 1, options = {}) {
+    if (this.actorReactions) {
+      this.actorReactions.trigger(target, type, intensity, options);
+    }
   }
 
   shakeScreen(amount) {
@@ -1180,9 +1375,11 @@ class DemoMode {
     if (state === "qte" || state === "enemy_windup") {
       SFX.sfxAlert();
     }
-    // 返回静态界面时清理残留粒子，避免覆盖菜单/列表
-    if (state === "main" || state === "list" || state === "preview") {
+    // 返回菜单/列表时清理残留粒子；预览页保留刚刚演示出的效果。
+    if (state === "main" || state === "list") {
       this.particles.clear();
+      this.floatingTexts.clear();
+      this.chargeFxTimer = 0;
     }
   }
 
@@ -1217,6 +1414,13 @@ class DemoMode {
         lines.push(`参考伤害：Success ${successDamage} / Perfect ${perfectDamage}`);
       }
 
+      if (item.chain.cost) {
+        const costs = Object.entries(item.chain.cost)
+          .map(([key, amount]) => `${ChainEffectSystem.resourceLabel(key)} ${amount}`)
+          .join("，");
+        lines.push(`启动消耗：${costs}`);
+      }
+
       const status = this.describeChainStatus(item.chain);
       if (status) {
         lines.push(`附加效果：${status}`);
@@ -1234,6 +1438,55 @@ class DemoMode {
     return lines;
   }
 
+  getProjectedTimelineLines(item = this.currentItem, limit = 8) {
+    if (!item || !item.chain) return [];
+    const outcome = this.manualMode ? (item.forceOutcome || "success") : (item.forceOutcome || "perfect");
+    const simulated = ChainEffectSystem.simulateChain(item.chain, outcome);
+    return ChainEffectSystem.timelineLinesFromRows(simulated.rows, { limit });
+  }
+
+  getActualTimelineLines(limit = 8) {
+    const activeRows = this.qteRunner && this.qteRunner.resultLog && this.qteRunner.resultLog.length > 0
+      ? this.buildActualTimelineRows(this.qteRunner.resultLog)
+      : this.lastTimelineRows;
+    if (!activeRows || activeRows.length === 0) {
+      return [];
+    }
+
+    return ChainEffectSystem.timelineLinesFromRows(activeRows, { limit });
+  }
+
+  buildActualTimelineRows(resultLog = []) {
+    let currentMul = 1;
+    let cumulativeDamage = 0;
+    const resources = {};
+    return resultLog.map((entry, idx) => {
+      const transition = entry.transition || {};
+      const chainNodes = this.currentItem && this.currentItem.chain ? this.currentItem.chain.nodes || [] : [];
+      const node = chainNodes.find(item => item.id === entry.nodeId) || {
+        id: entry.nodeId,
+        name: entry.nodeName,
+        duration: 0,
+        input: {}
+      };
+      const row = ChainEffectSystem.buildTimelineRow(idx + 1, node, entry.outcome, transition, currentMul);
+      if (transition.chargeMul !== undefined) currentMul *= transition.chargeMul;
+      row.chargeMulAfter = currentMul;
+      if (transition.damage !== undefined) {
+        row.damage = Math.floor(transition.damage * currentMul);
+        cumulativeDamage += row.damage;
+      }
+      if (transition.resource) {
+        for (const [key, value] of Object.entries(transition.resource)) {
+          resources[key] = (resources[key] || 0) + value;
+        }
+      }
+      row.cumulativeDamage = cumulativeDamage;
+      row.cumulativeResources = { ...resources };
+      return row;
+    });
+  }
+
   buildActionResultLines(item, msg) {
     const lines = [];
     if (msg) lines.push(`执行结果：${msg}`);
@@ -1247,20 +1500,15 @@ class DemoMode {
   }
 
   buildQTEResultLines(effects, ctx, dealtDamage, isCrit, resultLog = []) {
-    const lines = [];
-    lines.push(`本次结果：${this.previewTitle}`);
-    lines.push(`伤害：${dealtDamage}${isCrit ? "（暴击）" : ""}`);
-    if (effects.stunEnemy > 0) lines.push(`敌人眩晕：${effects.stunEnemy.toFixed(1)} 秒`);
-    if (effects.iframe > 0) lines.push(`无敌/规避窗口：${effects.iframe.toFixed(2)} 秒`);
-    if (effects.damageMul !== 1.0) lines.push(`玩家承伤倍率：${effects.damageMul}`);
-    if (effects.selfStun > 0) lines.push(`自身硬直：${effects.selfStun.toFixed(1)} 秒`);
-    if (ctx.counterAttack) lines.push("敌方回合反击：敌人攻击被打断。");
-    if (ctx.followUp) lines.push("追加攻击：用于追击，成功时可衔接打断效果。");
-    if (effects.messages.length > 0) lines.push(`关键反馈：${effects.messages.slice(-2).join(" / ")}`);
-    if (resultLog.length > 0) {
-      lines.push(`判定记录：${resultLog.map(entry => `${entry.nodeName}:${this.formatOutcome(entry.outcome)}`).join(" -> ")}`);
-    }
-    return lines;
+    return ChainEffectSystem.buildQTEResultLines({
+      title: this.previewTitle,
+      effects,
+      context: ctx,
+      dealtDamage,
+      isCrit,
+      resultLog,
+      formatOutcome: this.formatOutcome.bind(this)
+    });
   }
 
   describeLoadout() {
@@ -1307,19 +1555,7 @@ class DemoMode {
   }
 
   describeChainStatus(chain) {
-    const effects = new Set();
-    for (const node of chain.nodes || []) {
-      for (const value of Object.values(node)) {
-        if (!value || typeof value !== "object") continue;
-        if (value.stunEnemy) effects.add(`眩晕 ${value.stunEnemy}s`);
-        if (value.iframe) effects.add(`规避 ${value.iframe}s`);
-        if (value.damageMul === 0) effects.add("完全减伤");
-        else if (value.damageMul !== undefined) effects.add(`承伤 x${value.damageMul}`);
-        if (value.selfStun) effects.add(`自身硬直 ${value.selfStun}s`);
-        if (value.chargeMul) effects.add(`蓄力倍率 x${value.chargeMul}`);
-      }
-    }
-    return Array.from(effects).join("，");
+    return ChainEffectSystem.describeChainStatus(chain);
   }
 
   formatOutcome(outcome) {
@@ -1408,12 +1644,14 @@ class DemoMode {
     }
 
     if (this.state === "qte") {
-      return this.getQTEInspectorLines();
+      return this.getQTEInspectorLines().concat(this.getActualTimelineLines(6));
     }
 
     if (this.state === "preview") {
       lines.push(this.previewText || "演示完成。");
       if (this.resultLines.length > 0) lines.push(...this.resultLines);
+      const timeline = this.getActualTimelineLines(8);
+      if (timeline.length > 0) lines.push(...timeline);
       return lines;
     }
 
@@ -1472,5 +1710,9 @@ class DemoMode {
       `判定方式：${forced ? this.formatOutcome(forced) : "手动输入"}`,
       `已完成：${completed}`
     ];
+  }
+
+  getQTEDebugLines() {
+    return QTEDebugFormatter.getLines(this, { title: "Demo QTE Debug" });
   }
 }

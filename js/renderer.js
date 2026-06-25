@@ -6,6 +6,13 @@ class CanvasRenderer {
     // 逻辑分辨率 960×540，按 DPR 放大 canvas 实际像素，CSS 仍显示为 1280×720
     this.width = 960;
     this.height = 540;
+    this.layout = {
+      qteBarY: 456,
+      actionBarY: 484,
+      bottomHintY: 492,
+      selectionTitleY: 60,
+      demoTitleY: 62
+    };
     const dpr = window.devicePixelRatio || 1;
     const displayWidth = 1280;
     const displayHeight = 720;
@@ -74,6 +81,7 @@ class CanvasRenderer {
     this.drawBackground(ctx);
     this.drawCharacters(scene, t);
     this.drawAttackEffects(scene, t);
+    if (scene.effectBursts) scene.effectBursts.render(ctx);
 
     if (scene.turnState.startsWith("demo_")) {
       this.drawDemo(scene, t);
@@ -246,6 +254,21 @@ class CanvasRenderer {
 
     let offsetY = y + 40;
 
+    if (battle.resourceSystem && (battle.hasSpell && battle.hasSpell("fire") || battle.resourceSystem.heat > 0)) {
+      const heatY = offsetY;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      ctx.fillRect(x, heatY, barW, barH + 18);
+      ctx.fillStyle = "#2a2a3a";
+      ctx.fillRect(x, heatY + 18, barW, barH);
+      const heatRatio = Math.min(battle.resourceSystem.heat / battle.resourceSystem.maxHeat, 1);
+      ctx.fillStyle = heatRatio >= 0.85 ? "#e74c3c" : "#e67e22";
+      ctx.fillRect(x, heatY + 18, barW * heatRatio, barH);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "12px sans-serif";
+      ctx.fillText(`热量 ${Math.floor(battle.resourceSystem.heat)}/${battle.resourceSystem.maxHeat}`, x, heatY);
+      offsetY += 42;
+    }
+
     // 破甲
     if (battle.armorBreakActive) {
       ctx.fillStyle = "#e74c3c";
@@ -302,26 +325,11 @@ class CanvasRenderer {
 
     // 剑攻击轨迹
     if (pState === "swordAttack") {
-      const weapon = scene.playerConfig && scene.playerConfig.weapon ? WeaponDatabase[scene.playerConfig.weapon] : null;
+      const weaponId = scene.playerConfig && scene.playerConfig.weapon ? scene.playerConfig.weapon : "";
+      const weapon = weaponId ? WeaponDatabase[weaponId] : null;
       const color = weapon ? weapon.color : "#f1c40f";
-      const progress = (t * 6) % 1;
-      const startAngle = -Math.PI / 4;
-      const endAngle = Math.PI / 4;
-      const angle = startAngle + (endAngle - startAngle) * progress;
-      const r = 60 + progress * 40;
-
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(angle);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 4;
-      ctx.globalAlpha = 0.7 * (1 - progress);
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, -0.4, 0.4);
-      ctx.stroke();
-      ctx.restore();
+      const timing = this.getActionTiming(scene, t);
+      this.drawWeaponTrail(ctx, px, py, weaponId, weapon, color, timing.progress, timing.active);
     }
 
     // 火球蓄力特效：蓄力越久，火球越大越烈
@@ -377,6 +385,78 @@ class CanvasRenderer {
     }
   }
 
+  getActionTiming(scene, t) {
+    if (scene.qteRunner) {
+      const node = scene.qteRunner.currentNode();
+      if (node && node.duration) {
+        return {
+          active: true,
+          progress: Utils.clamp(scene.qteRunner.nodeTimer / node.duration, 0, 1)
+        };
+      }
+    }
+    return {
+      active: false,
+      progress: (t * 6) % 1
+    };
+  }
+
+  drawWeaponTrail(ctx, x, y, weaponId, weapon, color, progress, active) {
+    const eased = this.easeOutCubic(Utils.clamp(progress, 0, 1));
+    const alpha = active ? Math.max(0.08, 0.75 * (1 - Math.abs(eased - 0.62))) : 0.45 * (1 - progress);
+
+    if (weaponId === "dualBlades") {
+      for (let i = 0; i < 2; i++) {
+        const sign = i === 0 ? 1 : -1;
+        ctx.save();
+        ctx.translate(x + 18, y - 3 + sign * 10);
+        ctx.rotate(-0.4 + eased * 1.35 * sign);
+        ctx.strokeStyle = i === 0 ? color : "#ffffff";
+        ctx.lineWidth = i === 0 ? 4 : 2;
+        ctx.globalAlpha = alpha * (i === 0 ? 0.9 : 0.55);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(0, 0, 62 + eased * 28, -0.55, 0.62);
+        ctx.stroke();
+        ctx.restore();
+      }
+      return;
+    }
+
+    const isGreatsword = weaponId === "greatsword";
+    const startAngle = isGreatsword ? -Math.PI * 0.72 : -Math.PI * 0.38;
+    const endAngle = isGreatsword ? Math.PI * 0.28 : Math.PI * 0.42;
+    const angle = startAngle + (endAngle - startAngle) * eased;
+    const radius = isGreatsword ? 82 + eased * 52 : 58 + eased * 38;
+
+    ctx.save();
+    ctx.translate(x + (isGreatsword ? 8 : 0), y);
+    ctx.rotate(angle);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = isGreatsword ? 8 : 4;
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = isGreatsword ? 20 : 12;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, -0.42, 0.48);
+    ctx.stroke();
+    if (isGreatsword) {
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius - 10, -0.35, 0.38);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  easeOutCubic(value) {
+    const t = Utils.clamp(value, 0, 1);
+    return 1 - Math.pow(1 - t, 3);
+  }
+
   drawFireballCharge(scene, x, y, ratio, t) {
     const ctx = this.ctx;
     const radius = 12 + ratio * 38;
@@ -412,15 +492,7 @@ class CanvasRenderer {
 
     ctx.restore();
 
-    // 持续迸发火星
-    if (scene.particles && Math.random() < 0.6 + ratio * 0.4) {
-      const spread = radius * 0.8;
-      scene.particles.emit("fireball",
-        x + (Math.random() - 0.5) * spread,
-        y + (Math.random() - 0.5) * spread,
-        0.4 + ratio * 1.2
-      );
-    }
+    // 火星粒子由战斗/演示 update 阶段发射，保持渲染函数纯绘制。
   }
 
   drawCharacters(scene, t) {
@@ -437,63 +509,45 @@ class CanvasRenderer {
     const basePy = this.height - 190;
     const weaponId = scene.playerConfig ? scene.playerConfig.weapon : null;
     const weapon = weaponId ? WeaponDatabase[weaponId] : null;
+    const playerReaction = this.getActorReaction(scene, "player");
+    const style = scene.playerConfig && scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
+    const styleColor = style ? style.color : (weapon ? weapon.color : "#3498db");
+    const actionTiming = this.getActionTiming(scene, t);
 
     // 待机呼吸
     let bob = Math.sin(t * 2) * 2;
-    let px = basePx;
-    let py = basePy + bob;
+    let px = basePx + playerReaction.offsetX;
+    let py = basePy + bob + playerReaction.offsetY;
 
     // 架势位移
     const pState = scene.playerState ? scene.playerState.currentState : "idle";
     let stanceOffset = 0;
-    if (pState === "swordAttack") stanceOffset = 40;
-    else if (pState === "casting" || pState === "charge") stanceOffset = 15;
-    else if (pState === "shield") stanceOffset = 10;
+    if (pState === "swordAttack") stanceOffset = 24 + this.easeOutCubic(actionTiming.progress) * 28;
+    else if (pState === "casting" || pState === "charge") stanceOffset = 14;
+    else if (pState === "shield") stanceOffset = 8;
     px += stanceOffset;
 
-    // 玩家身体
-    ctx.fillStyle = "#3498db";
-    ctx.beginPath();
-    ctx.arc(px, py, 35, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 武器图标
-    if (weapon) {
-      ctx.fillStyle = weapon.color;
-      ctx.font = "bold 24px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(weapon.icon || weapon.name[0], px, py);
-    } else {
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 20px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("?", px, py);
-    }
-
-    // 玩家脚下标识
-    ctx.fillStyle = "rgba(52, 152, 219, 0.3)";
-    ctx.beginPath();
-    ctx.ellipse(basePx + stanceOffset, basePy + 45, 40, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 弹反/格挡光环
-    if (pState === "shield" || pState === "swordAttack") {
-      const pulse = 1 + Math.sin(t * 8) * 0.08;
-      ctx.strokeStyle = pState === "shield" ? "rgba(149, 165, 166, 0.4)" : "rgba(241, 196, 15, 0.35)";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(px, py, 42 * pulse, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42, "rgba(52, 152, 219, 0.3)");
+    this.drawPlayerSilhouette(ctx, scene, {
+      x: px,
+      y: py,
+      weaponId,
+      weapon,
+      state: pState,
+      styleColor,
+      reaction: playerReaction,
+      progress: actionTiming.progress,
+      t
+    });
+    this.drawActorReactionOverlay(px, py, 35, playerReaction);
 
     // 敌人
     const baseEx = this.width - 220;
     const baseEy = this.height - 190;
     const eBob = Math.sin(t * 2 + 1) * 2;
-    let ex = baseEx;
-    let ey = baseEy + eBob;
+    const enemyReaction = this.getActorReaction(scene, "enemy");
+    let ex = baseEx + enemyReaction.offsetX;
+    let ey = baseEy + eBob + enemyReaction.offsetY;
 
     // 敌方蓄力前冲
     let enemyForward = 0;
@@ -501,21 +555,16 @@ class CanvasRenderer {
     else if (scene.enemyAttackPhase === "hit") enemyForward = -40;
     ex += enemyForward;
 
-    ctx.fillStyle = scene.enemyStunTimer > 0 ? "#f1c40f" : EnemyDatabase.base.color;
-    ctx.beginPath();
-    ctx.arc(ex, ey, 50, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 20px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("敌", ex, ey);
-
-    ctx.fillStyle = "rgba(192, 57, 43, 0.3)";
-    ctx.beginPath();
-    ctx.ellipse(baseEx + enemyForward, baseEy + 55, 55, 12, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const enemyConfig = scene.enemyConfig || EnemyDatabase.base;
+    this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58, "rgba(192, 57, 43, 0.3)");
+    this.drawEnemySilhouette(ctx, scene, {
+      x: ex,
+      y: ey,
+      config: enemyConfig,
+      reaction: enemyReaction,
+      t
+    });
+    this.drawActorReactionOverlay(ex, ey, 50, enemyReaction);
 
     // 敌人眩晕提示
     if (scene.enemyStunTimer > 0) {
@@ -539,6 +588,328 @@ class CanvasRenderer {
       ctx.shadowColor = scene.enemyAttack.color || "#e74c3c";
       ctx.shadowBlur = 12;
       ctx.fillText(scene.enemyAttack.icon, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  drawActorShadow(ctx, x, y, radius, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius, Math.max(8, radius * 0.22), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawPlayerSilhouette(ctx, scene, options) {
+    const {
+      x,
+      y,
+      weaponId,
+      weapon,
+      state,
+      styleColor,
+      reaction,
+      progress,
+      t
+    } = options;
+    const scale = reaction.scale || 1;
+    const isAttack = state === "swordAttack";
+    const isShield = state === "shield";
+    const isCast = state === "casting" || state === "charge";
+    const attackEase = this.easeOutCubic(progress || 0);
+    const lean = isAttack ? -0.14 + attackEase * 0.22 : (isShield ? -0.10 : (isCast ? -0.06 : 0));
+    const bodyColor = "#2f6fa3";
+    const trimColor = styleColor || (weapon ? weapon.color : "#3498db");
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.rotate(lean);
+
+    // legs
+    this.drawLimb(ctx, -12, 22, -22, 50, "#24364d", 9);
+    this.drawLimb(ctx, 10, 22, 20, 50, "#24364d", 9);
+
+    // torso
+    ctx.fillStyle = bodyColor;
+    ctx.strokeStyle = trimColor;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = trimColor;
+    ctx.shadowBlur = isCast ? 14 : 0;
+    ctx.beginPath();
+    ctx.roundRect(-22, -24, 44, 56, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // head
+    ctx.fillStyle = "#d7e7ff";
+    ctx.beginPath();
+    ctx.arc(0, -48, 15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // accent chest mark
+    ctx.fillStyle = trimColor;
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(weapon ? (weapon.icon || weapon.name[0]) : "?", 0, 1);
+
+    if (isShield) {
+      this.drawLimb(ctx, 18, -10, 42, -4, "#d7e7ff", 7);
+      this.drawShieldSilhouette(ctx, 50, -4, trimColor, t);
+      this.drawLimb(ctx, -16, -8, -34, 10, "#d7e7ff", 7);
+    } else if (isCast) {
+      this.drawLimb(ctx, 16, -10, 43, -30, "#d7e7ff", 7);
+      this.drawCastFocus(ctx, 52, -35, trimColor, t);
+      this.drawLimb(ctx, -16, -8, -38, -22, "#d7e7ff", 7);
+      if (weaponId === "staff") {
+        this.drawWeaponSilhouette(ctx, weaponId, -30, 7, trimColor, -0.22, 0.9);
+      }
+    } else if (isAttack) {
+      this.drawLimb(ctx, 16, -10, 42 + attackEase * 18, -18 + attackEase * 12, "#d7e7ff", 7);
+      this.drawLimb(ctx, -16, -8, -32 + attackEase * 10, 2, "#d7e7ff", 7);
+      this.drawWeaponSilhouette(ctx, weaponId, 48 + attackEase * 18, -18 + attackEase * 12, trimColor, -0.22 + attackEase * 0.55, 1);
+    } else {
+      this.drawLimb(ctx, 16, -8, 36, 7, "#d7e7ff", 7);
+      this.drawLimb(ctx, -16, -8, -36, 10, "#d7e7ff", 7);
+      this.drawWeaponSilhouette(ctx, weaponId, 38, 10, trimColor, 0.25, 0.78);
+    }
+
+    ctx.restore();
+  }
+
+  drawEnemySilhouette(ctx, scene, options) {
+    const { x, y, config, reaction, t } = options;
+    const scale = reaction.scale || 1;
+    const color = scene.enemyStunTimer > 0 ? "#f1c40f" : (config.color || EnemyDatabase.base.color);
+    const icon = config.icon || "敌";
+    const isCaster = icon === "术";
+    const isArmored = icon === "甲";
+    const isSwift = icon === "迅";
+    const isShielded = icon === "盾";
+    const lean = isSwift ? -0.12 : (scene.enemyAttackPhase === "response" ? -0.16 : 0);
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.rotate(lean);
+
+    // legs
+    this.drawLimb(ctx, -14, 28, -28, 58, "#3a2028", isArmored ? 12 : 9);
+    this.drawLimb(ctx, 12, 28, 22, 58, "#3a2028", isArmored ? 12 : 9);
+
+    // torso
+    ctx.fillStyle = color;
+    ctx.strokeStyle = isArmored ? "#f5c6c6" : "rgba(255,255,255,0.35)";
+    ctx.lineWidth = isArmored ? 4 : 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = isCaster ? 14 : 0;
+    ctx.beginPath();
+    if (isSwift) {
+      ctx.moveTo(-24, -30);
+      ctx.lineTo(24, -20);
+      ctx.lineTo(18, 34);
+      ctx.lineTo(-18, 34);
+      ctx.closePath();
+    } else {
+      ctx.roundRect(isArmored ? -34 : -28, -32, isArmored ? 68 : 56, 66, isArmored ? 8 : 12);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // head
+    ctx.fillStyle = isCaster ? "#dec7ff" : "#f3d4d4";
+    ctx.beginPath();
+    ctx.arc(0, -58, isArmored ? 19 : 16, 0, Math.PI * 2);
+    ctx.fill();
+
+    // arms and archetype gear
+    if (isCaster) {
+      this.drawLimb(ctx, -24, -10, -54, -24, "#f3d4d4", 7);
+      this.drawCastFocus(ctx, -66, -28, color, t);
+      this.drawLimb(ctx, 24, -8, 45, 2, "#f3d4d4", 7);
+    } else if (isShielded) {
+      this.drawLimb(ctx, -26, -6, -52, -2, "#f3d4d4", 8);
+      this.drawShieldSilhouette(ctx, -62, -2, color, t);
+      this.drawLimb(ctx, 24, -8, 48, 10, "#f3d4d4", 8);
+    } else if (isSwift) {
+      this.drawLimb(ctx, -22, -10, -54, 0, "#f3d4d4", 6);
+      this.drawLimb(ctx, 22, -8, 54, -12, "#f3d4d4", 6);
+      this.drawWeaponSilhouette(ctx, "dualBlades", -56, 0, color, Math.PI * 0.9, 0.55);
+      this.drawWeaponSilhouette(ctx, "dualBlades", 54, -12, color, -Math.PI * 0.25, 0.55);
+    } else {
+      this.drawLimb(ctx, -26, -8, -50, 8, "#f3d4d4", 8);
+      this.drawLimb(ctx, 26, -8, 54, 0, "#f3d4d4", 8);
+      if (isArmored) this.drawWeaponSilhouette(ctx, "greatsword", -54, 8, color, Math.PI * 0.95, 0.7);
+    }
+
+    // center icon
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 19px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(icon, 0, 2);
+
+    if (isArmored) {
+      ctx.strokeStyle = "rgba(255,255,255,0.32)";
+      ctx.lineWidth = 2;
+      for (let yy = -16; yy <= 18; yy += 14) {
+        ctx.beginPath();
+        ctx.moveTo(-26, yy);
+        ctx.lineTo(26, yy);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawLimb(ctx, x1, y1, x2, y2, color, width) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawWeaponSilhouette(ctx, weaponId, x, y, color, angle, scale = 1) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle || 0);
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = color || "#f1c40f";
+    ctx.fillStyle = color || "#f1c40f";
+    ctx.shadowColor = color || "#f1c40f";
+    ctx.shadowBlur = 10;
+    ctx.lineCap = "round";
+
+    if (weaponId === "greatsword") {
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(52, 0);
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = 0.75;
+      ctx.fillRect(12, -2, 34, 4);
+      ctx.globalAlpha = 1;
+    } else if (weaponId === "dualBlades") {
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(34, -14);
+      ctx.moveTo(0, 6);
+      ctx.lineTo(34, 14);
+      ctx.stroke();
+    } else if (weaponId === "staff") {
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-8, 34);
+      ctx.lineTo(14, -42);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(16, -46, 8, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(40, 0);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawShieldSilhouette(ctx, x, y, color, t) {
+    const pulse = 1 + Math.sin(t * 7) * 0.04;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.strokeStyle = color || "#95a5a6";
+    ctx.lineWidth = 4;
+    ctx.shadowColor = color || "#95a5a6";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(0, -30);
+    ctx.lineTo(24, -14);
+    ctx.lineTo(18, 22);
+    ctx.lineTo(0, 34);
+    ctx.lineTo(-18, 22);
+    ctx.lineTo(-24, -14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawCastFocus(ctx, x, y, color, t) {
+    const pulse = 1 + Math.sin(t * 8) * 0.08;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(pulse, pulse);
+    ctx.strokeStyle = color || "#9b59b6";
+    ctx.fillStyle = color || "#9b59b6";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = color || "#9b59b6";
+    ctx.shadowBlur = 16;
+    ctx.beginPath();
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, 22, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  getActorReaction(scene, target) {
+    if (scene.actorReactions && scene.actorReactions.get) {
+      return scene.actorReactions.get(target);
+    }
+    return {
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+      flashAlpha: 0,
+      ringAlpha: 0,
+      color: "#ffffff"
+    };
+  }
+
+  drawActorReactionOverlay(x, y, radius, reaction) {
+    const ctx = this.ctx;
+    if (!reaction) return;
+
+    if (reaction.flashAlpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = reaction.flashAlpha;
+      ctx.fillStyle = reaction.color || "#ffffff";
+      ctx.shadowColor = reaction.color || "#ffffff";
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 1.05, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (reaction.ringAlpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = reaction.ringAlpha;
+      ctx.strokeStyle = reaction.color || "#ffffff";
+      ctx.lineWidth = 4;
+      ctx.shadowColor = reaction.color || "#ffffff";
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 1.35, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
   }
@@ -603,6 +974,9 @@ class CanvasRenderer {
 
     const x = this.width / 2;
     const pulse = 1 + Math.sin(t * 1000 / 120) * 0.12;
+    const label = `[${key}]`;
+    const fontSize = key.length > 4 ? 34 : (key.length > 2 ? 42 : 48);
+    const ringRadius = key.length > 4 ? 62 : 54;
 
     ctx.save();
     ctx.textAlign = "center";
@@ -611,28 +985,28 @@ class CanvasRenderer {
     // 外发光圆
     ctx.fillStyle = "rgba(241, 196, 64, 0.12)";
     ctx.beginPath();
-    ctx.arc(x, y, 64 * pulse, 0, Math.PI * 2);
+    ctx.arc(x, y, (ringRadius + 10) * pulse, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.strokeStyle = "rgba(241, 196, 64, 0.35)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, 54, 0, Math.PI * 2);
+    ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
     ctx.stroke();
 
     // 按键文字
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 52px sans-serif";
+    ctx.font = `bold ${fontSize}px sans-serif`;
     ctx.shadowColor = "rgba(241, 196, 64, 0.65)";
     ctx.shadowBlur = 18 * pulse;
-    ctx.fillText(`[${key}]`, x, y);
+    ctx.fillText(label, x, y);
     ctx.shadowBlur = 0;
 
     // 副标题
     if (subtext) {
       ctx.fillStyle = "#e8e8e8";
       ctx.font = "bold 16px sans-serif";
-      ctx.fillText(subtext, x, y + 46);
+      ctx.fillText(subtext, x, y + 42);
     }
 
     ctx.restore();
@@ -650,21 +1024,21 @@ class CanvasRenderer {
     ctx.font = "bold 34px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("选择你的战斗风格", this.width / 2, 70);
+    ctx.fillText("选择你的战斗风格", this.width / 2, this.layout.selectionTitleY);
 
     const styles = Object.entries(StyleDatabase);
-    const cardW = 140;
-    const cardH = 180;
-    const gap = 24;
+    const compact = styles.length > 5;
+    const cardW = compact ? 142 : 154;
+    const cardH = compact ? 164 : 176;
+    const gap = compact ? 16 : 22;
 
-    // 两行布局：3 + 2
-    const row1Count = 3;
-    const row2Count = 2;
+    const row1Count = Math.ceil(styles.length / 2);
+    const row2Count = styles.length - row1Count;
     const row1W = cardW * row1Count + gap * (row1Count - 1);
-    const row2W = cardW * row2Count + gap * (row2Count - 1);
+    const row2W = row2Count > 0 ? cardW * row2Count + gap * (row2Count - 1) : 0;
     const row1X = (this.width - row1W) / 2;
     const row2X = (this.width - row2W) / 2;
-    const row1Y = 90;
+    const row1Y = compact ? 106 : 112;
     const row2Y = row1Y + cardH + gap;
 
     styles.forEach(([id, style], idx) => {
@@ -698,24 +1072,24 @@ class CanvasRenderer {
 
       // 名称
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 16px sans-serif";
+      ctx.font = compact ? "bold 15px sans-serif" : "bold 16px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       this.drawWrappedLine(ctx, style.name, x + cardW / 2, y + 78, cardW - 16, 18, 2);
 
       // 描述
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "11px sans-serif";
-      this.drawWrappedLine(ctx, style.description, x + cardW / 2, y + 112, cardW - 12, 15, 4);
+      ctx.font = compact ? "10px sans-serif" : "11px sans-serif";
+      this.drawWrappedLine(ctx, style.description, x + cardW / 2, y + 108, cardW - 14, 14, compact ? 2 : 3);
 
       // 底层配置提示
       const tags = [];
       if (style.weapon) tags.push(WeaponDatabase[style.weapon].name);
       for (const sid of style.spells || []) tags.push(SpellDatabase[sid].name);
       for (const aid of style.combatArts || []) tags.push(CombatArtDatabase[aid].name);
-      ctx.fillStyle = "#888899";
+      ctx.fillStyle = "#9a9aad";
       ctx.font = "10px sans-serif";
-      ctx.fillText(tags.join(" / "), x + cardW / 2, y + cardH - 14);
+      ctx.fillText(this.truncateText(ctx, tags.join(" / "), cardW - 14), x + cardW / 2, y + cardH - 14);
     });
   }
 
@@ -723,6 +1097,7 @@ class CanvasRenderer {
     const ctx = this.ctx;
     const config = scene.playerConfig;
     if (!config || !config.weapon) return;
+    const weapon = WeaponDatabase[config.weapon] || null;
 
     const effective = Utils.getEffectiveChains(config);
     const entries = Object.entries(effective)
@@ -742,14 +1117,14 @@ class CanvasRenderer {
       const x = startX + idx * (cardW + gap);
 
       ctx.fillStyle = "rgba(20, 20, 30, 0.85)";
-      ctx.strokeStyle = chain.color || weapon.color;
+      ctx.strokeStyle = chain.color || (weapon ? weapon.color : "#f1c40f");
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.roundRect(x, y, cardW, cardH, 8);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = chain.color || weapon.color;
+      ctx.fillStyle = chain.color || (weapon ? weapon.color : "#f1c40f");
       ctx.font = "bold 18px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -923,7 +1298,7 @@ class CanvasRenderer {
     const barW = 600;
     const barH = 18;
     const x = (this.width - barW) / 2;
-    const y = 510;
+    const y = this.layout.actionBarY;
     const pendingFollowUp = scene.pendingFollowUp;
 
     // 背景
@@ -970,7 +1345,7 @@ class CanvasRenderer {
     const barW = 760;
     const barH = 30;
     const x = (this.width - barW) / 2;
-    const y = 510;
+    const y = this.layout.qteBarY;
 
     const totalTime = attack.windup + attack.hitTime;
     const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
@@ -1059,7 +1434,7 @@ class CanvasRenderer {
     const barW = 760;
     const barH = 30;
     const x = (this.width - barW) / 2;
-    const y = 510;
+    const y = this.layout.qteBarY;
     const bounds = runner.getWindowBounds();
 
     // 背景
@@ -1189,7 +1564,7 @@ class CanvasRenderer {
     const barW = 760;
     const barH = 30;
     const x = (this.width - barW) / 2;
-    const y = 510;
+    const y = this.layout.qteBarY;
     const bounds = runner.getWindowBounds();
 
     // 背景
@@ -1303,6 +1678,16 @@ class CanvasRenderer {
       if (ps.spellEnergy > ps.maxSpellEnergy) icons.push({ icon: "溢", color: "#f39c12" });
     }
     if (scene.enemyStunTimer > 0) icons.push({ icon: "晕", color: "#f1c40f", count: Math.ceil(scene.enemyStunTimer * 10) / 10 });
+    if (scene.statusSystem) {
+      for (const status of scene.statusSystem.list().slice(0, 6)) {
+        const def = scene.statusSystem.getDefinition(status.id);
+        icons.push({
+          icon: def.icon || "态",
+          color: def.color || "#ffffff",
+          count: status.duration
+        });
+      }
+    }
 
     if (icons.length === 0) return;
 
@@ -1383,14 +1768,14 @@ class CanvasRenderer {
     } else if (scene.turnState === "demo_qte") {
       // 演示 QTE 播放中 — 中央舞台，底部操作区
       const ctx = this.ctx;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
       ctx.fillRect(0, 0, this.width, this.height);
 
       ctx.fillStyle = "#f1c40f";
       ctx.font = "bold 26px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(scene.previewTitle, this.width / 2, 70);
+      ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
 
       const modeText = scene.manualMode ? "手动试玩：请在判定窗口内按键" : "自动演示中";
       ctx.fillStyle = "#aaaaaa";
@@ -1410,7 +1795,7 @@ class CanvasRenderer {
       }
 
       if (!scene.manualMode && scene.qteRunner) {
-        this.drawExpectedInputMarker(scene.qteRunner, 510);
+        this.drawExpectedInputMarker(scene.qteRunner, this.layout.qteBarY);
       }
     }
   }
@@ -1450,14 +1835,14 @@ class CanvasRenderer {
 
   drawDemoActionSequence(scene, t) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 28px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 70);
+    ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
 
     const seq = scene.actionSequence;
     if (!seq) return;
@@ -1498,14 +1883,14 @@ class CanvasRenderer {
 
   drawDemoEnemyWindup(scene) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 26px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 70);
+    ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
 
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
     ctx.fillStyle = "#aaaaaa";
@@ -1543,7 +1928,7 @@ class CanvasRenderer {
     const barW = 760;
     const barH = 30;
     const x = (this.width - barW) / 2;
-    const y = 510;
+    const y = this.layout.qteBarY;
 
     const totalTime = attack.windup + attack.hitTime;
     const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
@@ -1591,14 +1976,14 @@ class CanvasRenderer {
 
   drawDemoMenu(scene) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 40px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("效果演示模式", this.width / 2, 70);
+    ctx.fillText("效果演示模式", this.width / 2, this.layout.demoTitleY);
 
     const categories = scene.categories;
     const cardW = 210;
@@ -1645,7 +2030,7 @@ class CanvasRenderer {
     ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
-    ctx.fillText(`当前：${modeText} | 1-4 选择分类 | W 切换风格 | M 切换模式 | 6 切换难度 | ESC 返回`, this.width / 2, 500);
+    ctx.fillText(`当前：${modeText} | 1-4 选择分类 | W 切换风格 | M 切换模式 | 6 切换难度 | ESC 返回`, this.width / 2, this.layout.bottomHintY);
   }
 
   drawDemoList(scene) {
@@ -1655,14 +2040,14 @@ class CanvasRenderer {
     const totalPages = scene.getTotalPages();
     const categoryName = scene.getCategoryName();
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.76)";
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 30px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, 70);
+    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, this.layout.demoTitleY);
 
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
@@ -1710,12 +2095,12 @@ class CanvasRenderer {
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`当前：${modeText} | 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换模式 | ESC 返回`, this.width / 2, 500);
+    ctx.fillText(`当前：${modeText} | 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换模式 | ESC 返回`, this.width / 2, this.layout.bottomHintY);
   }
 
   drawDemoPreview(scene) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
     ctx.fillRect(0, 0, this.width, this.height);
 
     // 大标题
@@ -1723,7 +2108,7 @@ class CanvasRenderer {
     ctx.font = "bold 32px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, 70);
+    ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
 
     // 说明
     ctx.fillStyle = "#ffffff";
@@ -1738,6 +2123,12 @@ class CanvasRenderer {
       ctx.textBaseline = "top";
       ctx.fillText(scene.resultLines[scene.resultLines.length - 1], this.width / 2, 340);
     }
+
+    ctx.fillStyle = "#b0b8c0";
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("R 重播当前演示 / 任意键返回列表", this.width / 2, this.height - 28);
   }
 
   drawGameOver(battle) {

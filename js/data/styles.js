@@ -9,7 +9,8 @@ const StyleDatabase = {
     color: "#e74c3c",
     weapon: "staff",
     spells: ["fire"],
-    combatArts: []
+    combatArts: [],
+    preferredEnemy: "shielded"
   },
 
   absorb: {
@@ -21,7 +22,8 @@ const StyleDatabase = {
     color: "#9b59b6",
     weapon: "staff",
     spells: ["absorb"],
-    combatArts: []
+    combatArts: [],
+    preferredEnemy: "caster"
   },
 
   desslo: {
@@ -33,7 +35,8 @@ const StyleDatabase = {
     color: "#3498db",
     weapon: "dualBlades",
     spells: [],
-    combatArts: ["desslo"]
+    combatArts: ["desslo"],
+    preferredEnemy: "swift"
   },
 
   eastern: {
@@ -45,7 +48,8 @@ const StyleDatabase = {
     color: "#2ecc71",
     weapon: "greatsword",
     spells: [],
-    combatArts: ["eastern"]
+    combatArts: ["eastern"],
+    preferredEnemy: "armored"
   },
 
   desolo: {
@@ -57,6 +61,33 @@ const StyleDatabase = {
     color: "#f1c40f",
     weapon: "greatsword",
     spells: [],
-    combatArts: ["desolo"]
+    combatArts: ["desolo"],
+    preferredEnemy: "armored"
+  },
+
+  flameforge: {
+    key: "6",
+    number: "021",
+    name: "火铸大剑",
+    description: "以大剑承载烈火重重，A 进入焰刃熔甲链，格挡可触发盾焰反冲；热量越高，火系爆发越强。",
+    icon: "熔",
+    color: "#e67e22",
+    weapon: "greatsword",
+    spells: ["fire"],
+    combatArts: [],
+    preferredEnemy: "armored"
+  },
+
+  mirrorblade: {
+    key: "7",
+    number: "022",
+    name: "镜咒双刃",
+    description: "以双刀接入咒还，S 主动引流，D 消耗法术能量打出溢流爆发；防御时可展开镜咒折返。",
+    icon: "镜",
+    color: "#8e44ad",
+    weapon: "dualBlades",
+    spells: ["absorb"],
+    combatArts: [],
+    preferredEnemy: "caster"
   }
 };

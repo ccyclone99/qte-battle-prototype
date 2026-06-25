@@ -1,0 +1,1131 @@
+# QTE Battle Prototype Complete Spec
+
+## 1. Purpose
+
+This project is a tactical QTE duel prototype. The core experience is not "press random keys fast"; it is reading enemy intent, choosing a chain, executing timing inputs, and seeing clear rule outcomes through readable effects.
+
+The prototype should become a content-extensible combat sandbox:
+
+- Designers can add weapons, spells, combat arts, enemy attacks, and demo entries through data.
+- Players can understand timing, branches, resources, and status effects from the screen without reading debug logs.
+- Developers can validate chain data automatically and extend effects without mixing visual code into combat rules.
+
+## 2. Current State
+
+### Implemented
+
+- Main menu HUD bleed fixed.
+- QTE and demo layout moved into safer screen zones.
+- Demo playback speed and node pauses tuned.
+- Fireball charge particles moved out of renderer-side draw calls.
+- QTE handfeel padding added for press, hold-release, rhythm, and timeout grace.
+- Chain metadata added to all current chains:
+  - `family`
+  - `role`
+  - `visual`
+  - `tags`
+- Data validator added:
+  - `node scripts/validate-data.js`
+- Staff + Fire vertical slice implemented:
+  - `fireball_evolution_v2` on staff `A`
+  - kindle -> charge -> release
+  - spark and overheat fallback branches
+- Absorb active chain implemented:
+  - `absorb_siphon` on staff `S`
+  - sigil -> rhythm siphon -> release
+  - spell energy gain and absorb-ready state
+- Demo mode includes Fire v2 and Absorb active-chain entries.
+- Effect event queue implemented:
+  - shared visual event routing for battle and demo
+  - named anchors for player, enemy, QTE, and HUD positions
+  - weapon, spell, status, resource, and charge event helpers
+- Status system implemented:
+  - registered `burn`, `armorBreak`, `absorbReady`, `shieldEnchant`, `overload`, and `stun`
+  - burn turn tick
+  - armor-break damage multiplier
+  - player absorb/shield flags synchronized through statuses
+- Resource system implemented:
+  - spell energy gain/spend/overflow
+  - heat gain/spend loop for Fire
+  - overload warning status from spell energy overcap or high heat
+- Effect registry implemented:
+  - `js/data/effects.js`
+  - validator checks registered `visualEvent` names
+- Chain effect helper implemented:
+  - shared resource application
+  - shared status application
+  - shared demo result and chain-effect descriptions
+- QTE debug drawer implemented:
+  - node id, timer, input window, perfect point, last input, outcome, and handfeel values
+- Greatsword V2 implemented:
+  - `greatsword_a_v2`
+  - `greatsword_s_v2`
+  - `greatsword_d_v2`
+  - default Greatsword A/S/D mapping uses V2 chains
+- Dual Blades V2 implemented:
+  - `dualblades_a_v2`
+  - `dualblades_s_v2`
+  - `dualblades_d_v2`
+  - default Dual Blades A/S/D mapping uses V2 chains
+- Data validator checks registered status ids.
+- Fire R3 implemented:
+  - `flame_blade`
+  - `shield_flare`
+  - heat damage loop and HUD heat display
+- Absorb R3 implemented:
+  - `mirror_guard`
+  - `overflow_burst`
+  - spell-energy spender cost gate
+- Composite styles implemented:
+  - `flameforge`
+  - `mirrorblade`
+- Enemy archetype initial pass implemented:
+  - caster
+  - armored
+  - swift
+  - shielded
+
+### Still Needed
+
+- Demo timeline and replay inspector.
+- Balance pass for damage, timing windows, recovery, and resource loops.
+- Shared render helpers for QTE, demo, and effects.
+- Balance/simulation scripts for chain outputs and enemy pressure.
+
+## 3. Design Pillars
+
+### Readability First
+
+- The player should know what is happening before they are asked to react.
+- Timing windows, charge state, enemy attack phase, and branch results must be visible.
+- Effects should clarify state and impact before adding spectacle.
+
+### Fail Forward
+
+- Early, late, and failed inputs should not always hard-stop a chain.
+- Bad inputs should often produce weaker branches, self-stun, resource leak, or fallback attacks.
+- Perfect should feel meaningfully different, not only numerically stronger.
+
+### Data-Driven Content
+
+- Weapons, spells, combat arts, enemy attacks, statuses, and demo entries should move toward data definitions.
+- Runtime code should interpret data consistently rather than hardcoding every chain.
+
+### Rule/Visual Separation
+
+- Combat systems decide outcomes.
+- Effect systems visualize outcomes.
+- Renderer should draw state, not create gameplay or particle side effects.
+
+## 4. Non-Goals For This Prototype
+
+- No full RPG inventory system yet.
+- No permanent character progression yet.
+- No network or save system.
+- No production-grade animation framework until the combat loop is stable.
+- No large engine migration unless vanilla Canvas becomes the actual blocker.
+
+## 5. Core Gameplay Loop
+
+1. Player selects a combat style.
+2. Player turn begins.
+3. Action bar fills or player chooses `A/S/D`.
+4. QTE chain starts.
+5. Each node resolves to `perfect`, `success`, `early`, `late`, `fail`, or `timeout`.
+6. Chain transitions accumulate:
+   - damage
+   - stun
+   - self-stun
+   - resources
+   - statuses
+   - visual events
+   - follow-up windows
+7. Enemy turn begins unless the player earns an extra turn, stun, interrupt, or follow-up.
+8. Enemy windup creates a response window.
+9. Player chooses dodge, parry, guard, or special reaction.
+10. Result feeds back into the next player turn.
+
+## 6. Controls
+
+### Global
+
+- `ESC`: back/menu
+- `H`: help
+- `L`: log
+- `M`: demo manual/auto toggle
+
+### Combat
+
+- `1-7`: select combat style
+- `A/S/D`: weapon or spell chains
+- `SPACE`: dodge/parry where allowed
+- `F`: guard
+
+### Demo
+
+- `1-4`: choose category
+- number keys: choose demo item
+- `A` / left arrow: previous page
+- `D` / right arrow: next page
+- `W` / `5`: cycle style
+- `6`: cycle difficulty
+
+## 7. Handfeel Spec
+
+### Timing Defaults
+
+The current runner supports configurable handfeel:
+
+- `windowPad`: `0.08`
+- `holdWindowPad`: `0.10`
+- `perfectTolerance`: `0.07`
+- `rhythmPad`: `0.07`
+- `timeoutGrace`: `0.22`
+
+These values should remain globally tunable and later exposed in a debug panel.
+
+### Press Nodes
+
+- Press nodes should feel precise but not brittle.
+- Near-window inputs should resolve predictably.
+- Perfect should require intentional timing and should not be automatic on every success.
+
+### Hold-Release Nodes
+
+- Charge state must be visually readable.
+- Release timing should map clearly:
+  - before window: early branch
+  - inside window: success
+  - near perfect marker: perfect
+  - after window: late or overcharge branch
+- Overcharge should be useful for risk/reward, not only punishment.
+
+### Rhythm Nodes
+
+- Beats should be visible before the hit moment.
+- Wrong keys should count as misses but should not skip the current beat immediately.
+- Perfect rhythm should require all beats; success can allow partial hits.
+
+### Enemy Response
+
+- Enemy windup should show a clear pre-response phase.
+- Green response window must appear before input is expected.
+- Hit moment should have strong but brief freeze/impact.
+
+### Feedback Durations
+
+- Perfect hit-stop: short, readable, does not block next chain input.
+- Success feedback: lighter hit-stop and combo pulse.
+- Failure feedback: explain early, late, wrong, timeout, or chain break.
+
+## 8. Combat State Spec
+
+### Player State
+
+Required fields:
+
+- `currentState`: `idle`, `swordAttack`, `casting`, `charge`, `shield`
+- `spellEnergy`
+- `maxSpellEnergy`
+- `absorbReady`
+- `shieldEnchanted`
+- `consecutiveDodges`
+- `lastAttackTime`
+
+Future fields:
+
+- `heat`
+- `overloadTimer`
+- `activeStatuses`
+- `followWindow`
+- `lastChainFamily`
+
+### Enemy State
+
+Required fields:
+
+- HP
+- active attack
+- attack phase
+- stun timer
+- active statuses
+
+Future fields:
+
+- armor
+- poise
+- shield
+- elemental weakness/resistance
+- current archetype
+
+### Resource Rules
+
+#### Spell Energy
+
+- Absorb chains and spell absorption generate spell energy.
+- Staff + Absorb can exceed normal max up to overflow cap.
+- Overcap should create visible instability and optional HP drain.
+- Future overflow spenders should convert excess energy into high-risk burst attacks.
+
+#### Heat
+
+Fire should eventually gain a heat loop:
+
+- Fire hits add heat.
+- Heat increases fire impact and burn chance.
+- High heat increases recovery or overheat risk.
+- Overheat branch can become a strong but dangerous payoff.
+
+## 9. Status System Spec
+
+Statuses should become first-class data instead of ad hoc flags.
+
+### Status Shape
+
+```js
+{
+  id: "burn",
+  target: "enemy",
+  stacks: 1,
+  duration: 2,
+  source: "fireball_evolution_v2",
+  data: {}
+}
+```
+
+### Required Statuses
+
+- `burn`
+  - Target: enemy
+  - Effect: damage over time or next fire impact bonus
+  - Visual: ember ticks and orange outline
+- `armorBreak`
+  - Target: enemy
+  - Effect: increased incoming damage
+  - Visual: red crack marks
+- `absorbReady`
+  - Target: player
+  - Effect: next incoming spell can be absorbed/reflected
+  - Visual: purple glyph near player
+- `shieldEnchant`
+  - Target: player
+  - Effect: guard/parry reflects spell damage
+  - Visual: shield rune flash
+- `overload`
+  - Target: player
+  - Effect: overcap spell energy instability and HP drain
+  - Visual: purple warning pulse
+- `stun`
+  - Target: enemy or player
+  - Effect: skip or delay action
+  - Visual: white/yellow stars or broken posture mark
+
+### Status Application Timing
+
+- Apply status effects after QTE chain completion unless a node explicitly marks `immediate: true`.
+- Tick enemy statuses at enemy turn start.
+- Tick player statuses at player turn start.
+- Visual events should fire both on application and on tick.
+
+## 10. Chain Data Spec
+
+### Chain Shape
+
+```js
+{
+  key: "A",
+  name: "火球术·三段进化",
+  description: "Readable player-facing summary.",
+  color: "#e74c3c",
+  family: "fire",
+  role: "fusion",
+  visual: "emberProjectile",
+  tags: ["fire", "charge", "projectile"],
+  nodes: []
+}
+```
+
+### Node Shape
+
+```js
+{
+  id: "charge",
+  name: "聚焰蓄热",
+  duration: 1.8,
+  input: { type: "hold_release", key: "A" },
+  window: { start: 0.70, end: 1.55 },
+  perfect: 1.18,
+  onPerfect: {},
+  onSuccess: {},
+  onEarly: {},
+  onLate: {},
+  onFail: {}
+}
+```
+
+### Transition Shape
+
+```js
+{
+  next: "release",
+  effect: "fire_charge_perfect",
+  damage: 0,
+  chargeMul: 1.55,
+  selfStun: 0,
+  stunEnemy: 0,
+  iframe: 0,
+  damageMul: 1,
+  staminaCost: 0,
+  resource: { spellEnergy: 18 },
+  status: { target: "enemy", type: "burn", turns: 2 },
+  visualEvent: "fireChargePeak",
+  absorbReady: true,
+  openPlayerTurn: false,
+  followWindow: "fire_finisher",
+  message: "聚焰临界"
+}
+```
+
+### Metadata Requirements
+
+Every chain must include:
+
+- `key`
+- `name`
+- `description`
+- `color`
+- `family`
+- `role`
+- `visual`
+- `tags`
+- non-empty `nodes`
+
+Every node must include:
+
+- unique `id`
+- `name`
+- positive `duration`
+- valid `input`
+- at least one transition
+
+Every transition with `next` must point to an existing node in the same chain.
+
+## 11. Weapon Chain Spec
+
+### Common Roles
+
+- `A`: reliable opener
+- `S`: signature challenge
+- `D`: control, utility, or risky payoff
+
+Every weapon should have:
+
+- one short chain
+- one technical chain
+- one payoff/control chain
+- at least one fail-forward branch
+- at least one Perfect branch that changes behavior, not just damage
+
+### Greatsword
+
+Identity:
+
+- commitment
+- stance
+- heavy payoff
+- armor break
+
+Current V2 chains:
+
+- `greatsword_a_v2`
+  - raise -> cut -> optional cleave
+  - Perfect raise opens stronger cleave
+  - fail becomes weak but usable cut
+- `greatsword_s_v2`
+  - staged charge
+  - early: low damage
+  - success: heavy slash
+  - perfect: ground shock
+  - late: overcharge self-stun, partial impact
+- `greatsword_d_v2`
+  - guard-break/control
+  - Perfect opens extra player turn
+  - success stuns and applies short armor break
+
+Visual language:
+
+- wide arcs
+- red weight trails
+- ground shock lines
+- chunkier hit sparks
+- heavier camera punch on Perfect
+
+### Dual Blades
+
+Identity:
+
+- speed
+- rhythm
+- branching combo
+- sustained pressure
+
+Current V2 chains:
+
+- `dualblades_a_v2`
+  - multi-key combo
+  - Perfect streak unlocks alternate finisher
+  - failures fallback to short cut instead of full stop
+- `dualblades_s_v2`
+  - precision thrust
+  - narrow Perfect payoff
+  - strong crit branch
+- `dualblades_d_v2`
+  - spin/rhythm hybrid
+  - builds combo count
+  - Perfect grants dodge-cancel-style iframe pressure
+
+Visual language:
+
+- afterimages
+- thin repeated slashes
+- green combo streaks
+- lower screen shake
+- fast hit sparks
+
+### Staff
+
+Identity:
+
+- preparation
+- glyphs
+- rhythm casting
+- projectile release
+- status control
+
+Current chains:
+
+- `staff_a`
+- `staff_s`
+- `staff_d`
+- `fireball_evolution_v2`
+- `absorb_siphon`
+
+Planned chains:
+
+- `staff_s_v2`
+  - stronger rhythm chant with visible glyph steps
+  - branches based on hit count
+- `staff_d_v2`
+  - status/control spell with enemy-turn manipulation
+  - low damage, stronger stun or slow
+
+Visual language:
+
+- glyph rings
+- mana threads
+- projectile travel
+- elemental impact bloom
+- less physical shake than weapons
+
+## 12. Spell Chain Spec
+
+### Common Spell Requirements
+
+Every spell should provide:
+
+- one active chain alteration
+- one defensive reaction
+- one resource or state loop
+- demo entries for active, defensive, and resource behavior
+
+### Fire: `fire`
+
+Identity:
+
+- heat
+- burn
+- charge
+- armor cracks
+- explosive payoff
+
+Current:
+
+- Active chain: `fireball_evolution_v2` replaces staff `A`.
+- Sword interaction: sword hits can build toward armor break.
+- `flame_blade`
+  - replaces sword `A` for Fire weapon styles.
+  - adds heat, burn, and armor break.
+- `shield_flare`
+  - replaces guard defense for Fire styles.
+  - creates a shield flame counter.
+- `heat` resource loop
+  - Fire hits add heat.
+  - heat increases Fire chain damage.
+  - high heat applies overload warning.
+- Composite style: `flameforge`.
+
+### Absorb: `absorb`
+
+Identity:
+
+- spell reversal
+- siphon
+- stored energy
+- reflect
+- overload
+
+Current:
+
+- Active chain: `absorb_siphon` replaces staff `S`.
+- Sword interaction: sword attack can prepare `absorbReady`.
+- Resource loop: spell energy can overflow.
+- `mirror_guard`
+  - replaces guard/parry defense for Absorb styles.
+  - stores or reflects spell damage.
+- `overflow_burst`
+  - consumes spell energy for high damage.
+  - includes emergency vent fallback.
+- Composite style: `mirrorblade`.
+
+### Future Spell Candidates
+
+These are not committed for the next pass, but they fit the system:
+
+- Frost
+  - slow, bind, turn delay, brittle shatter.
+- Lightning
+  - narrow Perfect, chain jumps, interrupt windows.
+- Blood
+  - HP conversion, lifesteal, risk/reward.
+- Stone
+  - armor, guard stability, heavy stagger.
+- Wind
+  - dodge-cancel, reposition, extra action speed.
+
+## 13. Combat Art Spec
+
+Combat arts should be rule modifiers, not just stat buffs.
+
+### Existing Directions
+
+- Desslo
+  - attack-anytime
+  - Perfect crit
+  - dodge during casting
+- Eastern
+  - guard/dodge flexibility
+  - consecutive dodge crit
+  - post-attack guard neutralize
+- Desolo
+  - follow-up attack
+  - interrupt on follow-up
+  - casting can carry parry/absorb behavior
+
+### Future Requirements
+
+- Combat arts should declare:
+  - passive flags
+  - follow-up chains
+  - reaction permissions
+  - demo explanation entries
+- Validator should verify follow-up chain references.
+- Demo should label combat-art exceptions clearly.
+
+## 14. Enemy Spec
+
+Enemy design should force the player to value different chains.
+
+### Current State
+
+The battle setup now picks a preferred enemy archetype from the selected style. This is an initial pressure model, not a final encounter system.
+
+### Enemy Archetypes
+
+- Caster
+  - frequent `spellCast`
+  - makes Absorb valuable
+  - has slow but high-threat magic windup
+- Armored
+  - higher HP and heavy pressure
+  - rewards Greatsword and Fire armor break
+  - has heavy guard-break attacks
+- Swift
+  - short windups
+  - rewards Dual Blades, dodge, and fast openers
+  - lower HP, higher pressure
+- Shielded
+  - mixes shield pressure and projectile pressure
+  - rewards control chains, parry, and status
+- Berserker
+  - not implemented yet
+  - predictable but high damage
+  - rewards stun, guard, and interrupt timing
+
+### Enemy Attack Data
+
+Enemy attacks should expose:
+
+- `id`
+- `name`
+- `damage`
+- `windup`
+- `hitTime`
+- `allowedResponses`
+- `type`: physical, spell, heavy, projectile
+- `visual`
+- `status`
+- `followUp`
+
+## 15. Visual Spec
+
+### Composition
+
+- Top 52px belongs to DOM HUD.
+- Bottom 90px belongs to QTE/action bars and compact hints.
+- QTE bar is primary during QTE.
+- Key prompt is secondary during QTE.
+- Demo mode uses a darker stage and lower background contrast.
+
+### Effect Families
+
+- Slash
+  - weapon arcs, sparks, hit trails
+- Projectile
+  - travel line, charge core, impact bloom
+- Glyph
+  - rings, sigils, rhythm pulses
+- Shield
+  - radial guard flash, metallic sparks
+- Status
+  - burn ticks, armor cracks, stun marks
+- Resource
+  - spell energy pulse, overload warning
+
+### Effect Event Shape
+
+```js
+{
+  type: "projectile",
+  preset: "emberProjectile",
+  source: "player",
+  target: "enemy",
+  anchor: "enemyChest",
+  intensity: 1.5,
+  outcome: "perfect",
+  color: "#e74c3c",
+  duration: 0.45
+}
+```
+
+### Required Effect Queue Behavior
+
+- Combat and demo call `emitEffect`.
+- The effect queue resolves named anchors.
+- Renderer draws effects from queue state.
+- Particle spawning is capped per effect type.
+- Pure draw functions never emit new particles.
+
+### Named Anchors
+
+- `playerCore`
+- `playerHand`
+- `playerShield`
+- `enemyCore`
+- `enemyChest`
+- `midpoint`
+- `qteBar`
+- `hudEnergy`
+
+## 16. Demo Mode Spec
+
+Demo mode is both a showcase and a debugging tool.
+
+### Categories
+
+- Style chains
+- Spells
+- Combat arts
+- Defense/counter
+
+### Required Demo Features
+
+- Auto playback
+- Manual playback
+- Difficulty toggle
+- Current style toggle
+- Result panel
+- Chain input flow
+- Reference damage
+- Status/resource results
+- Console-error-free playback
+
+### Planned Demo Features
+
+- Timeline panel
+  - nodes as steps
+  - outcome per node
+  - branch path
+  - damage/resource/status per step
+- Replay button
+- Slow-motion slider
+- Frame-step for QTE nodes
+- Visual event list
+- Data validation badge
+
+## 17. Debug And Tuning Spec
+
+### Handfeel Debug Panel
+
+Should display:
+
+- current node id
+- timer
+- expected input time
+- window start/end
+- perfect point
+- last input time
+- input delta
+- resolved outcome
+- current difficulty scale
+- handfeel padding values
+
+### Balance Debug Panel
+
+Should display:
+
+- total chain damage by outcome
+- current combo multiplier
+- active statuses
+- resource gain/spend
+- enemy stun/self-stun
+- turn result prediction
+
+### Data Debug Tools
+
+Existing:
+
+- `node scripts/validate-data.js`
+
+Future:
+
+- `node scripts/print-chain.js fireball_evolution_v2`
+- `node scripts/sim-chain.js absorb_siphon perfect`
+- `node scripts/check-balance.js`
+
+## 18. Data Validation Spec
+
+The validator must check:
+
+- chain metadata
+- node ids
+- duplicate node ids
+- valid input types
+- rhythm beats inside node duration
+- valid windows
+- transition numeric fields
+- transition `next` references
+- transition `resource` values
+- registered transition `resource` ids
+- transition `status` shape
+- registered transition `status.type`
+- transition `visualEvent`
+- registered transition `visualEvent`
+- chain `cost` resource ids
+- weapon chain references
+- spell chainMap references
+- combat art follow-up references
+- defense chain references
+- enemy archetype attack references
+- style weapon/spell/combat-art references
+- style preferred enemy references
+
+Future validator checks:
+
+- damage ranges fit balance bands
+- no unreachable nodes
+- no accidental infinite loops unless explicitly allowed
+
+## 19. Architecture And Refactor Plan
+
+### Current Hotspots
+
+- `js/battle.js`
+  - combat rules, state, effects, QTE completion
+- `js/demo-mode.js`
+  - demo state, playback, demo effects, result panels
+- `js/renderer.js`
+  - stage, UI, demo drawing, QTE bars
+
+### Target Modules
+
+- `js/systems/effects.js`
+  - effect queue
+  - named anchors
+  - event normalization
+- `js/systems/statuses.js`
+  - apply/tick/remove statuses
+  - status visual hooks
+- `js/systems/resources.js`
+  - spell energy, heat, overload
+- `js/systems/chain-effects.js`
+  - convert QTE transition output into combat effects
+- `js/render/qte-view.js`
+  - shared QTE drawing
+- `js/render/demo-view.js`
+  - demo menu/list/timeline/result drawing
+- `js/render/effect-renderers.js`
+  - slash/projectile/glyph/shield/status rendering
+- `js/data/statuses.js`
+  - status definitions
+- `js/data/effects.js`
+  - effect preset definitions
+
+### Refactor Rules
+
+- Do not rewrite everything at once.
+- Extract only around active change areas.
+- Preserve current game behavior while moving code.
+- Add validation before adding larger content sets.
+- Keep data shape stable once demo entries depend on it.
+
+## 20. Roadmap
+
+### R0 - Foundation, Completed
+
+- Layout cleanup.
+- Handfeel padding.
+- Fire charge update-side particles.
+- Chain metadata.
+- Data validator.
+- Fire v2 and Absorb active slice.
+
+### R1 - Systems Foundation, Completed
+
+- Add effect event queue.
+- Add status registry and status tick/apply flow.
+- Add resource registry for spell energy and heat.
+- Move visual event routing out of `battle.js` and `demo-mode.js`.
+- Add debug panel for QTE timing.
+
+Implemented files:
+
+- `js/systems/effects.js`
+- `js/systems/statuses.js`
+- `js/systems/resources.js`
+- `js/systems/qte-debug.js`
+
+Remaining cleanup after R1:
+
+- Move more one-off demo action effects into `EffectEventQueue`.
+- Move the remaining raw particle helper calls into named event definitions.
+
+### R2 - Weapon V2, Completed
+
+- Implemented Greatsword v2 chains.
+- Implemented Dual Blades v2 chains.
+- Replaced default Greatsword and Dual Blades A/S/D mappings with V2 chains.
+- Added weapon-specific visual events through `EffectEventQueue`.
+- Connected `armorBreak` status to incoming damage calculation.
+- Connected `openPlayerTurn` transition results to turn flow.
+- Exposed V2 chains in style-chain demo through the active style mapping.
+- Added validator check for registered status ids.
+
+Implemented files:
+
+- `js/data/chains.js`
+- `js/data/weapons.js`
+- `js/battle.js`
+- `js/demo-mode.js`
+- `js/systems/effects.js`
+- `scripts/validate-data.js`
+
+Remaining cleanup after R2:
+
+- Run a balance pass after R3 and enemy archetypes.
+
+### R3 - Spell V2, Completed
+
+- Added Fire heat loop.
+- Added `flame_blade`.
+- Added `shield_flare`.
+- Added `mirror_guard`.
+- Added `overflow_burst`.
+- Added overload warning and vent behavior.
+- Added composite Fire/Absorb styles for battle access.
+- Added demo entries for R3 spell chains and defensive reactions.
+
+Implemented files:
+
+- `js/data/chains.js`
+- `js/data/spells.js`
+- `js/data/styles.js`
+- `js/data/effects.js`
+- `js/systems/resources.js`
+- `js/systems/chain-effects.js`
+- `js/battle.js`
+- `js/demo-mode.js`
+- `js/renderer.js`
+- `scripts/validate-data.js`
+
+Remaining cleanup after R3:
+
+- Tune heat gain, heat damage bonus, and overflow costs.
+- Add balance script output for all chain outcomes.
+- Improve visual renderer fidelity for fire/glyph/shield events.
+
+### R4 - Enemy Archetypes, Initial Pass Completed
+
+- Added caster enemy.
+- Added armored enemy.
+- Added swift enemy.
+- Added shielded enemy.
+- Added style-driven enemy selection in battle setup.
+
+Remaining cleanup after R4:
+
+- Add explicit enemy selection UI if manual matchup testing becomes necessary.
+- Add berserker archetype.
+- Add armor/shield mechanics beyond HP and attack-pool pressure.
+
+### R5 - Demo And Tooling, Completed
+
+- Added projected demo timeline rows for chain node, outcome, input, damage, resource, status, stun, iframe, extra-turn, and visual event data.
+- Added actual QTE timeline rows that persist into the result preview after the runner is cleared.
+- Added result-preview replay: press `R` to replay the current demo item, any other key returns to list.
+- Added demo reset cleanup so replay/list transitions clear heat and stale timeline/result rows.
+- Added non-demo empty state for the demo-detail drawer when entering menu or battle.
+- Added `scripts/lib/load-data.js` for shared script-side data loading.
+- Added `scripts/sim-chain.js` for Perfect/Success/Early/Late/Fail chain simulation.
+- Added `scripts/check-balance.js` for advisory damage, stun, self-stun, resource, and status-duration outlier checks.
+- Added `scripts/smoke-checklist.js` for static smoke coverage of script ordering, required chains, spell mappings, styles, and enemy archetypes.
+- Current balance baseline: 28 chains, 140 simulated outcomes, no advisory warnings.
+
+Remaining cleanup after R5:
+
+- Add Playwright/browser-driven screenshot automation if this project later needs CI-grade visual regression checks.
+- Tune thresholds in `scripts/check-balance.js` after more enemies, status DOT, and armor mechanics land.
+
+### R6 - Polish
+
+### R6-A - FX Renderers And Hit Feedback, Completed
+
+- Added `EffectBurstSystem` for reusable event-driven burst primitives: ring, pulse, glyph, slash, beam, and shield.
+- Added `ActorReactionSystem` for player/enemy hit, crit, guard, dodge, stagger, and cast reactions.
+- Extended `EffectEventDefinitions` with reusable burst renderer data for Fire, Absorb, Greatsword, and Dual Blades events.
+- Extended `EffectEventQueue` to emit burst and actor-reaction events from data definitions and transition outcomes.
+- Added status burst feedback for burn, overload, absorb-ready/shield-enchant, and generic status applications.
+- Added renderer support for reaction-driven actor offset, scale, flash, and ring overlays.
+
+Remaining cleanup after R6-A:
+
+- Add audio pass for hit confirmation, charge peaks, resource gain, and branch failure.
+- Add mobile/touch layout polish.
+- Add final balance pass after visuals and audio settle.
+
+### R6-B - Actor Silhouettes And Node-Timed Motion, Completed
+
+- Replaced circular player/enemy placeholders with composed canvas silhouettes: head, torso, limbs, weapon, shield, and casting focus.
+- Added player pose variants for idle, sword attack, shield/guard, casting, and charge states.
+- Added enemy archetype silhouettes for caster, armored, swift, shielded, and base enemies.
+- Updated weapon trails to use QTE node progress when available instead of only looping on wall-clock time.
+- Added distinct visual trails for greatsword weight and dual-blade flurries.
+- Preserved actor reaction overlays from R6-A on top of the new silhouettes.
+
+Remaining cleanup after R6-B:
+
+- Add audio pass for hit confirmation, charge peaks, resource gain, status application, branch failure, and overflow.
+- Add per-node pose tags if future chain nodes need exact bespoke animation poses.
+- Add automated screenshot smoke once silhouette and audio pass settle.
+- Add mobile/touch layout polish.
+
+## 21. Acceptance Criteria
+
+### General
+
+- Main menu opens without battle HUD bleed.
+- Battle, practice, and demo modes can be entered and exited.
+- No console errors during normal smoke path.
+- All JS files pass syntax check.
+- Data validator passes.
+
+### Handfeel
+
+- Press, hold-release, and rhythm QTEs are readable.
+- Perfect is achievable but not automatic.
+- Early/late/fail feedback is visible.
+- Demo playback does not feel stalled by excessive pauses.
+
+### Visual
+
+- QTE bars are not clipped.
+- Demo panels do not overlap key content.
+- Effects are event-driven, not spawned from pure draw calls.
+- Fire and Absorb have distinct visual identity.
+- Major visual events use reusable burst primitives instead of one-off canvas code.
+- Player and enemy react visibly to hit, crit, guard, dodge, stagger, and cast events.
+- Player/enemy stage silhouettes communicate weapon, guard, cast, and enemy archetype without relying only on text.
+
+### Combat
+
+- Weapon chains resolve damage and branch outcomes.
+- Fire v2 applies damage, branch feedback, and burn/status presentation.
+- Absorb active chain grants spell energy and absorb-ready state.
+- Defense QTEs still resolve dodge, parry, and guard.
+
+### Demo
+
+- Fire v2 demo entries show branch path and result lines.
+- Absorb active-chain demo entries show spell energy and absorb-ready result.
+- Demo detail panel shows chain input flow, reference damage, projected timeline, actual timeline, and result summary.
+- Demo result preview supports replaying the current item with `R`.
+
+## 22. Verification Commands
+
+```powershell
+node scripts\validate-data.js
+node scripts\sim-chain.js flame_blade perfect
+node scripts\sim-chain.js overflow_burst perfect
+node scripts\check-balance.js
+node scripts\smoke-checklist.js
+node scripts\flow-smoke.js
+Get-ChildItem -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
+```
+
+Browser smoke test:
+
+- Open `http://localhost:8765/`.
+- Confirm main menu HUD is hidden.
+- Enter demo mode.
+- Open spell demos.
+- Run Fire v2 entry.
+- Press `R` on the result preview and confirm the same Fire v2 entry replays.
+- Run Absorb active-chain entry.
+- Run `flow-smoke.js` to cover battle style `6`, battle style `7`, Fire v2 demo playback, spell-list paging, and `overflow_burst` end to end.
+- Cycle demo style to Dual Blades and run a V2 weapon chain.
+- Cycle demo style to Greatsword and run a V2 weapon chain.
+- In battle, select a Greatsword style and confirm the QTE debug drawer shows V2 chain data.
+- In battle, select `6` Fire Greatsword and run `flame_blade`.
+- In battle, select `7` Mirror Blades, gain energy with `S`, then run `overflow_burst`.
+- Confirm no console errors.
+
+## 23. Open Questions
+
+- Should burn deal turn-start DOT or amplify the next fire hit?
+- Should Fire heat gain decay over time, at turn boundaries, or only through overheat branches?
+- Should Absorb overflow cost scale with stored energy or remain fixed per chain?
+- Should armor break later become both a status multiplier and an enemy armor-stat reducer?
+- Should Dual Blades Perfect streak be global combo-based or chain-local?
+- Should enemy archetype selection become a manual battle setup option?
+- Should future visuals remain Canvas 2D or introduce a stronger animation layer first?
+
+## 24. Immediate Next Task Recommendation
+
+Move to R6-C polish next:
+
+1. Add an audio pass for timing confirmation, perfect hits, branch failures, resource gain, status application, and overflow.
+2. Add screenshot smoke automation for main menu, style select, Fire demo, Absorb demo, and battle style 6/7.
+3. Add manual enemy matchup selection if balance testing against archetypes becomes slow.
+4. Add per-node pose tags only where generic node-timed motion is not enough.
+5. Revisit mobile/touch layout after screenshots cover the core desktop flow.
+
+R1-R6B now provide content, observability, reusable visual primitives, readable character staging, and baseline feedback. The next bottleneck is audio confirmation and regression-proof visual testing.

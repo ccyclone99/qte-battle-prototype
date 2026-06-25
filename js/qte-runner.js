@@ -1,7 +1,7 @@
 class QTEChainRunner {
   constructor(chainConfig, context) {
     this.chain = chainConfig;
-    this.context = context;
+    this.context = context || {};
     this.nodeIndex = 0;
     this.nodeTimer = 0;
     this.state = "running"; // running | done
@@ -23,6 +23,18 @@ class QTEChainRunner {
     this.forcedDelay = 0.18;
     this.postNodePause = 0;
     this.timeScale = 1;
+    this.handfeel = {
+      windowPad: 0.08,
+      holdWindowPad: 0.10,
+      perfectTolerance: 0.07,
+      rhythmPad: 0.07,
+      timeoutGrace: 0.22,
+      ...(this.context.handfeel || {})
+    };
+    this.debug = {
+      lastInput: null,
+      lastOutcome: null
+    };
 
     const firstNode = this.currentNode();
     if (firstNode && firstNode.input.type === "rhythm") {
@@ -55,10 +67,13 @@ class QTEChainRunner {
 
   getEffectiveWindow(node) {
     // 判定窗口基础放宽
-    const pad = 0.04;
+    const pad = node.input && node.input.type === "hold_release"
+      ? this.handfeel.holdWindowPad
+      : this.handfeel.windowPad;
+    const source = node.window || { start: 0, end: node.duration };
     return {
-      start: Math.max(0, node.window.start - pad),
-      end: Math.min(node.duration + 0.3, node.window.end + pad),
+      start: Math.max(0, source.start - pad),
+      end: Math.min(node.duration + this.handfeel.timeoutGrace, source.end + pad),
       perfect: node.perfect
     };
   }
@@ -102,7 +117,7 @@ class QTEChainRunner {
 
 
     // 普通节点超时判定
-    if (this.nodeTimer > node.duration + 0.3) {
+    if (this.nodeTimer > node.duration + this.handfeel.timeoutGrace) {
       this.resolveNode("timeout");
     }
 
@@ -153,7 +168,7 @@ class QTEChainRunner {
     }
 
     const beats = node.input.beats;
-    const tolerance = (node.rhythmTolerance || 0.18) + 0.05;
+    const tolerance = (node.rhythmTolerance || 0.18) + this.handfeel.rhythmPad;
 
     // 检查是否错过当前节拍（若已因乱按记过 miss，则只推进不重复计数）
     while (this.rhythmState.beatIndex < beats.length) {
@@ -187,7 +202,7 @@ class QTEChainRunner {
 
   updateForcedRhythm(node) {
     const beats = node.input.beats;
-    const tolerance = (node.rhythmTolerance || 0.18) + 0.05;
+    const tolerance = (node.rhythmTolerance || 0.18) + this.handfeel.rhythmPad;
     const outcome = this.forcedOutcome;
 
     if (outcome === "fail" || outcome === "early" || outcome === "late") {
@@ -237,17 +252,21 @@ class QTEChainRunner {
       return;
     }
 
-    if (!Utils.inputMatches(node.input, event)) return;
+    if (!Utils.inputMatches(node.input, event)) {
+      this.recordDebugInput(event, node, false);
+      return;
+    }
 
     const t = this.nodeTimer;
     const win = this.getEffectiveWindow(node);
     const perfect = node.perfect;
+    this.recordDebugInput(event, node, true);
 
     if (t < win.start) {
       this.resolveNode("early");
     } else if (t > win.end) {
       this.resolveNode("late");
-    } else if (perfect !== null && perfect !== undefined && Math.abs(t - perfect) <= 0.06) {
+    } else if (perfect !== null && perfect !== undefined && Math.abs(t - perfect) <= this.handfeel.perfectTolerance) {
       this.resolveNode("perfect");
     } else {
       this.resolveNode("success");
@@ -258,10 +277,11 @@ class QTEChainRunner {
     if (event.type !== "press") return;
 
     const beats = node.input.beats;
-    const tolerance = (node.rhythmTolerance || 0.18) + 0.05;
+    const tolerance = (node.rhythmTolerance || 0.18) + this.handfeel.rhythmPad;
     const idx = this.rhythmState.beatIndex;
 
     if (idx >= beats.length) return;
+    this.recordDebugInput(event, node, event.key.toUpperCase() === node.input.key.toUpperCase());
 
     // 防连打/乱按：按错键只记 miss，不跳过当前拍子，仍可在判定时间内按对
     if (event.key.toUpperCase() !== node.input.key.toUpperCase()) {
@@ -295,6 +315,21 @@ class QTEChainRunner {
     this.forcedOutcome = outcome;
   }
 
+  recordDebugInput(event, node, matched) {
+    const expected = this.getExpectedInputTime();
+    const time = Math.max(0, this.nodeTimer);
+    this.debug.lastInput = {
+      key: event.key,
+      type: event.type,
+      nodeId: node.id,
+      nodeName: node.name,
+      matched,
+      time,
+      expected,
+      delta: expected === null || expected === undefined ? null : time - expected
+    };
+  }
+
   resolveNode(outcome) {
     if (this.resolvedThisFrame) return;
     this.resolvedThisFrame = true;
@@ -308,6 +343,12 @@ class QTEChainRunner {
     const transition = node["on" + Utils.capitalize(outcome)]
       || node.onFail
       || { next: null, effect: "fail", damage: 0 };
+    this.debug.lastOutcome = {
+      nodeId: node.id,
+      nodeName: node.name,
+      outcome,
+      time: Math.max(0, this.nodeTimer)
+    };
 
     this.resultLog.push({
       nodeId: node.id,
@@ -347,6 +388,11 @@ class QTEChainRunner {
       damageMul: 1.0,
       staminaCost: 0,
       openPlayerTurn: false,
+      spellEnergy: 0,
+      resources: {},
+      absorbReady: false,
+      statuses: [],
+      visualEvents: [],
       messages: []
     };
 
@@ -363,6 +409,15 @@ class QTEChainRunner {
       if (t.damageMul !== undefined) effects.damageMul = t.damageMul;
       if (t.staminaCost !== undefined) effects.staminaCost += t.staminaCost;
       if (t.openPlayerTurn) effects.openPlayerTurn = true;
+      if (t.resource) {
+        for (const [key, value] of Object.entries(t.resource)) {
+          effects.resources[key] = (effects.resources[key] || 0) + value;
+          if (key === "spellEnergy") effects.spellEnergy += value;
+        }
+      }
+      if (t.absorbReady) effects.absorbReady = true;
+      if (t.status) effects.statuses.push(t.status);
+      if (t.visualEvent) effects.visualEvents.push(t.visualEvent);
       if (t.message) effects.messages.push(t.message);
     }
 

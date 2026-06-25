@@ -7,9 +7,9 @@ const WeaponDatabase = {
     normalAttack: 18,
     icon: "大",
     chains: {
-      A: "greatsword_a",
-      S: "greatsword_s",
-      D: "greatsword_d"
+      A: "greatsword_a_v2",
+      S: "greatsword_s_v2",
+      D: "greatsword_d_v2"
     }
   },
 
@@ -35,9 +35,9 @@ const WeaponDatabase = {
     normalAttack: 12,
     icon: "双",
     chains: {
-      A: "dualblades_a",
-      S: "dualblades_s",
-      D: "dualblades_d"
+      A: "dualblades_a_v2",
+      S: "dualblades_s_v2",
+      D: "dualblades_d_v2"
     }
   }
 };

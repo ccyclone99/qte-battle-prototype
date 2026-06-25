@@ -121,6 +121,309 @@ class ParticleSystem {
   }
 }
 
+class EffectBurstSystem {
+  constructor() {
+    this.bursts = [];
+  }
+
+  clear() {
+    this.bursts = [];
+  }
+
+  emit(config, origin, target = null) {
+    if (!config || !origin) return;
+    const duration = config.duration || config.life || 0.35;
+    const angle = config.angle !== undefined
+      ? config.angle
+      : (target ? Math.atan2(target.y - origin.y, target.x - origin.x) : 0);
+    this.bursts.push({
+      ...config,
+      x: origin.x,
+      y: origin.y,
+      x2: target ? target.x : config.x2,
+      y2: target ? target.y : config.y2,
+      angle,
+      time: 0,
+      duration
+    });
+  }
+
+  update(dt) {
+    for (const burst of this.bursts) {
+      burst.time += dt;
+    }
+    this.bursts = this.bursts.filter(burst => burst.time < burst.duration);
+  }
+
+  render(ctx) {
+    if (this.bursts.length === 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const burst of this.bursts) {
+      const progress = Math.min(1, burst.time / burst.duration);
+      const alpha = Math.max(0, 1 - progress);
+      const kind = burst.kind || "ring";
+      if (kind === "glyph") this.drawGlyph(ctx, burst, progress, alpha);
+      else if (kind === "slash") this.drawSlash(ctx, burst, progress, alpha);
+      else if (kind === "beam") this.drawBeam(ctx, burst, progress, alpha);
+      else if (kind === "shield") this.drawShield(ctx, burst, progress, alpha);
+      else if (kind === "pulse") this.drawPulse(ctx, burst, progress, alpha);
+      else this.drawRing(ctx, burst, progress, alpha);
+    }
+    ctx.restore();
+  }
+
+  drawRing(ctx, burst, progress, alpha) {
+    const radius = (burst.radius || 46) * (0.45 + progress * 0.85);
+    ctx.save();
+    ctx.translate(burst.x, burst.y);
+    ctx.globalAlpha = alpha * (burst.alpha || 0.85);
+    ctx.strokeStyle = burst.color || "#ffffff";
+    ctx.lineWidth = (burst.width || 5) * (1 - progress * 0.55);
+    ctx.shadowColor = burst.color || "#ffffff";
+    ctx.shadowBlur = burst.glow || 16;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawPulse(ctx, burst, progress, alpha) {
+    const radius = (burst.radius || 56) * (0.35 + progress);
+    const grad = ctx.createRadialGradient(burst.x, burst.y, 0, burst.x, burst.y, radius);
+    grad.addColorStop(0, this.withAlpha(burst.coreColor || burst.color || "#ffffff", alpha * 0.7));
+    grad.addColorStop(0.45, this.withAlpha(burst.color || "#ffffff", alpha * 0.35));
+    grad.addColorStop(1, this.withAlpha(burst.edgeColor || burst.color || "#ffffff", 0));
+    ctx.save();
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(burst.x, burst.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawGlyph(ctx, burst, progress, alpha) {
+    const radius = burst.radius || 36;
+    const spin = (burst.spin || 1) * progress * Math.PI * 2;
+    ctx.save();
+    ctx.translate(burst.x, burst.y);
+    ctx.rotate(spin);
+    ctx.globalAlpha = alpha * (burst.alpha || 0.9);
+    ctx.strokeStyle = burst.color || "#9b59b6";
+    ctx.lineWidth = burst.width || 2;
+    ctx.shadowColor = burst.color || "#9b59b6";
+    ctx.shadowBlur = burst.glow || 14;
+
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.62, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const ticks = burst.ticks || 6;
+    for (let i = 0; i < ticks; i++) {
+      const a = (i / ticks) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * radius * 0.78, Math.sin(a) * radius * 0.78);
+      ctx.lineTo(Math.cos(a) * radius * 1.12, Math.sin(a) * radius * 1.12);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawSlash(ctx, burst, progress, alpha) {
+    const length = burst.length || 110;
+    const width = burst.width || 7;
+    const sweep = burst.sweep || 0.85;
+    const radius = length * (0.45 + progress * 0.2);
+    ctx.save();
+    ctx.translate(burst.x, burst.y);
+    ctx.rotate(burst.angle || 0);
+    ctx.globalAlpha = alpha * (burst.alpha || 0.9);
+    ctx.strokeStyle = burst.color || "#f1c40f";
+    ctx.lineWidth = width * (1 - progress * 0.4);
+    ctx.lineCap = "round";
+    ctx.shadowColor = burst.color || "#f1c40f";
+    ctx.shadowBlur = burst.glow || 16;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, -sweep, sweep);
+    ctx.stroke();
+    if (burst.secondaryColor) {
+      ctx.globalAlpha *= 0.55;
+      ctx.strokeStyle = burst.secondaryColor;
+      ctx.lineWidth = Math.max(1, width * 0.4);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.78, -sweep * 0.7, sweep * 0.7);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawBeam(ctx, burst, progress, alpha) {
+    const x2 = burst.x2 ?? (burst.x + Math.cos(burst.angle || 0) * (burst.length || 180));
+    const y2 = burst.y2 ?? (burst.y + Math.sin(burst.angle || 0) * (burst.length || 0));
+    const eased = Math.sin(progress * Math.PI * 0.5);
+    const endX = burst.x + (x2 - burst.x) * eased;
+    const endY = burst.y + (y2 - burst.y) * eased;
+    ctx.save();
+    ctx.globalAlpha = alpha * (burst.alpha || 0.75);
+    ctx.strokeStyle = burst.color || "#5dade2";
+    ctx.lineWidth = burst.width || 5;
+    ctx.lineCap = "round";
+    ctx.shadowColor = burst.color || "#5dade2";
+    ctx.shadowBlur = burst.glow || 18;
+    ctx.beginPath();
+    ctx.moveTo(burst.x, burst.y);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawShield(ctx, burst, progress, alpha) {
+    const radius = (burst.radius || 48) * (1 + progress * 0.12);
+    const sides = burst.sides || 6;
+    ctx.save();
+    ctx.translate(burst.x, burst.y);
+    ctx.rotate(Math.PI / 6 + progress * 0.35);
+    ctx.globalAlpha = alpha * (burst.alpha || 0.9);
+    ctx.strokeStyle = burst.color || "#95a5a6";
+    ctx.lineWidth = burst.width || 4;
+    ctx.shadowColor = burst.color || "#95a5a6";
+    ctx.shadowBlur = burst.glow || 18;
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const a = (i / sides) * Math.PI * 2;
+      const x = Math.cos(a) * radius;
+      const y = Math.sin(a) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  withAlpha(color, alpha) {
+    if (!color || color[0] !== "#") return color || `rgba(255,255,255,${alpha})`;
+    const hex = color.slice(1);
+    const full = hex.length === 3
+      ? hex.split("").map(ch => ch + ch).join("")
+      : hex;
+    const num = parseInt(full, 16);
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+}
+
+class ActorReactionSystem {
+  constructor() {
+    this.reactions = {
+      player: null,
+      enemy: null
+    };
+  }
+
+  clear() {
+    this.reactions.player = null;
+    this.reactions.enemy = null;
+  }
+
+  trigger(target, type = "hit", intensity = 1, options = {}) {
+    if (!Object.prototype.hasOwnProperty.call(this.reactions, target)) return;
+    const durationByType = {
+      hit: 0.24,
+      crit: 0.34,
+      guard: 0.28,
+      dodge: 0.26,
+      stagger: 0.32,
+      cast: 0.24
+    };
+    this.reactions[target] = {
+      target,
+      type,
+      intensity,
+      duration: options.duration || durationByType[type] || 0.25,
+      time: 0,
+      color: options.color || this.colorFor(type)
+    };
+  }
+
+  update(dt) {
+    for (const target of Object.keys(this.reactions)) {
+      const reaction = this.reactions[target];
+      if (!reaction) continue;
+      reaction.time += dt;
+      if (reaction.time >= reaction.duration) {
+        this.reactions[target] = null;
+      }
+    }
+  }
+
+  get(target) {
+    const reaction = this.reactions[target];
+    if (!reaction) return {
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+      flashAlpha: 0,
+      ringAlpha: 0,
+      color: "#ffffff"
+    };
+
+    const progress = Math.min(1, reaction.time / reaction.duration);
+    const punch = Math.sin(progress * Math.PI);
+    const fade = 1 - progress;
+    const direction = target === "enemy" ? 1 : -1;
+    const intensity = reaction.intensity || 1;
+
+    let offsetX = 0;
+    let offsetY = 0;
+    let scale = 1;
+    let flashAlpha = 0;
+    let ringAlpha = 0;
+
+    if (reaction.type === "hit" || reaction.type === "crit" || reaction.type === "stagger") {
+      const strength = reaction.type === "crit" ? 44 : (reaction.type === "stagger" ? 30 : 24);
+      offsetX = direction * strength * intensity * punch;
+      offsetY = -5 * intensity * punch;
+      scale = 1 + (reaction.type === "crit" ? 0.12 : 0.06) * punch;
+      flashAlpha = (reaction.type === "crit" ? 0.55 : 0.38) * fade;
+    } else if (reaction.type === "guard") {
+      offsetX = direction * 8 * intensity * punch;
+      scale = 1 + 0.05 * punch;
+      ringAlpha = 0.55 * fade;
+    } else if (reaction.type === "dodge") {
+      offsetX = -38 * intensity * punch;
+      offsetY = -4 * punch;
+      scale = 0.98 + 0.04 * punch;
+      ringAlpha = 0.35 * fade;
+    } else if (reaction.type === "cast") {
+      scale = 1 + 0.05 * punch;
+      ringAlpha = 0.35 * fade;
+    }
+
+    return {
+      offsetX,
+      offsetY,
+      scale,
+      flashAlpha,
+      ringAlpha,
+      color: reaction.color
+    };
+  }
+
+  colorFor(type) {
+    if (type === "crit") return "#f1c40f";
+    if (type === "guard") return "#5dade2";
+    if (type === "dodge") return "#2ecc71";
+    if (type === "cast") return "#9b59b6";
+    if (type === "stagger") return "#e67e22";
+    return "#ffffff";
+  }
+}
+
 class FloatingTextManager {
   constructor() {
     this.texts = [];

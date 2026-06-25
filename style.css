@@ -41,7 +41,7 @@ body {
   height: 50px;
   background: rgba(10, 10, 16, 0.92);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
@@ -210,6 +210,18 @@ body {
   max-height: 520px;
 }
 
+.qte-debug-drawer {
+  left: 20px;
+  top: 300px;
+  width: 300px;
+  max-height: 360px;
+}
+
+.qte-debug-drawer .drawer-content {
+  font-family: Consolas, "Microsoft YaHei", monospace;
+  font-size: 11px;
+}
+
 .drawer-header {
   display: flex;
   justify-content: space-between;
@@ -256,7 +268,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(10, 10, 16, 0.94);
+  background: rgba(10, 10, 16, 0.97);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -346,6 +358,19 @@ body {
   transition: opacity 0.2s, transform 0.2s;
 }
 
+.touch-row {
+  display: grid;
+  gap: 6px;
+}
+
+.touch-row-numeric {
+  grid-template-columns: repeat(7, minmax(34px, 1fr));
+}
+
+.touch-row-action {
+  grid-template-columns: repeat(8, minmax(34px, 1fr));
+}
+
 .touch-controls.hidden {
   opacity: 0;
   pointer-events: none;
@@ -353,7 +378,7 @@ body {
 }
 
 .touch-controls button {
-  min-width: 40px;
+  min-width: 34px;
   height: 40px;
   font-family: inherit;
   font-size: 13px;
@@ -369,7 +394,7 @@ body {
 }
 
 .touch-controls button.wide {
-  min-width: 100%;
+  grid-column: span 2;
 }
 
 .touch-controls button:active {
