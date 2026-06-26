@@ -1771,6 +1771,37 @@ Acceptance criteria:
 - Starting battle or practice with that menu option enters style `counterflow` without needing to press `8`.
 - Static smoke protects the style dropdown, the counterflow option, and the menu-start style application hook.
 
+### R22 - Enemy Telegraph And Action Cinematics, Completed
+
+Goal: enemy attacks should no longer read as the same generic remote swing. The visual layer must communicate the attack family before impact and make the enemy body posture match that family.
+
+Implemented direction:
+
+- `EnemyDatabase.attacks` now declares a `telegraph` object per attack:
+  - `type`: player-facing attack family such as `stab`, `slash`, `smash`, `bolt`, `burst`, or `bash`
+  - `shape`: warning geometry such as `line`, `arc`, `circle`, `cone`, or `glyph`
+  - `pose`: enemy body posture such as `lunge`, `sweep`, `overhead`, `cast`, or `bash`
+  - `width`: rough visual width/intensity for the warning and hit overlay
+- `CanvasRenderer.getEnemyTelegraph()` provides a fallback mapper for older attack definitions.
+- Enemy windup/response now draws type-specific warning shapes:
+  - stab/bolt: narrow lane
+  - slash: crescent arc near the player
+  - smash/burst: circular ground marker
+  - shield bash: cone pressure from enemy to player
+  - spell cast: caster glyph plus path preview
+- Enemy hit frames now draw type-specific impact shapes instead of one shared curve.
+- Enemy silhouettes now receive a pose overlay, so casting, lunging, sweeping, overhead windup, and shield bash read from the model itself.
+- Enemy readout labels use the same attack-family vocabulary as the telegraph.
+- During active enemy attacks, the old central floating message is suppressed so it does not compete with the enemy attack bar and telegraph.
+
+Acceptance criteria:
+
+- Every enemy attack declares `telegraph.type`, `telegraph.shape`, `telegraph.pose`, and `telegraph.width`.
+- Renderer contains `getEnemyTelegraph`, `drawEnemyTelegraphLane`, `drawEnemyTelegraphHit`, and `drawEnemyAttackPoseOverlay`.
+- Static smoke protects the telegraph data contract and renderer helper surface.
+- Static smoke protects suppression of duplicate enemy-attack floating messages.
+- Visual smoke captures a dedicated `battle-enemy-telegraph` scenario and still passes on desktop and mobile screenshots.
+
 ## 22. Verification Commands
 
 ```powershell

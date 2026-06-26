@@ -531,6 +531,33 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
+    await pressKey(cdp, "8");
+    await wait(240);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.setTurnState("enemy_turn");
+      battle.enemyAttack = battle.buildEnemyAttack("curseBurst");
+      battle.enemyAttackTimer = Math.max(0.2, battle.enemyAttack.windup * 0.72);
+      battle.enemyAttackPhase = "response";
+      battle.activeAttackSystem.active = [];
+      battle.setMessage("敌方预警检查：咒爆");
+      battle.messageTimer = 0;
+      battle.turnBanner = null;
+      battle.flashMessage = null;
+    })()`);
+    await wait(320);
+    await captureScenario(cdp, "battle-enemy-telegraph", [
+      { label: "enemy telegraph turn active", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.turnState === "enemy_turn"`) },
+      { label: "enemy telegraph attack active", ok: await evaluate(cdp, `battle.enemyAttack && battle.enemyAttack.id === "curseBurst" && battle.enemyAttackPhase === "response"`) },
+      { label: "renderer telegraph reads curse burst", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        return !!(r && battle.enemyAttack && r.getEnemyTelegraph(battle.enemyAttack).shape === "circle" && r.getEnemyAttackMeta(battle.enemyAttack).type === "咒爆");
+      })()`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-start");
+    await closeTutorial(cdp);
     await pressKey(cdp, "6");
     await wait(240);
     await evaluate(cdp, `(() => {

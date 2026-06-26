@@ -165,6 +165,7 @@ class CanvasRenderer {
     if (scene.turnState.startsWith("demo_")) return false;
     if (scene.turnState.startsWith("select_")) return false;
     if (scene.turnState === "game_over") return false;
+    if (scene.turnState === "enemy_turn" && scene.enemyAttack && scene.enemyAttackPhase !== "none") return false;
     return scene.turnState !== "qte_running" && scene.turnState !== "attack_active";
   }
 
@@ -735,59 +736,303 @@ class CanvasRenderer {
     if (!attack) return;
     const color = attack.color || "#e74c3c";
     const phase = scene.enemyAttackPhase;
-    const isSpell = this.isSpellLikeAttack(attack);
+    const telegraph = this.getEnemyTelegraph(attack);
     const totalTime = Math.max(0.1, attack.windup + attack.hitTime);
     const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
-    const pulse = 0.65 + Math.sin(t * 10) * 0.18;
 
     if (phase === "windup" || phase === "response") {
-      const alpha = phase === "response" ? 0.42 : 0.22;
-      ctx.save();
-      ctx.globalAlpha = alpha * pulse;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = phase === "response" ? 4 : 2;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = phase === "response" ? 18 : 10;
-      ctx.setLineDash(phase === "response" ? [14, 8] : [6, 10]);
-      ctx.beginPath();
-      ctx.moveTo(ex - 40, ey - 24);
-      ctx.quadraticCurveTo((px + ex) / 2, ey - 95 + Math.sin(t * 4) * 8, px + 42, py - 18);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (isSpell) {
-        ctx.globalAlpha *= 0.85;
-        ctx.beginPath();
-        ctx.arc(ex - 62, ey - 34, 20 + Math.sin(t * 7) * 4, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.restore();
+      this.drawEnemyTelegraphLane(ctx, telegraph, phase, color, px, py, ex, ey, progress, t);
       return;
     }
 
     if (phase === "hit") {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      ctx.strokeStyle = color;
-      ctx.lineWidth = isSpell ? 8 : 7;
-      ctx.lineCap = "round";
-      ctx.globalAlpha = Math.max(0.25, 1 - progress * 0.65);
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 22;
+      this.drawEnemyTelegraphHit(ctx, telegraph, color, px, py, ex, ey, progress, t);
+    }
+  }
+
+  getEnemyTelegraph(attack) {
+    if (!attack) {
+      return {
+        type: "strike",
+        shape: "line",
+        pose: "lunge",
+        width: 30
+      };
+    }
+
+    if (attack.telegraph) {
+      return {
+        type: attack.telegraph.type || "strike",
+        shape: attack.telegraph.shape || "line",
+        pose: attack.telegraph.pose || "lunge",
+        width: attack.telegraph.width || 30
+      };
+    }
+
+    const id = String(attack.id || "").toLowerCase();
+    if (id.includes("curse")) return { type: "burst", shape: "circle", pose: "cast", width: 76 };
+    if (id.includes("arcane")) return { type: "bolt", shape: "line", pose: "cast", width: 30 };
+    if (this.isSpellLikeAttack(attack)) return { type: "spell", shape: "glyph", pose: "cast", width: 44 };
+    if (id.includes("shield")) return { type: "bash", shape: "cone", pose: "bash", width: 58 };
+    if (id.includes("heavy")) return { type: "smash", shape: "circle", pose: "overhead", width: 68 };
+    if (id.includes("slash")) return { type: "slash", shape: "arc", pose: "sweep", width: 42 };
+    return { type: "stab", shape: "line", pose: "lunge", width: 24 };
+  }
+
+  getEnemyTelegraphPoints(px, py, ex, ey) {
+    return {
+      source: { x: ex - 52, y: ey - 34 },
+      target: { x: px + 42, y: py - 12 },
+      enemyCast: { x: ex - 70, y: ey - 36 },
+      playerFoot: { x: px + 34, y: py + 20 }
+    };
+  }
+
+  drawEnemyTelegraphLane(ctx, telegraph, phase, color, px, py, ex, ey, progress, t) {
+    const points = this.getEnemyTelegraphPoints(px, py, ex, ey);
+    const { source, target, enemyCast, playerFoot } = points;
+    const response = phase === "response";
+    const pulse = 0.72 + Math.sin(t * 10) * 0.18;
+    const alpha = (response ? 0.46 : 0.24) * pulse;
+    const width = telegraph.width || 32;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = response ? 20 : 11;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (telegraph.shape === "arc") {
+      const r = 54 + width * 0.36;
+      ctx.globalAlpha = alpha * 0.70;
+      ctx.lineWidth = response ? 8 : 4;
+      ctx.setLineDash(response ? [18, 10] : [8, 10]);
       ctx.beginPath();
-      if (isSpell) {
-        ctx.moveTo(ex - 55, ey - 34);
-        ctx.lineTo(px + 35, py - 18);
-      } else {
-        ctx.moveTo(ex - 25, ey - 44);
-        ctx.quadraticCurveTo((px + ex) / 2, ey - 55, px + 40, py + 18);
+      ctx.arc(target.x + 2, target.y + 4, r, Math.PI * 0.58, Math.PI * 1.38);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = alpha * 0.30;
+      ctx.beginPath();
+      ctx.arc(target.x, target.y + 4, r + 18, Math.PI * 0.60, Math.PI * 1.35);
+      ctx.stroke();
+    } else if (telegraph.shape === "circle") {
+      const radius = 34 + width * 0.48 + Math.sin(t * 8) * 3;
+      ctx.globalAlpha = alpha * 0.28;
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.lineWidth = response ? 5 : 3;
+      ctx.setLineDash(response ? [14, 7] : [6, 9]);
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(playerFoot.x - radius * 0.72, playerFoot.y);
+      ctx.lineTo(playerFoot.x + radius * 0.72, playerFoot.y);
+      ctx.moveTo(playerFoot.x, playerFoot.y - radius * 0.72);
+      ctx.lineTo(playerFoot.x, playerFoot.y + radius * 0.72);
+      ctx.stroke();
+    } else if (telegraph.shape === "cone") {
+      const angle = Math.atan2(target.y - source.y, target.x - source.x);
+      const length = Math.hypot(target.x - source.x, target.y - source.y);
+      const spread = 0.18 + width / 520;
+      const left = {
+        x: source.x + Math.cos(angle - spread) * length,
+        y: source.y + Math.sin(angle - spread) * length
+      };
+      const right = {
+        x: source.x + Math.cos(angle + spread) * length,
+        y: source.y + Math.sin(angle + spread) * length
+      };
+      ctx.globalAlpha = alpha * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(left.x, left.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = alpha * 0.82;
+      ctx.lineWidth = response ? 5 : 3;
+      ctx.setLineDash(response ? [18, 8] : [7, 10]);
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(left.x, left.y);
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (telegraph.shape === "glyph") {
+      ctx.globalAlpha = alpha * 0.90;
+      ctx.lineWidth = response ? 4 : 2;
+      this.drawEnemyGlyph(ctx, enemyCast.x, enemyCast.y, 24 + Math.sin(t * 7) * 4, color, t);
+      ctx.globalAlpha = alpha * 0.42;
+      ctx.setLineDash(response ? [12, 8] : [4, 10]);
+      ctx.beginPath();
+      ctx.moveTo(enemyCast.x, enemyCast.y);
+      ctx.quadraticCurveTo((enemyCast.x + target.x) / 2, target.y - 92, target.x, target.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      const isBolt = telegraph.type === "bolt";
+      const laneWidth = response ? Math.max(5, width * 0.22) : Math.max(3, width * 0.14);
+      ctx.globalAlpha = alpha * 0.30;
+      ctx.lineWidth = Math.max(10, width);
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.lineWidth = laneWidth;
+      ctx.setLineDash(response ? [16, 8] : [6, 10]);
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (isBolt) {
+        for (let i = 0; i < 4; i++) {
+          const p = (i + 0.25 + (t * 0.42) % 1) / 4;
+          const x = source.x + (target.x - source.x) * p;
+          const y = source.y + (target.y - source.y) * p + Math.sin(t * 8 + i) * 8;
+          ctx.globalAlpha = alpha * 0.75;
+          ctx.beginPath();
+          ctx.arc(x, y, 4 + response * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
+    }
+
+    ctx.restore();
+  }
+
+  drawEnemyTelegraphHit(ctx, telegraph, color, px, py, ex, ey, progress, t) {
+    const points = this.getEnemyTelegraphPoints(px, py, ex, ey);
+    const { source, target, enemyCast, playerFoot } = points;
+    const alpha = Math.max(0.22, 1 - progress * 0.72);
+    const width = telegraph.width || 32;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 24;
+    ctx.globalAlpha = alpha;
+
+    if (telegraph.shape === "arc") {
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.arc(target.x + 8, target.y + 4, 58 + width * 0.35, Math.PI * 0.54, Math.PI * 1.34);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = alpha * 0.58;
+      ctx.stroke();
+    } else if (telegraph.shape === "circle") {
+      const radius = 36 + width * 0.62 + progress * 28;
+      ctx.globalAlpha = alpha * 0.20;
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
       ctx.stroke();
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;
-      ctx.globalAlpha *= 0.55;
+      ctx.globalAlpha = alpha * 0.60;
       ctx.stroke();
-      ctx.restore();
+    } else if (telegraph.shape === "cone") {
+      const angle = Math.atan2(target.y - source.y, target.x - source.x);
+      const length = Math.hypot(target.x - source.x, target.y - source.y);
+      const spread = 0.20 + width / 480;
+      const hit = {
+        x: source.x + Math.cos(angle) * length,
+        y: source.y + Math.sin(angle) * length
+      };
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(hit.x, hit.y);
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.34;
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(source.x + Math.cos(angle - spread) * length, source.y + Math.sin(angle - spread) * length);
+      ctx.lineTo(source.x + Math.cos(angle + spread) * length, source.y + Math.sin(angle + spread) * length);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = alpha * 0.56;
+      ctx.stroke();
+    } else if (telegraph.shape === "glyph" || telegraph.type === "bolt") {
+      ctx.lineWidth = telegraph.type === "bolt" ? 8 : 10;
+      ctx.beginPath();
+      ctx.moveTo(enemyCast.x, enemyCast.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = alpha * 0.58;
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.84;
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, telegraph.type === "bolt" ? 16 : 24, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.lineWidth = Math.max(7, width * 0.34);
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = alpha * 0.58;
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.82;
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 12 + Math.sin(t * 20) * 2, 0, Math.PI * 2);
+      ctx.fill();
     }
+
+    ctx.restore();
+  }
+
+  drawEnemyGlyph(ctx, x, y, radius, color, t) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.rotate(t * 0.9);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const r = i % 2 === 0 ? radius * 0.72 : radius * 0.38;
+      const x1 = Math.cos(a) * r;
+      const y1 = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x1, y1);
+      else ctx.lineTo(x1, y1);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   isSpellLikeAttack(attack) {
@@ -1593,6 +1838,8 @@ class CanvasRenderer {
       if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -54 - attackReach + windupPull, 8, color, Math.PI * 0.95, isArmored ? 0.7 : 0.55);
     }
 
+    this.drawEnemyAttackPoseOverlay(ctx, modelType, scene.enemyAttack, scene.enemyAttackPhase, color, t, reactionPulse);
+
     ctx.restore();
   }
 
@@ -1703,6 +1950,97 @@ class CanvasRenderer {
       ctx.lineTo(14, -66);
       ctx.moveTo(-10, -56);
       ctx.lineTo(10, -56);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawEnemyAttackPoseOverlay(ctx, modelType, attack, phase, color, t, reactionPulse = 0) {
+    if (!attack || phase === "none" || phase === "canceled") return;
+    const telegraph = this.getEnemyTelegraph(attack);
+    const pose = telegraph.pose || "lunge";
+    const response = phase === "response";
+    const hit = phase === "hit";
+    const wind = phase === "windup";
+    const intensity = hit ? 1 : (response ? 0.72 : 0.42 + reactionPulse * 0.18);
+    const pulse = 0.85 + Math.sin(t * 11) * 0.15;
+    const reach = hit ? 34 : (response ? 22 : 10);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = hit ? 22 : (response ? 16 : 8);
+    ctx.globalAlpha = Math.max(0.12, intensity * pulse);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (pose === "cast") {
+      const radius = hit ? 28 : (response ? 23 : 18);
+      this.drawEnemyGlyph(ctx, -64 - reach * 0.45, -30, radius, color, t);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-22, -16);
+      ctx.lineTo(-55 - reach * 0.45, -30);
+      ctx.stroke();
+      if (modelType !== "caster") {
+        ctx.beginPath();
+        ctx.arc(0, -8, 11 + Math.sin(t * 8) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (pose === "overhead") {
+      ctx.lineWidth = hit ? 10 : 6;
+      ctx.beginPath();
+      ctx.moveTo(-18, -18);
+      ctx.lineTo(-22, -92 + (wind ? Math.sin(t * 5) * 3 : 0));
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha *= 0.55;
+      ctx.beginPath();
+      ctx.moveTo(-22, -88);
+      ctx.lineTo(-38, -106);
+      ctx.moveTo(-22, -88);
+      ctx.lineTo(-6, -106);
+      ctx.stroke();
+    } else if (pose === "sweep") {
+      ctx.lineWidth = hit ? 9 : 5;
+      ctx.beginPath();
+      ctx.arc(-38 - reach * 0.4, -6, 52 + reach * 0.25, Math.PI * 0.70, Math.PI * 1.52);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha *= 0.48;
+      ctx.stroke();
+    } else if (pose === "bash") {
+      const x = -56 - reach * 0.55;
+      ctx.globalAlpha *= 0.92;
+      ctx.fillStyle = this.hexToRgba(color, 0.22);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = hit ? 5 : 3;
+      ctx.beginPath();
+      ctx.roundRect(x - 18, -30, 34, 58, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 28, -20);
+      ctx.lineTo(x - 48, 0);
+      ctx.lineTo(x - 28, 20);
+      ctx.stroke();
+    } else {
+      ctx.lineWidth = hit ? 8 : 5;
+      ctx.beginPath();
+      ctx.moveTo(-26, -10);
+      ctx.lineTo(-76 - reach, -22);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha *= 0.52;
+      ctx.beginPath();
+      ctx.moveTo(-78 - reach, -22);
+      ctx.lineTo(-98 - reach, -26);
       ctx.stroke();
     }
 
@@ -2421,8 +2759,19 @@ class CanvasRenderer {
 
   getEnemyAttackMeta(attack) {
     const id = attack.id || "";
+    const telegraph = this.getEnemyTelegraph(attack);
+    const typeNames = {
+      stab: "刺击",
+      slash: "横扫",
+      smash: "重砸",
+      spell: "法术",
+      bolt: "飞弹",
+      burst: "咒爆",
+      bash: "盾冲",
+      strike: "打击"
+    };
     const isSpell = attack.interruptible || id.includes("spell") || id.includes("arcane") || id.includes("curse");
-    const type = isSpell ? "法术" : (id.includes("heavy") || id.includes("shield") ? "重击" : "物理");
+    const type = typeNames[telegraph.type] || (isSpell ? "法术" : (id.includes("heavy") || id.includes("shield") ? "重击" : "物理"));
     const isHighThreat = attack.damage >= 30 || attack.stunOnHit || id.includes("heavy") || id.includes("curse");
     const threat = isHighThreat ? "高危" : (attack.windup <= 0.75 ? "快攻" : "中危");
     const threatColor = threat === "高危" ? "#e74c3c" : (threat === "快攻" ? "#2ecc71" : "#f1c40f");

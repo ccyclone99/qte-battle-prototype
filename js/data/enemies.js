@@ -90,6 +90,12 @@ const EnemyDatabase = {
       allowedResponses: ["dodge", "parry"],
       damage: 11,
       color: "#2ecc71",
+      telegraph: {
+        type: "stab",
+        shape: "line",
+        pose: "lunge",
+        width: 18
+      },
       hint: "短预警，可闪避/弹反 [SPACE]"
     },
     thrust: {
@@ -100,6 +106,12 @@ const EnemyDatabase = {
       allowedResponses: ["dodge", "parry"],
       damage: 15,
       color: "#e74c3c",
+      telegraph: {
+        type: "stab",
+        shape: "line",
+        pose: "lunge",
+        width: 24
+      },
       hint: "可闪避 [SPACE] / 弹反 [SPACE]"
     },
     slash: {
@@ -110,6 +122,12 @@ const EnemyDatabase = {
       allowedResponses: ["dodge", "guard"],
       damage: 12,
       color: "#f39c12",
+      telegraph: {
+        type: "slash",
+        shape: "arc",
+        pose: "sweep",
+        width: 42
+      },
       hint: "可闪避 [SPACE] / 格挡 [F]"
     },
     heavySmash: {
@@ -121,6 +139,12 @@ const EnemyDatabase = {
       damage: 30,
       stunOnHit: 1.5,
       color: "#8e44ad",
+      telegraph: {
+        type: "smash",
+        shape: "circle",
+        pose: "overhead",
+        width: 68
+      },
       hint: "只能闪避 [SPACE]"
     },
     spellCast: {
@@ -132,6 +156,12 @@ const EnemyDatabase = {
       damage: 25,
       interruptible: true,
       color: "#9b59b6",
+      telegraph: {
+        type: "spell",
+        shape: "glyph",
+        pose: "cast",
+        width: 44
+      },
       hint: "可弹反打断 [SPACE]"
     },
     arcaneBolt: {
@@ -143,6 +173,12 @@ const EnemyDatabase = {
       damage: 20,
       interruptible: true,
       color: "#5dade2",
+      telegraph: {
+        type: "bolt",
+        shape: "line",
+        pose: "cast",
+        width: 30
+      },
       hint: "法术飞弹，可弹反 [SPACE]"
     },
     curseBurst: {
@@ -154,6 +190,12 @@ const EnemyDatabase = {
       damage: 32,
       interruptible: true,
       color: "#9b59b6",
+      telegraph: {
+        type: "burst",
+        shape: "circle",
+        pose: "cast",
+        width: 76
+      },
       hint: "高威胁法术，可弹反/格挡"
     },
     shieldBash: {
@@ -165,6 +207,12 @@ const EnemyDatabase = {
       damage: 20,
       stunOnHit: 0.8,
       color: "#d4ac0d",
+      telegraph: {
+        type: "bash",
+        shape: "cone",
+        pose: "bash",
+        width: 58
+      },
       hint: "可闪避 [SPACE] / 格挡 [F]"
     }
   },
