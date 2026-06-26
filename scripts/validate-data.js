@@ -282,6 +282,15 @@ function validateReferences() {
       if (!EnemyDatabase.attacks[attackId]) fail(`${owner}: unknown attack "${attackId}"`);
     }
   };
+  const validateAttackPattern = (owner, pattern) => {
+    if (!Array.isArray(pattern) || pattern.length === 0) {
+      fail(`${owner}: attackPattern must be non-empty`);
+      return;
+    }
+    for (const attackId of pattern) {
+      if (!EnemyDatabase.attacks[attackId]) fail(`${owner}: unknown attack "${attackId}"`);
+    }
+  };
   validateEnemyAttackList("EnemyDatabase.base", EnemyDatabase.base);
   for (const [enemyId, enemy] of Object.entries(EnemyDatabase.archetypes || {})) {
     validateEnemyAttackList(`EnemyDatabase.archetypes.${enemyId}`, enemy);
@@ -291,11 +300,32 @@ function validateReferences() {
     if (!encounter.enemyId || !EnemyDatabase.archetypes[encounter.enemyId]) {
       fail(`EncounterDatabase.${encounterId}: unknown enemyId "${encounter.enemyId}"`);
     }
-    if (!Array.isArray(encounter.attackPattern) || encounter.attackPattern.length === 0) {
-      fail(`EncounterDatabase.${encounterId}: attackPattern must be non-empty`);
-    } else {
-      for (const attackId of encounter.attackPattern) {
-        if (!EnemyDatabase.attacks[attackId]) fail(`EncounterDatabase.${encounterId}: unknown attack "${attackId}"`);
+    validateAttackPattern(`EncounterDatabase.${encounterId}`, encounter.attackPattern);
+    if (encounter.phases !== undefined) {
+      if (!Array.isArray(encounter.phases)) {
+        fail(`EncounterDatabase.${encounterId}: phases must be an array`);
+      } else {
+        const phaseIds = new Set();
+        for (const phase of encounter.phases) {
+          if (!phase || typeof phase !== "object") {
+            fail(`EncounterDatabase.${encounterId}: phase must be an object`);
+            continue;
+          }
+          if (typeof phase.id !== "string" || !phase.id) {
+            fail(`EncounterDatabase.${encounterId}: phase id is required`);
+          } else if (phaseIds.has(phase.id)) {
+            fail(`EncounterDatabase.${encounterId}: duplicate phase id "${phase.id}"`);
+          } else {
+            phaseIds.add(phase.id);
+          }
+          if (typeof phase.name !== "string" || !phase.name) {
+            fail(`EncounterDatabase.${encounterId}.${phase.id || "phase"}: phase name is required`);
+          }
+          if (!isNumber(phase.hpBelow) || phase.hpBelow <= 0 || phase.hpBelow >= 1) {
+            fail(`EncounterDatabase.${encounterId}.${phase.id || "phase"}: hpBelow must be between 0 and 1`);
+          }
+          validateAttackPattern(`EncounterDatabase.${encounterId}.${phase.id || "phase"}`, phase.attackPattern);
+        }
       }
     }
     for (const styleId of encounter.recommendedStyles || []) {

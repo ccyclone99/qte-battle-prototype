@@ -82,13 +82,26 @@ body {
 
 .game-over-stats {
   display: none;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px 32px;
+  grid-template-columns: 1fr;
+  gap: 7px;
+  min-width: min(560px, calc(100% - 40px));
+  max-width: 620px;
+  padding: 16px 22px;
   margin-bottom: 24px;
-  font-size: 16px;
-  color: #dddddd;
+  font-size: 14px;
+  color: #dfe5f2;
   text-align: center;
+  background: rgba(24, 28, 40, 0.9);
+  border: 1px solid rgba(241, 196, 15, 0.34);
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+}
+
+.game-over-stats-title {
+  color: #f1c40f;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 2px;
 }
 
 .hp-group {
@@ -356,8 +369,9 @@ body {
 /* ========== 虚拟按键 ========== */
 .touch-controls {
   position: absolute;
-  bottom: 56px;
+  top: 66px;
   right: 12px;
+  bottom: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -367,7 +381,11 @@ body {
   border-radius: 10px;
   z-index: 20;
   pointer-events: auto;
-  transition: opacity 0.2s, transform 0.2s;
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  transition: none;
+  max-width: min(330px, calc(100% - 24px));
 }
 
 .touch-row {
@@ -386,7 +404,8 @@ body {
 .touch-controls.hidden {
   opacity: 0;
   pointer-events: none;
-  transform: translateY(20px);
+  transform: translateY(-8px);
+  visibility: hidden;
 }
 
 .touch-controls button {
@@ -666,9 +685,11 @@ body {
   }
 
   .touch-controls {
-    left: 8px;
+    left: auto;
     right: 8px;
-    bottom: 46px;
+    top: 50px;
+    bottom: auto;
+    max-width: min(360px, calc(100% - 16px));
   }
 
   .touch-row-numeric {

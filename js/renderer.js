@@ -81,6 +81,7 @@ class CanvasRenderer {
     this.drawBackground(ctx);
     this.drawCharacters(scene, t);
     this.drawAttackEffects(scene, t);
+    this.drawHitConfirmOverlays(scene);
     if (scene.effectBursts) scene.effectBursts.render(ctx);
 
     if (scene.turnState.startsWith("demo_")) {
@@ -112,17 +113,21 @@ class CanvasRenderer {
         const key = node.input.type === "hold_release" ? `松开 ${node.input.key}` : node.input.key;
         this.drawBigKeyPrompt(scene, key, node.name, 300, t);
       }
+    } else if (scene.turnState === "attack_active") {
+      this.drawPlayerState(scene);
+      this.drawStatusIcons(scene);
+      this.drawActiveAttackPrompt(scene, t);
     } else if (scene.turnState === "game_over") {
       this.drawGameOver(scene);
     }
 
     // 通用浮层提示（选择/演示/结束界面各自处理）
-    if (!scene.turnState.startsWith("demo_") && !scene.turnState.startsWith("select_") && scene.turnState !== "game_over") {
+    if (this.shouldDrawFloatingMessage(scene)) {
       this.drawFloatingMessage(scene);
     }
 
     // 屏幕闪白/闪红
-    if (scene.screenFlash) {
+    if (scene.screenFlash && this.shouldDrawScreenFlash(scene)) {
       this.drawScreenFlash(scene);
     }
 
@@ -131,7 +136,7 @@ class CanvasRenderer {
     if (scene.floatingTexts) scene.floatingTexts.render(ctx);
 
     // 回合横幅
-    if (scene.turnBanner) {
+    if (this.shouldDrawTurnBanner(scene)) {
       this.drawTurnBanner(scene);
     }
 
@@ -154,6 +159,24 @@ class CanvasRenderer {
     }
 
     ctx.restore();
+  }
+
+  shouldDrawFloatingMessage(scene) {
+    if (!scene || !scene.turnState) return false;
+    if (scene.turnState.startsWith("demo_")) return false;
+    if (scene.turnState.startsWith("select_")) return false;
+    if (scene.turnState === "game_over") return false;
+    return scene.turnState !== "qte_running" && scene.turnState !== "attack_active";
+  }
+
+  shouldDrawTurnBanner(scene) {
+    if (!scene || !scene.turnBanner) return false;
+    return scene.turnState !== "qte_running" && scene.turnState !== "attack_active";
+  }
+
+  shouldDrawScreenFlash(scene) {
+    if (!scene || !scene.turnState) return false;
+    return scene.turnState !== "demo_preview";
   }
 
   drawVignette() {
@@ -230,43 +253,40 @@ class CanvasRenderer {
   drawPlayerState(battle) {
     const ctx = this.ctx;
     const x = 20;
-    const y = 70;
-    const barW = 160;
-    const barH = 12;
+    const y = 72;
+    const barW = 138;
+    const isActionFocused = this.isActionFocusedState(battle);
+    let offsetY = y;
 
-    // 法术能量条
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(x, y, barW, barH + 18);
-
-    ctx.fillStyle = "#2a2a3a";
-    ctx.fillRect(x, y + 18, barW, barH);
-
-    const energyRatio = Math.min(battle.playerState.spellEnergy / battle.playerState.maxSpellEnergy, 1.5);
-    const displayRatio = Math.min(energyRatio, 1);
-    ctx.fillStyle = battle.playerState.spellEnergy > battle.playerState.maxSpellEnergy ? "#e74c3c" : "#9b59b6";
-    ctx.fillRect(x, y + 18, barW * displayRatio, barH);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "12px sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(`法术能量 ${Math.floor(battle.playerState.spellEnergy)}/${battle.playerState.maxSpellEnergy}`, x, y);
-
-    let offsetY = y + 40;
+    const hasAbsorb = battle.hasSpell && battle.hasSpell("absorb");
+    const spellEnergy = battle.playerState.spellEnergy || 0;
+    if (hasAbsorb || spellEnergy > 0) {
+      offsetY = this.drawResourceMeter(ctx, {
+        x,
+        y: offsetY,
+        w: barW,
+        label: "法术能量",
+        value: spellEnergy,
+        max: battle.playerState.maxSpellEnergy,
+        color: "#9b59b6",
+        overColor: "#e74c3c"
+      }) + 8;
+    }
 
     if (battle.resourceSystem && (battle.hasSpell && battle.hasSpell("fire") || battle.resourceSystem.heat > 0)) {
-      const heatY = offsetY;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-      ctx.fillRect(x, heatY, barW, barH + 18);
-      ctx.fillStyle = "#2a2a3a";
-      ctx.fillRect(x, heatY + 18, barW, barH);
-      const heatRatio = Math.min(battle.resourceSystem.heat / battle.resourceSystem.maxHeat, 1);
-      ctx.fillStyle = heatRatio >= 0.85 ? "#e74c3c" : "#e67e22";
-      ctx.fillRect(x, heatY + 18, barW * heatRatio, barH);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "12px sans-serif";
-      ctx.fillText(`热量 ${Math.floor(battle.resourceSystem.heat)}/${battle.resourceSystem.maxHeat}`, x, heatY);
-      offsetY += 42;
+      const heatRatio = battle.resourceSystem.maxHeat
+        ? battle.resourceSystem.heat / battle.resourceSystem.maxHeat
+        : 0;
+      offsetY = this.drawResourceMeter(ctx, {
+        x,
+        y: offsetY,
+        w: barW,
+        label: "热量",
+        value: battle.resourceSystem.heat,
+        max: battle.resourceSystem.maxHeat,
+        color: heatRatio >= 0.85 ? "#e74c3c" : "#e67e22",
+        overColor: "#e74c3c"
+      }) + 8;
     }
 
     // 破甲
@@ -274,7 +294,7 @@ class CanvasRenderer {
       ctx.fillStyle = "#e74c3c";
       ctx.font = "bold 14px sans-serif";
       ctx.fillText(`破甲中 ${battle.armorBreakTurns} 回合`, x, offsetY);
-      offsetY += 22;
+      offsetY += 20;
     }
 
     // 连续闪避
@@ -282,7 +302,7 @@ class CanvasRenderer {
       ctx.fillStyle = "#2ecc71";
       ctx.font = "bold 14px sans-serif";
       ctx.fillText(`连续闪避 ${battle.playerState.consecutiveDodges}`, x, offsetY);
-      offsetY += 22;
+      offsetY += 20;
     }
 
     // 盾附魔
@@ -290,29 +310,97 @@ class CanvasRenderer {
       ctx.fillStyle = "#9b59b6";
       ctx.font = "bold 14px sans-serif";
       ctx.fillText("盾牌附魔", x, offsetY);
-      offsetY += 22;
+      offsetY += 20;
     }
 
     // 当前激活咒术/战技
-    if (battle.playerConfig.spells.length > 0 || battle.playerConfig.combatArts.length > 0) {
-      ctx.fillStyle = "#f1c40f";
-      ctx.font = "bold 12px sans-serif";
-      ctx.fillText("已装备:", x, offsetY);
-      offsetY += 18;
-
-      for (const id of battle.playerConfig.spells) {
-        const spell = SpellDatabase[id];
-        ctx.fillStyle = spell.color;
-        ctx.fillText(`· ${spell.name}`, x + 5, offsetY);
-        offsetY += 16;
-      }
-      for (const id of battle.playerConfig.combatArts) {
-        const art = CombatArtDatabase[id];
-        ctx.fillStyle = art.color;
-        ctx.fillText(`· ${art.name}`, x + 5, offsetY);
-        offsetY += 16;
-      }
+    if (!isActionFocused && (battle.playerConfig.spells.length > 0 || battle.playerConfig.combatArts.length > 0)) {
+      this.drawEquipmentChips(ctx, battle, x, offsetY, 176);
     }
+  }
+
+  isActionFocusedState(scene) {
+    return scene
+      && (scene.turnState === "qte_running" || scene.turnState === "attack_active" || scene.turnState === "enemy_turn");
+  }
+
+  drawResourceMeter(ctx, options) {
+    const x = options.x;
+    const y = options.y;
+    const w = options.w || 138;
+    const h = 8;
+    const value = Math.max(0, options.value || 0);
+    const max = Math.max(1, options.max || 1);
+    const ratio = Utils.clamp(value / max, 0, 1);
+    const over = value > max;
+    const label = `${options.label} ${Math.floor(value)}/${options.max || max}`;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(5, 7, 12, 0.62)";
+    ctx.beginPath();
+    ctx.roundRect(x - 4, y - 3, w + 8, 28, 4);
+    ctx.fill();
+
+    ctx.fillStyle = "#cfd6e6";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(this.truncateText(ctx, label, w), x, y);
+
+    ctx.fillStyle = "rgba(42, 42, 58, 0.9)";
+    ctx.fillRect(x, y + 16, w, h);
+    ctx.fillStyle = over ? (options.overColor || "#e74c3c") : (options.color || "#f1c40f");
+    ctx.fillRect(x, y + 16, Math.max(value > 0 ? 3 : 0, w * ratio), h);
+
+    if (over) {
+      ctx.strokeStyle = options.overColor || "#e74c3c";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x - 1, y + 15, w + 2, h + 2);
+    }
+    ctx.restore();
+    return y + 25;
+  }
+
+  drawEquipmentChips(ctx, battle, x, y, maxWidth = 176) {
+    const chips = [];
+    for (const id of battle.playerConfig.spells) {
+      const spell = SpellDatabase[id];
+      if (spell) chips.push({ label: spell.name, color: spell.color });
+    }
+    for (const id of battle.playerConfig.combatArts) {
+      const art = CombatArtDatabase[id];
+      if (art) chips.push({ label: art.name, color: art.color });
+    }
+    if (chips.length === 0) return;
+
+    ctx.save();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillStyle = "#f1c40f";
+    ctx.fillText("装备", x, y + 8);
+
+    let cursorX = x;
+    let cursorY = y + 24;
+    for (const chip of chips) {
+      const label = this.truncateText(ctx, chip.label, maxWidth - 16);
+      const chipW = Math.min(maxWidth, Math.max(48, ctx.measureText(label).width + 18));
+      if (cursorX > x && cursorX + chipW > x + maxWidth) {
+        cursorX = x;
+        cursorY += 22;
+      }
+      ctx.fillStyle = "rgba(8, 10, 16, 0.68)";
+      ctx.strokeStyle = chip.color || "#f1c40f";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(cursorX, cursorY, chipW, 18, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = chip.color || "#ffffff";
+      ctx.fillText(label, cursorX + 8, cursorY + 9);
+      cursorX += chipW + 6;
+    }
+    ctx.restore();
   }
 
   drawAttackEffects(scene, t) {
@@ -384,6 +472,273 @@ class CanvasRenderer {
       ctx.fill();
       ctx.restore();
     }
+
+    if (scene.enemyAttack && (scene.turnState === "enemy_turn" || scene.enemyAttackPhase === "hit")) {
+      this.drawEnemyAttackMotion(ctx, scene, px, py, ex, ey, t);
+    }
+
+    this.drawActiveAttacks(scene, t);
+  }
+
+  drawActiveAttacks(scene, t) {
+    const system = scene.activeAttackSystem;
+    if (!system || !Array.isArray(system.active) || system.active.length === 0) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const attack of system.active) {
+      const profile = attack.profile || {};
+      const color = profile.color || (attack.source === "enemy" ? "#e74c3c" : "#f1c40f");
+      const from = this.getBattleAnchor(attack.intent.fromAnchor || attack.intent.anchor || (attack.source === "enemy" ? "enemyCore" : "playerHand"));
+      const to = this.getBattleAnchor(attack.intent.toAnchor || (attack.target === "player" ? "playerCore" : "enemyCore"));
+      const pos = attack.position || {
+        x: from.x + (to.x - from.x) * (attack.progress || 0),
+        y: from.y + (to.y - from.y) * (attack.progress || 0)
+      };
+      const progress = Utils.clamp(attack.progress || 0, 0, 1);
+      const pulse = 1 + Math.sin(t * 10) * 0.08;
+
+      if (profile.type === "projectile") {
+        const r = (profile.radius || 32) * (0.78 + progress * 0.22) * pulse;
+        const grad = ctx.createRadialGradient(pos.x, pos.y, 2, pos.x, pos.y, r);
+        grad.addColorStop(0, "#ffffff");
+        grad.addColorStop(0.28, color);
+        grad.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = grad;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 24;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (profile.type === "beam") {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 10 + Math.sin(t * 18) * 2;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 20;
+        ctx.globalAlpha = attack.phase === "reaction" ? 0.55 : 0.85;
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      } else if (profile.type === "pulse") {
+        const r = (profile.radius || 72) * Math.max(0.15, progress) * pulse;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 5;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 22;
+        ctx.globalAlpha = 0.25 + progress * 0.55;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      } else {
+        const mx = from.x + (to.x - from.x) * progress;
+        const my = from.y + (to.y - from.y) * progress;
+        const width = attack.source === "enemy" ? 72 : 86;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = attack.phase === "impact" ? 9 : 6;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.moveTo(mx - width * 0.4, my - 40);
+        ctx.quadraticCurveTo(mx, my - 70, mx + width * 0.5, my + 24);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      if (attack.phase === "reaction") {
+        ctx.strokeStyle = "rgba(46, 204, 113, 0.65)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        ctx.arc(to.x, to.y, (profile.radius || 46) + 18 + Math.sin(t * 8) * 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+
+  getBattleAnchor(anchor) {
+    const py = this.height - 190;
+    const ey = this.height - 190;
+    const anchors = {
+      playerCore: { x: 220, y: py },
+      playerHand: { x: 270, y: py - 40 },
+      playerShield: { x: 222, y: py - 5 },
+      enemyCore: { x: this.width - 220, y: ey },
+      enemyChest: { x: this.width - 220, y: ey - 34 },
+      midpoint: { x: this.width / 2, y: py }
+    };
+    return anchors[anchor] || anchors.midpoint;
+  }
+
+  drawHitConfirmOverlays(scene) {
+    if (!scene.hitConfirmSystem || !Array.isArray(scene.hitConfirmSystem.active)) return;
+    const hits = scene.hitConfirmSystem.active;
+    if (hits.length === 0) return;
+
+    const ctx = this.ctx;
+    ctx.save();
+    for (const hit of hits) {
+      const lifeRatio = hit.maxLife ? Utils.clamp(hit.life / hit.maxLife, 0, 1) : 1;
+      const phaseMul = hit.phase === "active" ? 1 : (hit.phase === "startup" ? 0.55 : 0.38);
+      const alpha = Math.max(0.05, Math.min(0.42, lifeRatio * phaseMul));
+      const color = hit.confirmed ? "#2ecc71" : (hit.duplicate ? "#95a5a6" : "#e67e22");
+
+      if (hit.hitbox) {
+        this.drawHitboxShape(ctx, hit.hitbox, color, alpha);
+      }
+      if (hit.hurtbox && hit.phase === "active") {
+        this.drawHurtboxShape(ctx, hit.hurtbox, hit.confirmed ? "#ffffff" : color, alpha * 0.65);
+      }
+    }
+    ctx.restore();
+  }
+
+  drawHitboxShape(ctx, hitbox, color, alpha) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+
+    if (hitbox.shape === "trail") {
+      const points = hitbox.points || [hitbox.start, hitbox.end].filter(Boolean);
+      if (points.length >= 2) {
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.globalAlpha = alpha * 0.26;
+        ctx.lineWidth = hitbox.width || 36;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
+
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
+      }
+    } else if (hitbox.shape === "circle") {
+      ctx.globalAlpha = alpha * 0.18;
+      ctx.beginPath();
+      ctx.arc(hitbox.x, hitbox.y, hitbox.r || hitbox.radius || 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha * 0.8;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      const rect = {
+        x: hitbox.x,
+        y: hitbox.y,
+        w: hitbox.w || hitbox.width || 0,
+        h: hitbox.h || hitbox.height || 0
+      };
+      ctx.globalAlpha = alpha * 0.16;
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.globalAlpha = alpha * 0.75;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    }
+    ctx.restore();
+  }
+
+  drawHurtboxShape(ctx, hurtbox, color, alpha) {
+    if (!hurtbox) return;
+    const rect = {
+      x: hurtbox.x,
+      y: hurtbox.y,
+      w: hurtbox.w || hurtbox.width || 0,
+      h: hurtbox.h || hurtbox.height || 0
+    };
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.restore();
+  }
+
+  drawEnemyAttackMotion(ctx, scene, px, py, ex, ey, t) {
+    const attack = scene.enemyAttack;
+    if (!attack) return;
+    const color = attack.color || "#e74c3c";
+    const phase = scene.enemyAttackPhase;
+    const isSpell = this.isSpellLikeAttack(attack);
+    const totalTime = Math.max(0.1, attack.windup + attack.hitTime);
+    const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
+    const pulse = 0.65 + Math.sin(t * 10) * 0.18;
+
+    if (phase === "windup" || phase === "response") {
+      const alpha = phase === "response" ? 0.42 : 0.22;
+      ctx.save();
+      ctx.globalAlpha = alpha * pulse;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = phase === "response" ? 4 : 2;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = phase === "response" ? 18 : 10;
+      ctx.setLineDash(phase === "response" ? [14, 8] : [6, 10]);
+      ctx.beginPath();
+      ctx.moveTo(ex - 40, ey - 24);
+      ctx.quadraticCurveTo((px + ex) / 2, ey - 95 + Math.sin(t * 4) * 8, px + 42, py - 18);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (isSpell) {
+        ctx.globalAlpha *= 0.85;
+        ctx.beginPath();
+        ctx.arc(ex - 62, ey - 34, 20 + Math.sin(t * 7) * 4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
+
+    if (phase === "hit") {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = isSpell ? 8 : 7;
+      ctx.lineCap = "round";
+      ctx.globalAlpha = Math.max(0.25, 1 - progress * 0.65);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 22;
+      ctx.beginPath();
+      if (isSpell) {
+        ctx.moveTo(ex - 55, ey - 34);
+        ctx.lineTo(px + 35, py - 18);
+      } else {
+        ctx.moveTo(ex - 25, ey - 44);
+        ctx.quadraticCurveTo((px + ex) / 2, ey - 55, px + 40, py + 18);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha *= 0.55;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  isSpellLikeAttack(attack) {
+    const id = String(attack.id || "").toLowerCase();
+    return !!attack.interruptible || id.includes("spell") || id.includes("arcane") || id.includes("curse");
   }
 
   getActionTiming(scene, t) {
@@ -579,6 +934,7 @@ class CanvasRenderer {
     px += stanceOffset;
 
     this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42, "rgba(52, 152, 219, 0.3)");
+    this.drawActorMotionLines(ctx, px, py, playerReaction, "player", styleColor);
     this.drawPlayerSilhouette(ctx, scene, {
       x: px,
       y: py,
@@ -609,6 +965,7 @@ class CanvasRenderer {
 
     const enemyConfig = scene.enemyConfig || EnemyDatabase.base;
     this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58, "rgba(192, 57, 43, 0.3)");
+    this.drawActorMotionLines(ctx, ex, ey, enemyReaction, "enemy", enemyConfig.color || "#e74c3c");
     this.drawEnemySilhouette(ctx, scene, {
       x: ex,
       y: ey,
@@ -653,6 +1010,54 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  drawActorMotionLines(ctx, x, y, reaction, actor, color) {
+    if (!reaction || !reaction.type) return;
+    const type = reaction.type;
+    const progress = reaction.progress || 0;
+    const fade = Math.max(0, 1 - progress);
+    const forward = actor === "enemy" ? -1 : 1;
+    const away = actor === "enemy" ? 1 : -1;
+    const lineColor = reaction.color || color || "#ffffff";
+
+    ctx.save();
+    ctx.strokeStyle = lineColor;
+    ctx.shadowColor = lineColor;
+    ctx.shadowBlur = 14;
+    ctx.lineCap = "round";
+
+    if (type === "attack" || type === "dodge") {
+      ctx.globalAlpha = 0.45 * fade;
+      ctx.lineWidth = type === "attack" ? 4 : 3;
+      for (let i = 0; i < 3; i++) {
+        const yy = y - 34 + i * 22;
+        const tail = x - forward * (70 + i * 10);
+        const head = x - forward * (18 + i * 4);
+        ctx.beginPath();
+        ctx.moveTo(tail, yy + Math.sin(progress * Math.PI + i) * 5);
+        ctx.lineTo(head, yy - forward * 2);
+        ctx.stroke();
+      }
+    } else if (type === "windup" || type === "cast") {
+      ctx.globalAlpha = (type === "windup" ? 0.38 : 0.28) * fade;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x + forward * 18, y - 12, 48 + Math.sin(progress * Math.PI) * 8, -0.7, 0.9);
+      ctx.stroke();
+    } else if (type === "hit" || type === "crit" || type === "stagger") {
+      ctx.globalAlpha = (type === "crit" ? 0.65 : 0.42) * fade;
+      ctx.lineWidth = type === "crit" ? 5 : 3;
+      for (let i = 0; i < 4; i++) {
+        const spread = (i - 1.5) * 16;
+        ctx.beginPath();
+        ctx.moveTo(x - away * 8, y - 30 + spread);
+        ctx.lineTo(x + away * (42 + i * 6), y - 40 + spread * 0.75);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
   drawPlayerSilhouette(ctx, scene, options) {
     const {
       x,
@@ -683,7 +1088,7 @@ class CanvasRenderer {
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
-    ctx.rotate(lean);
+    ctx.rotate(lean + (reaction.rotation || 0));
 
     // legs
     this.drawLimb(ctx, -12, 22, -22, 50, "#24364d", 9);
@@ -784,7 +1189,11 @@ class CanvasRenderer {
     const isArmored = icon === "甲";
     const isSwift = icon === "迅";
     const isShielded = icon === "盾";
-    const lean = isSwift ? -0.12 : (scene.enemyAttackPhase === "response" ? -0.16 : 0);
+    const reactionType = reaction.type || "";
+    const reactionPulse = Math.sin((reaction.progress || 0) * Math.PI);
+    const attackReach = reactionType === "attack" ? 26 * reactionPulse : 0;
+    const windupPull = reactionType === "windup" ? 12 * reactionPulse : 0;
+    const lean = (isSwift ? -0.12 : (scene.enemyAttackPhase === "response" ? -0.16 : 0)) + (reaction.rotation || 0);
 
     ctx.save();
     ctx.translate(x, y);
@@ -823,22 +1232,22 @@ class CanvasRenderer {
 
     // arms and archetype gear
     if (isCaster) {
-      this.drawLimb(ctx, -24, -10, -54, -24, "#f3d4d4", 7);
-      this.drawCastFocus(ctx, -66, -28, color, t);
+      this.drawLimb(ctx, -24, -10, -54 - attackReach + windupPull, -24, "#f3d4d4", 7);
+      this.drawCastFocus(ctx, -66 - attackReach + windupPull, -28, color, t);
       this.drawLimb(ctx, 24, -8, 45, 2, "#f3d4d4", 7);
     } else if (isShielded) {
-      this.drawLimb(ctx, -26, -6, -52, -2, "#f3d4d4", 8);
-      this.drawShieldSilhouette(ctx, -62, -2, color, t);
-      this.drawLimb(ctx, 24, -8, 48, 10, "#f3d4d4", 8);
+      this.drawLimb(ctx, -26, -6, -52 - attackReach + windupPull, -2, "#f3d4d4", 8);
+      this.drawShieldSilhouette(ctx, -62 - attackReach + windupPull, -2, color, t);
+      this.drawLimb(ctx, 24, -8, 48 - attackReach * 0.35, 10, "#f3d4d4", 8);
     } else if (isSwift) {
-      this.drawLimb(ctx, -22, -10, -54, 0, "#f3d4d4", 6);
-      this.drawLimb(ctx, 22, -8, 54, -12, "#f3d4d4", 6);
-      this.drawWeaponSilhouette(ctx, "dualBlades", -56, 0, color, Math.PI * 0.9, 0.55);
+      this.drawLimb(ctx, -22, -10, -54 - attackReach, 0, "#f3d4d4", 6);
+      this.drawLimb(ctx, 22, -8, 54 - attackReach * 0.4, -12, "#f3d4d4", 6);
+      this.drawWeaponSilhouette(ctx, "dualBlades", -56 - attackReach, 0, color, Math.PI * 0.9, 0.55);
       this.drawWeaponSilhouette(ctx, "dualBlades", 54, -12, color, -Math.PI * 0.25, 0.55);
     } else {
-      this.drawLimb(ctx, -26, -8, -50, 8, "#f3d4d4", 8);
-      this.drawLimb(ctx, 26, -8, 54, 0, "#f3d4d4", 8);
-      if (isArmored) this.drawWeaponSilhouette(ctx, "greatsword", -54, 8, color, Math.PI * 0.95, 0.7);
+      this.drawLimb(ctx, -26, -8, -50 - attackReach + windupPull, 8, "#f3d4d4", 8);
+      this.drawLimb(ctx, 26, -8, 54 - attackReach * 0.3, 0, "#f3d4d4", 8);
+      if (isArmored) this.drawWeaponSilhouette(ctx, "greatsword", -54 - attackReach + windupPull, 8, color, Math.PI * 0.95, 0.7);
     }
 
     // center icon
@@ -993,6 +1402,19 @@ class CanvasRenderer {
       ctx.arc(x, y, radius * 1.05, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+
+      const progress = reaction.progress || 0;
+      const burstRadius = radius * (1.1 + progress * 0.9);
+      ctx.save();
+      ctx.globalAlpha = reaction.flashAlpha * 0.65;
+      ctx.strokeStyle = reaction.color || "#ffffff";
+      ctx.lineWidth = Math.max(2, 6 * (1 - progress));
+      ctx.shadowColor = reaction.color || "#ffffff";
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.arc(x, y, burstRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
 
     if (reaction.ringAlpha > 0) {
@@ -1035,14 +1457,14 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawExpectedInputMarker(runner, barY, barW = 760, barH = 30) {
+  drawExpectedInputMarker(runner, barY, barW = 760, barH = 30, centerX = this.width / 2) {
     const ctx = this.ctx;
     const node = runner.currentNode();
     if (!node) return;
     const t = runner.getExpectedInputTime();
     if (t === null || t === undefined) return;
 
-    const x = (this.width - barW) / 2 + barW * Utils.clamp(t / node.duration, 0, 1);
+    const x = centerX - barW / 2 + barW * Utils.clamp(t / node.duration, 0, 1);
     const y = barY + barH + 10;
 
     ctx.save();
@@ -1063,11 +1485,11 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawBigKeyPrompt(scene, key, subtext, y = 435, t = performance.now() / 1000) {
+  drawBigKeyPrompt(scene, key, subtext, y = 435, t = performance.now() / 1000, centerX = this.width / 2) {
     const ctx = this.ctx;
     if (!key) return;
 
-    const x = this.width / 2;
+    const x = centerX;
     const pulse = 1 + Math.sin(t * 1000 / 120) * 0.12;
     const label = `[${key}]`;
     const fontSize = key.length > 4 ? 34 : (key.length > 2 ? 42 : 48);
@@ -1104,6 +1526,55 @@ class CanvasRenderer {
       ctx.fillText(subtext, x, y + 42);
     }
 
+    ctx.restore();
+  }
+
+  drawActiveAttackPrompt(scene, t = performance.now() / 1000) {
+    const system = scene.activeAttackSystem;
+    const attack = system && system.active && system.active[0];
+    if (!attack) return;
+
+    const ctx = this.ctx;
+    const x = this.width / 2;
+    const y = this.layout.qteBarY;
+    const barW = 620;
+    const barH = 16;
+    const barX = x - barW / 2;
+    const progress = Utils.clamp((attack.elapsed || 0) / Math.max(0.001, attack.profile.total || 1), 0, 1);
+    const color = attack.profile.color || "#f1c40f";
+    const phaseLabel = attack.phase === "reaction"
+      ? "防御窗口"
+      : (attack.phase === "impact" || attack.phase === "recovery" ? "命中结算" : "攻击推进");
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 22px sans-serif";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 + Math.sin(t * 12) * 3;
+    ctx.fillText(phaseLabel, x, y - 34);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "rgba(18, 22, 31, 0.86)";
+    ctx.fillRect(barX, y, barW, barH);
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(barX, y, barW, barH);
+
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.fillRect(barX, y, Math.max(4, barW * progress), barH);
+    ctx.shadowBlur = 0;
+
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#d7d9e5";
+    ctx.font = "bold 14px sans-serif";
+    const helper = attack.phase === "reaction"
+      ? "攻击即将命中，防守方可响应"
+      : "攻击实体推进中，命中帧才结算伤害";
+    ctx.fillText(helper, x, y + barH + 12);
     ctx.restore();
   }
 
@@ -1212,8 +1683,8 @@ class CanvasRenderer {
       .map(([key, chainId]) => ({ key, chain: ChainDatabase[chainId] }))
       .filter(({ chain }) => chain);
     const chains = entries;
-    const cardW = 170;
-    const cardH = 50;
+    const cardW = chains.length >= 3 ? 240 : 250;
+    const cardH = 68;
     const gap = 16;
     const totalW = cardW * chains.length + gap * (chains.length - 1);
     const startX = (this.width - totalW) / 2;
@@ -1232,14 +1703,14 @@ class CanvasRenderer {
       ctx.stroke();
 
       ctx.fillStyle = chain.color || (weapon ? weapon.color : "#f1c40f");
-      ctx.font = "bold 18px sans-serif";
+      ctx.font = "bold 16px sans-serif";
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`[${key}] ${chain.name}`, x + cardW / 2, y + cardH / 2 - 7);
+      ctx.textBaseline = "top";
+      this.drawWrappedLine(ctx, `[${key}] ${chain.name}`, x + cardW / 2, y + 9, cardW - 18, 18, 1);
 
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "11px sans-serif";
-      ctx.fillText(chain.description, x + cardW / 2, y + cardH / 2 + 10);
+      ctx.font = "10.5px sans-serif";
+      this.drawWrappedLine(ctx, chain.description, x + cardW / 2, y + 33, cardW - 20, 14, 2);
 
       idx++;
     }
@@ -1449,25 +1920,32 @@ class CanvasRenderer {
     if (!scene.enemyAttack) return;
 
     const attack = scene.enemyAttack;
+    const active = scene.activeAttackSystem && scene.activeAttackSystem.active
+      ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
+      : null;
     const barW = 760;
     const barH = 30;
     const x = (this.width - barW) / 2;
     const y = this.layout.qteBarY;
 
-    const totalTime = attack.windup + attack.hitTime;
-    const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
+    const impactTime = active ? active.profile.impactTime : attack.windup + attack.hitTime;
+    const totalTime = Math.max(0.001, impactTime);
+    const currentTime = active ? active.elapsed : scene.enemyAttackTimer;
+    const progress = Utils.clamp(currentTime / totalTime, 0, 1);
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
     ctx.fillRect(x, y, barW, barH);
 
     // 响应窗口区域
-    const responseDuration = attack.responseDuration || Difficulty.responseDuration();
-    const responseStartRatio = Utils.clamp(Math.max(0, attack.windup - responseDuration) / totalTime, 0, 1);
-    const windupEndRatio = Utils.clamp(attack.windup / totalTime, 0, 1);
+    const responseStart = active
+      ? active.profile.reactionStart
+      : Math.max(0, impactTime - Math.min(attack.responseDuration || Difficulty.responseDuration(), Utils.clamp(attack.hitTime + 0.28, 0.48, 0.92)));
+    const responseStartRatio = Utils.clamp(responseStart / totalTime, 0, 1);
+    const impactRatio = 1;
 
     ctx.fillStyle = "rgba(46, 204, 113, 0.25)";
-    ctx.fillRect(x + barW * responseStartRatio, y, barW * (windupEndRatio - responseStartRatio), barH);
+    ctx.fillRect(x + barW * responseStartRatio, y, barW * (impactRatio - responseStartRatio), barH);
 
     // 进度条
     const grad = ctx.createLinearGradient(x, y, x + barW * progress, y);
@@ -1484,7 +1962,7 @@ class CanvasRenderer {
 
     // 命中点标记
     ctx.fillStyle = "#e74c3c";
-    ctx.fillRect(x + barW * windupEndRatio - 2, y - 4, 4, barH + 8);
+    ctx.fillRect(x + barW * impactRatio - 2, y - 4, 4, barH + 8);
 
     // 边框
     ctx.strokeStyle = "#5a5a6a";
@@ -1492,7 +1970,7 @@ class CanvasRenderer {
     ctx.strokeRect(x, y, barW, barH);
 
     // 文字
-    ctx.fillStyle = progress < windupEndRatio ? "#ffffff" : "#000000";
+    ctx.fillStyle = progress < impactRatio ? "#ffffff" : "#000000";
     ctx.font = "bold 14px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -1546,12 +2024,18 @@ class CanvasRenderer {
   drawEnemyAttackReadout(scene, attack, x, y, barW, totalTime) {
     const ctx = this.ctx;
     const meta = this.getEnemyAttackMeta(attack);
-    const responseDuration = attack.responseDuration || Difficulty.responseDuration();
-    const responseStart = Math.max(0, attack.windup - responseDuration);
-    const timeToWindow = Math.max(0, responseStart - scene.enemyAttackTimer);
-    const timeToHit = Math.max(0, attack.windup - scene.enemyAttackTimer);
+    const active = scene.activeAttackSystem && scene.activeAttackSystem.active
+      ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
+      : null;
+    const impactTime = active ? active.profile.impactTime : attack.windup + attack.hitTime;
+    const currentTime = active ? active.elapsed : scene.enemyAttackTimer;
+    const responseStart = active
+      ? active.profile.reactionStart
+      : Math.max(0, impactTime - Math.min(attack.responseDuration || Difficulty.responseDuration(), Utils.clamp(attack.hitTime + 0.28, 0.48, 0.92)));
+    const timeToWindow = Math.max(0, responseStart - currentTime);
+    const timeToHit = Math.max(0, impactTime - currentTime);
     const inResponse = scene.enemyAttackPhase === "response";
-    const progress = Utils.clamp(scene.enemyAttackTimer / totalTime, 0, 1);
+    const progress = Utils.clamp(currentTime / Math.max(0.001, impactTime), 0, 1);
 
     ctx.save();
     ctx.textAlign = "center";
@@ -1592,15 +2076,15 @@ class CanvasRenderer {
     const barH = 30;
     const x = (this.width - barW) / 2;
     const y = this.layout.qteBarY;
-    const bounds = runner.getWindowBounds();
+    const windowBounds = runner.getWindowBounds();
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
     ctx.fillRect(x, y, barW, barH);
 
     // 判定窗口
-    const winStartX = x + barW * (bounds.start / bounds.duration);
-    const winEndX = x + barW * (bounds.end / bounds.duration);
+    const winStartX = x + barW * (windowBounds.start / windowBounds.duration);
+    const winEndX = x + barW * (windowBounds.end / windowBounds.duration);
     const winGrad = ctx.createLinearGradient(winStartX, y, winEndX, y);
     winGrad.addColorStop(0, "rgba(46, 204, 113, 0.25)");
     winGrad.addColorStop(0.5, "rgba(46, 204, 113, 0.55)");
@@ -1609,8 +2093,8 @@ class CanvasRenderer {
     ctx.fillRect(winStartX, y, winEndX - winStartX, barH);
 
     // Perfect 标记脉冲
-    if (bounds.perfect !== null && bounds.perfect !== undefined) {
-      const perfectX = x + barW * (bounds.perfect / bounds.duration);
+    if (windowBounds.perfect !== null && windowBounds.perfect !== undefined) {
+      const perfectX = x + barW * (windowBounds.perfect / windowBounds.duration);
       const pulse = 1 + Math.sin(performance.now() / 120) * 0.25;
       ctx.strokeStyle = "#f1c40f";
       ctx.lineWidth = 3;
@@ -1628,7 +2112,7 @@ class CanvasRenderer {
       const nextIdx = runner.rhythmState ? runner.rhythmState.beatIndex : 0;
       for (let i = 0; i < node.input.beats.length; i++) {
         const beat = node.input.beats[i];
-        const beatX = x + barW * (beat / bounds.duration);
+        const beatX = x + barW * (beat / windowBounds.duration);
         const isNext = i === nextIdx;
         ctx.beginPath();
         ctx.arc(beatX, y + barH / 2, isNext ? 10 : 7, 0, Math.PI * 2);
@@ -1710,27 +2194,29 @@ class CanvasRenderer {
     return `按 ${input.key}`;
   }
 
-  drawDemoQTEBar(scene) {
+  drawDemoQTEBar(scene, bounds = null) {
     const ctx = this.ctx;
     const runner = scene.qteRunner;
-    if (!runner) return;
+    const stage = bounds || this.getDemoStageBounds();
+    const barW = Math.min(760, Math.max(520, stage.w - 36));
+    const barH = 30;
+    const x = stage.centerX - barW / 2;
+    const y = this.layout.qteBarY;
+    const metrics = { x, y, w: barW, h: barH, centerX: stage.centerX };
+    if (!runner) return metrics;
 
     const node = runner.currentNode();
-    if (!node) return;
+    if (!node) return metrics;
 
-    const barW = 760;
-    const barH = 30;
-    const x = (this.width - barW) / 2;
-    const y = this.layout.qteBarY;
-    const bounds = runner.getWindowBounds();
+    const windowBounds = runner.getWindowBounds();
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
     ctx.fillRect(x, y, barW, barH);
 
     // 判定窗口
-    const winStartX = x + barW * (bounds.start / bounds.duration);
-    const winEndX = x + barW * (bounds.end / bounds.duration);
+    const winStartX = x + barW * (windowBounds.start / windowBounds.duration);
+    const winEndX = x + barW * (windowBounds.end / windowBounds.duration);
     const winGrad = ctx.createLinearGradient(winStartX, y, winEndX, y);
     winGrad.addColorStop(0, "rgba(46, 204, 113, 0.25)");
     winGrad.addColorStop(0.5, "rgba(46, 204, 113, 0.55)");
@@ -1739,8 +2225,8 @@ class CanvasRenderer {
     ctx.fillRect(winStartX, y, winEndX - winStartX, barH);
 
     // Perfect 标记脉冲
-    if (bounds.perfect !== null && bounds.perfect !== undefined) {
-      const perfectX = x + barW * (bounds.perfect / bounds.duration);
+    if (windowBounds.perfect !== null && windowBounds.perfect !== undefined) {
+      const perfectX = x + barW * (windowBounds.perfect / windowBounds.duration);
       const pulse = 1 + Math.sin(performance.now() / 120) * 0.25;
       ctx.strokeStyle = "#f1c40f";
       ctx.lineWidth = 3;
@@ -1758,7 +2244,7 @@ class CanvasRenderer {
       const nextIdx = runner.rhythmState ? runner.rhythmState.beatIndex : 0;
       for (let i = 0; i < node.input.beats.length; i++) {
         const beat = node.input.beats[i];
-        const beatX = x + barW * (beat / bounds.duration);
+        const beatX = x + barW * (beat / windowBounds.duration);
         const isNext = i === nextIdx;
         ctx.beginPath();
         ctx.arc(beatX, y + barH / 2, isNext ? 12 : 8, 0, Math.PI * 2);
@@ -1798,18 +2284,18 @@ class CanvasRenderer {
 
     // 阶段标题
     const stageTitle = this.getNodeStageTitle(node);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(stageTitle, this.width / 2, y - 46);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 18px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(stageTitle, stage.centerX, y - 46);
 
     // 链标题
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 26);
+    ctx.fillText(this.truncateText(ctx, runner.chain.name || "QTE", barW - 40), stage.centerX, y - 26);
 
     // 输入提示
     const hint = this.getNodeInputHint(node);
@@ -1818,8 +2304,9 @@ class CanvasRenderer {
       ctx.font = "bold 14px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(hint, this.width / 2, y + barH + 10);
+      ctx.fillText(this.truncateText(ctx, hint, barW - 30), stage.centerX, y + barH + 10);
     }
+    return metrics;
   }
 
   drawStatusIcons(scene) {
@@ -1911,17 +2398,18 @@ class CanvasRenderer {
 
   drawDemo(scene, t) {
     const ctx = this.ctx;
+    const bounds = this.getDemoStageBounds();
 
     if (scene.turnState === "demo_main") {
-      this.drawDemoMenu(scene);
+      this.drawDemoMenu(scene, bounds);
     } else if (scene.turnState === "demo_list") {
-      this.drawDemoList(scene);
+      this.drawDemoList(scene, bounds);
     } else if (scene.turnState === "demo_preview") {
-      this.drawDemoPreview(scene);
+      this.drawDemoPreview(scene, bounds);
     } else if (scene.turnState === "demo_enemy_windup") {
-      this.drawDemoEnemyWindup(scene);
+      this.drawDemoEnemyWindup(scene, t, bounds);
     } else if (scene.turnState === "demo_action_sequence") {
-      this.drawDemoActionSequence(scene, t);
+      this.drawDemoActionSequence(scene, t, bounds);
     } else if (scene.turnState === "demo_qte") {
       // 演示 QTE 播放中 — 中央舞台，底部操作区
       const ctx = this.ctx;
@@ -1932,12 +2420,12 @@ class CanvasRenderer {
       ctx.font = "bold 26px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
+      ctx.fillText(this.truncateText(ctx, scene.previewTitle, bounds.w), bounds.centerX, this.layout.demoTitleY);
 
       const modeText = scene.manualMode ? "手动试玩：请在判定窗口内按键" : "自动演示中";
       ctx.fillStyle = "#aaaaaa";
       ctx.font = "14px sans-serif";
-      ctx.fillText(modeText, this.width / 2, 103);
+      ctx.fillText(modeText, bounds.centerX, 103);
 
       if (scene.demoCounterAttack) {
         this.drawDemoCounterAttackIndicator(ctx);
@@ -1945,21 +2433,43 @@ class CanvasRenderer {
 
       const focusLines = scene.getActiveDirectorLines ? scene.getActiveDirectorLines(4) : [];
       if (focusLines.length > 0) {
-        this.drawDemoFocusPanel(ctx, focusLines, 128, 760);
+        this.drawDemoFocusPanel(ctx, focusLines, 128, Math.min(760, bounds.w), bounds.centerX);
       }
 
-      this.drawDemoQTEBar(scene);
+      const qteBar = this.drawDemoQTEBar(scene, bounds);
 
       const node = scene.qteRunner ? scene.qteRunner.currentNode() : null;
       if (node) {
         const key = node.input.type === "hold_release" ? `松开 ${node.input.key}` : node.input.key;
-        this.drawBigKeyPrompt(scene, key, node.name, 360, t);
+        this.drawBigKeyPrompt(scene, key, "", 322, t, bounds.centerX);
       }
 
       if (!scene.manualMode && scene.qteRunner) {
-        this.drawExpectedInputMarker(scene.qteRunner, this.layout.qteBarY);
+        this.drawExpectedInputMarker(scene.qteRunner, this.layout.qteBarY, qteBar.w, qteBar.h, qteBar.centerX);
       }
     }
+  }
+
+  getDemoStageBounds() {
+    const compact = typeof window !== "undefined"
+      && typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 900px), (max-height: 520px)").matches;
+    if (compact) {
+      return {
+        x: 40,
+        w: this.width - 80,
+        centerX: this.width / 2,
+        compact: true
+      };
+    }
+
+    // Desktop demo keeps the explain drawer on the right; keep playable choices in the visible stage lane.
+    return {
+      x: 34,
+      w: 640,
+      centerX: 354,
+      compact: false
+    };
   }
 
   drawDemoCounterAttackIndicator(ctx) {
@@ -1995,7 +2505,7 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawDemoFocusPanel(ctx, lines, y, maxWidth = 760) {
+  drawDemoFocusPanel(ctx, lines, y, maxWidth = 760, centerX = this.width / 2) {
     const cleanLines = (lines || []).filter(Boolean).slice(0, 4);
     if (cleanLines.length === 0) return;
 
@@ -2004,7 +2514,7 @@ class CanvasRenderer {
     const padY = 10;
     const w = maxWidth;
     const h = padY * 2 + cleanLines.length * lineH;
-    const x = (this.width - w) / 2;
+    const x = centerX - w / 2;
 
     ctx.save();
     ctx.fillStyle = "rgba(10, 12, 18, 0.62)";
@@ -2025,8 +2535,9 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawDemoActionSequence(scene, t) {
+  drawDemoActionSequence(scene, t, bounds = null) {
     const ctx = this.ctx;
+    const stage = bounds || this.getDemoStageBounds();
     ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
     ctx.fillRect(0, 0, this.width, this.height);
 
@@ -2034,36 +2545,37 @@ class CanvasRenderer {
     ctx.font = "bold 28px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
+    ctx.fillText(this.truncateText(ctx, scene.previewTitle, stage.w), stage.centerX, this.layout.demoTitleY);
 
     const seq = scene.actionSequence;
     if (!seq) return;
 
     if (scene.enemyAttack) {
-      this.drawDemoEnemyAttackBar(scene);
+      this.drawDemoEnemyAttackBar(scene, stage, { suppressReadout: true });
     }
 
     const phase = seq.phases[seq.phaseIndex];
     const total = seq.phases.length;
     const completed = seq.phaseIndex;
+    const actionKeyPromptY = 365;
 
     // 当前阶段大字说明
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 36px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(phase.label || "", this.width / 2, this.height / 2 - 30);
+    ctx.fillText(this.truncateText(ctx, phase.label || "", stage.w), stage.centerX, this.height / 2 - 30);
 
     if (phase.detail) {
       ctx.fillStyle = "#d8d8e8";
       ctx.font = "15px sans-serif";
       ctx.textBaseline = "top";
-      ctx.fillText(phase.detail, this.width / 2, this.height / 2 + 2);
+      ctx.fillText(this.truncateText(ctx, phase.detail, stage.w), stage.centerX, this.height / 2 + 2);
     }
 
     // 阶段进度点
     const dotY = this.height / 2 + 30;
-    const startX = this.width / 2 - (total - 1) * 20;
+    const startX = stage.centerX - (total - 1) * 20;
     for (let i = 0; i < total; i++) {
       const x = startX + i * 40;
       ctx.beginPath();
@@ -2080,12 +2592,13 @@ class CanvasRenderer {
     // 当前按键提示（如果阶段标签包含按键）
     const keyMatch = phase.key ? [null, phase.key] : (phase.label || "").match(/按 ([A-Z]+)/);
     if (keyMatch && keyMatch[1]) {
-      this.drawBigKeyPrompt(scene, keyMatch[1], "", 300, t);
+      this.drawBigKeyPrompt(scene, keyMatch[1], "", actionKeyPromptY, t, stage.centerX);
     }
   }
 
-  drawDemoEnemyWindup(scene) {
+  drawDemoEnemyWindup(scene, t, bounds = null) {
     const ctx = this.ctx;
+    const stage = bounds || this.getDemoStageBounds();
     ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
     ctx.fillRect(0, 0, this.width, this.height);
 
@@ -2093,17 +2606,17 @@ class CanvasRenderer {
     ctx.font = "bold 26px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
+    ctx.fillText(this.truncateText(ctx, scene.previewTitle, stage.w), stage.centerX, this.layout.demoTitleY);
 
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
-    ctx.fillText(`${modeText} — ${scene.message}`, this.width / 2, 103);
+    ctx.fillText(this.truncateText(ctx, `${modeText} — ${scene.message}`, stage.w), stage.centerX, 103);
 
-    this.drawDemoEnemyAttackBar(scene);
+    this.drawDemoEnemyAttackBar(scene, stage);
 
     const key = scene.demoDefenseKey || "?";
-    this.drawBigKeyPrompt(scene, key, "命中后按", 300, t);
+    this.drawBigKeyPrompt(scene, key, "命中后按", 300, t, stage.centerX);
 
     // 阶段说明（简洁版，避免遮挡）
     const steps = [
@@ -2115,7 +2628,7 @@ class CanvasRenderer {
     ctx.fillStyle = "#ccccdd";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    const stepX = 40;
+    const stepX = stage.x + 8;
     let stepY = 340;
     for (const step of steps) {
       ctx.fillText(step, stepX, stepY);
@@ -2123,14 +2636,15 @@ class CanvasRenderer {
     }
   }
 
-  drawDemoEnemyAttackBar(scene) {
+  drawDemoEnemyAttackBar(scene, bounds = null, options = {}) {
     const ctx = this.ctx;
     if (!scene.enemyAttack) return;
+    const stage = bounds || this.getDemoStageBounds();
 
     const attack = scene.enemyAttack;
-    const barW = 760;
+    const barW = Math.min(760, Math.max(520, stage.w - 36));
     const barH = 30;
-    const x = (this.width - barW) / 2;
+    const x = stage.centerX - barW / 2;
     const y = this.layout.qteBarY;
 
     const totalTime = attack.windup + attack.hitTime;
@@ -2176,30 +2690,33 @@ class CanvasRenderer {
     ctx.textBaseline = "middle";
     ctx.fillText(`${attack.name}`, x + barW / 2, y + barH / 2);
 
-    this.drawEnemyAttackReadout(scene, attack, x, y, barW, totalTime);
+    if (!options.suppressReadout) {
+      this.drawEnemyAttackReadout(scene, attack, x, y, barW, totalTime);
+    }
   }
 
-  drawDemoMenu(scene) {
+  drawDemoMenu(scene, bounds = null) {
     const ctx = this.ctx;
+    const stage = bounds || this.getDemoStageBounds();
     ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 40px sans-serif";
+    ctx.font = stage.compact ? "bold 40px sans-serif" : "bold 34px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("效果演示模式", this.width / 2, this.layout.demoTitleY);
+    ctx.fillText("效果演示模式", stage.centerX, this.layout.demoTitleY);
 
     const categories = scene.categories;
-    const cardW = 210;
-    const cardH = 110;
-    const gap = 24;
+    const cardW = stage.compact ? 210 : 190;
+    const cardH = stage.compact ? 110 : 100;
+    const gap = stage.compact ? 24 : 18;
     const row1Count = Math.min(3, categories.length);
     const row2Count = Math.max(0, categories.length - row1Count);
     const row1W = cardW * row1Count + gap * (row1Count - 1);
     const row2W = row2Count > 0 ? cardW * row2Count + gap * (row2Count - 1) : 0;
-    const row1X = (this.width - row1W) / 2;
-    const row2X = (this.width - row2W) / 2;
+    const row1X = stage.centerX - row1W / 2;
+    const row2X = stage.centerX - row2W / 2;
     const row1Y = 120;
     const row2Y = row1Y + cardH + gap;
 
@@ -2218,28 +2735,37 @@ class CanvasRenderer {
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 34px sans-serif";
+      ctx.font = stage.compact ? "bold 34px sans-serif" : "bold 30px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(cat.icon, x + cardW / 2, y + 36);
+      ctx.fillText(cat.icon, x + cardW / 2, y + (stage.compact ? 36 : 32));
 
-      ctx.font = "bold 20px sans-serif";
-      ctx.fillText(cat.name, x + cardW / 2, y + 76);
+      ctx.font = stage.compact ? "bold 20px sans-serif" : "bold 18px sans-serif";
+      ctx.fillText(cat.name, x + cardW / 2, y + (stage.compact ? 76 : 70));
 
       ctx.fillStyle = "#aaaaaa";
-      ctx.font = "13px sans-serif";
-      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + 100);
+      ctx.font = "12px sans-serif";
+      ctx.fillText(`按 ${idx + 1}`, x + cardW / 2, y + cardH - 13);
     });
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
     const modeText = scene.manualMode ? "手动试玩" : "自动演示";
-    ctx.fillText(`当前：${modeText} | 1-${categories.length} 选择分类 | W 切换风格 | M 切换模式 | 6 切换难度 | ESC 返回`, this.width / 2, this.layout.bottomHintY);
+    this.drawWrappedLine(
+      ctx,
+      `当前：${modeText} | 1-${categories.length} 选择分类 | W 切换风格 | M 切换模式 | 6 切换难度 | ESC 返回`,
+      stage.centerX,
+      this.layout.bottomHintY - (stage.compact ? 0 : 8),
+      stage.w,
+      18,
+      2
+    );
   }
 
-  drawDemoList(scene) {
+  drawDemoList(scene, bounds = null) {
     const ctx = this.ctx;
+    const stage = bounds || this.getDemoStageBounds();
     const items = scene.getCurrentPageItems();
     const totalItems = scene.getCurrentItems().length;
     const totalPages = scene.getTotalPages();
@@ -2252,19 +2778,19 @@ class CanvasRenderer {
     ctx.font = "bold 30px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${categoryName} — 选择要演示的效果`, this.width / 2, this.layout.demoTitleY);
+    ctx.fillText(this.truncateText(ctx, `${categoryName} — 选择要演示的效果`, stage.w), stage.centerX, this.layout.demoTitleY);
 
     ctx.fillStyle = "#aaaaaa";
     ctx.font = "14px sans-serif";
-    ctx.fillText(`共 ${totalItems} 项  |  第 ${scene.listPage + 1}/${totalPages} 页`, this.width / 2, 105);
+    ctx.fillText(`共 ${totalItems} 项  |  第 ${scene.listPage + 1}/${totalPages} 页`, stage.centerX, 105);
 
     const cols = 2;
-    const cardW = 360;
-    const cardH = 100;
-    const gapX = 24;
+    const cardW = stage.compact ? 360 : 300;
+    const cardH = stage.compact ? 100 : 102;
+    const gapX = stage.compact ? 24 : 18;
     const gapY = 14;
     const totalW = cardW * cols + gapX * (cols - 1);
-    const startX = Math.floor((this.width - totalW) / 2);
+    const startX = Math.floor(stage.centerX - totalW / 2);
     const startY = 120;
 
     items.forEach((item, idx) => {
@@ -2300,39 +2826,47 @@ class CanvasRenderer {
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`当前：${modeText} | 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换模式 | ESC 返回`, this.width / 2, this.layout.bottomHintY);
+    this.drawWrappedLine(
+      ctx,
+      `当前：${modeText} | 1-${items.length} 选择 | A/← 上页 | D/→ 下页 | M 切换模式 | ESC 返回`,
+      stage.centerX,
+      this.layout.bottomHintY - (stage.compact ? 0 : 8),
+      stage.w,
+      18,
+      2
+    );
   }
 
-  drawDemoPreview(scene) {
+  drawDemoPreview(scene, bounds = null) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+    const stage = bounds || this.getDemoStageBounds();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // 大标题
+    const panelW = Math.min(stage.compact ? stage.w : 604, stage.w);
+    const panelX = stage.centerX - panelW / 2;
+    const panelY = stage.compact ? 150 : 168;
+    const panelBottom = stage.compact ? 410 : 428;
+
     ctx.fillStyle = "#f1c40f";
-    ctx.font = "bold 32px sans-serif";
+    ctx.font = "bold 30px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(scene.previewTitle, this.width / 2, this.layout.demoTitleY);
+    ctx.fillText(this.truncateText(ctx, scene.previewTitle, stage.w), stage.centerX, this.layout.demoTitleY);
 
-    // 说明
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "18px sans-serif";
-    this.wrapText(ctx, scene.previewText, this.width / 2, 115, 720, 28);
+    ctx.fillStyle = "#dfe5f2";
+    ctx.font = "bold 17px sans-serif";
+    this.drawWrappedLine(ctx, scene.previewText, stage.centerX, 112, stage.w, 24, 2);
 
-    // 结算/结果摘要
     const summaryLines = scene.getPreviewSummaryLines
-      ? scene.getPreviewSummaryLines(8)
+      ? scene.getPreviewSummaryLines(stage.compact ? 6 : 8)
       : (scene.resultLines || []).slice(0, 6);
     if (summaryLines.length > 0) {
-      const panelW = 860;
-      const panelX = (this.width - panelW) / 2;
-      const panelY = 205;
-      const lineH = 23;
-      const panelH = 28 + summaryLines.length * lineH;
+      const lineH = stage.compact ? 19 : 21;
+      const panelH = Math.min(panelBottom - panelY, 42 + summaryLines.length * lineH);
 
-      ctx.fillStyle = "rgba(10, 12, 18, 0.68)";
-      ctx.strokeStyle = "rgba(241, 196, 15, 0.45)";
+      ctx.fillStyle = "rgba(8, 10, 16, 0.84)";
+      ctx.strokeStyle = "rgba(241, 196, 15, 0.52)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.roundRect(panelX, panelY, panelW, panelH, 8);
@@ -2345,24 +2879,37 @@ class CanvasRenderer {
       ctx.textBaseline = "top";
       ctx.fillText("演示摘要", panelX + 18, panelY + 10);
 
-      ctx.font = "13px sans-serif";
-      summaryLines.forEach((line, idx) => {
+      ctx.font = stage.compact ? "12px sans-serif" : "13px sans-serif";
+      const maxLines = Math.floor((panelH - 42) / lineH);
+      summaryLines.slice(0, maxLines).forEach((line, idx) => {
         ctx.fillStyle = line.startsWith("看点：") ? "#f1c40f" : "#d9deea";
         ctx.fillText(this.truncateText(ctx, line, panelW - 36), panelX + 18, panelY + 34 + idx * lineH);
       });
     }
 
-    ctx.fillStyle = "#b0b8c0";
-    ctx.font = "14px sans-serif";
+    const hintW = Math.min(stage.w, 360);
+    const hintH = 30;
+    const hintX = stage.centerX - hintW / 2;
+    const hintY = this.height - 58;
+    ctx.fillStyle = "rgba(8, 10, 16, 0.82)";
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(hintX, hintY, hintW, hintH, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#d8deea";
+    ctx.font = "bold 13px sans-serif";
     ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillText("R 重播当前演示 / 任意键返回列表", this.width / 2, this.height - 28);
+    ctx.textBaseline = "middle";
+    ctx.fillText("R 重播当前演示 / 任意键返回列表", stage.centerX, hintY + hintH / 2);
   }
 
   drawGameOver(battle) {
     const ctx = this.ctx;
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
     ctx.fillRect(0, 0, this.width, this.height);
 
     const won = battle.enemyHp <= 0;
@@ -2375,5 +2922,34 @@ class CanvasRenderer {
     ctx.fillStyle = "#ffffff";
     ctx.font = "20px sans-serif";
     ctx.fillText("点击按钮继续", this.width / 2, this.height / 2 + 30);
+
+    const lines = battle.getBattleResultLines ? battle.getBattleResultLines() : [];
+    if (lines.length > 0) {
+      const panelW = 520;
+      const panelX = this.width / 2 - panelW / 2;
+      const panelY = this.height / 2 + 70;
+      const lineH = 22;
+      const panelH = 34 + lines.length * lineH;
+
+      ctx.fillStyle = "rgba(24, 28, 40, 0.92)";
+      ctx.strokeStyle = won ? "rgba(46, 204, 113, 0.42)" : "rgba(231, 76, 60, 0.42)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(panelX, panelY, panelW, panelH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#f1c40f";
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText("战斗摘要", panelX + 18, panelY + 10);
+
+      ctx.fillStyle = "#dbe2ef";
+      ctx.font = "13px sans-serif";
+      lines.forEach((line, idx) => {
+        ctx.fillText(this.truncateText(ctx, line, panelW - 36), panelX + 18, panelY + 32 + idx * lineH);
+      });
+    }
   }
 }

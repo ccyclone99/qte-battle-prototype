@@ -267,6 +267,17 @@ async function clickId(cdp, id) {
   await wait(160);
 }
 
+async function clickVirtualKey(cdp, key) {
+  const serialized = JSON.stringify(String(key).toUpperCase());
+  await evaluate(cdp, `(() => {
+    const key = ${serialized};
+    const el = document.querySelector('#touch-controls button[data-key="' + key + '"]');
+    if (!el) throw new Error("missing virtual key " + key);
+    el.click();
+  })()`);
+  await wait(180);
+}
+
 async function closeTutorial(cdp) {
   await evaluate(cdp, `(() => {
     const overlay = document.getElementById("tutorial-overlay");
@@ -433,7 +444,18 @@ async function runVisualSmoke() {
     await closeTutorial(cdp);
     await captureScenario(cdp, "demo-menu-showcase", [
       { label: "showcase category visible", ok: await evaluate(cdp, `document.body.textContent.includes("亮点演示")`) },
-      { label: "demo detail visible", ok: await evaluate(cdp, `!document.getElementById("demo-detail-drawer").classList.contains("hidden")`) }
+      { label: "demo detail visible", ok: await evaluate(cdp, `!document.getElementById("demo-detail-drawer").classList.contains("hidden")`) },
+      { label: "demo stage avoids detail drawer", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || !r.getDemoStageBounds) return false;
+        const stage = r.getDemoStageBounds();
+        if (stage.compact) return true;
+        const drawer = document.getElementById("demo-detail-drawer").getBoundingClientRect();
+        const canvas = document.getElementById("game-canvas").getBoundingClientRect();
+        const scaleX = canvas.width / 960;
+        const stageRight = canvas.left + (stage.x + stage.w) * scaleX;
+        return stageRight <= drawer.left - 8;
+      })()`) }
     ]);
 
     await navigate(cdp, appUrl, desktop);
@@ -469,7 +491,28 @@ async function runVisualSmoke() {
     await captureScenario(cdp, "battle-style6-qte", [
       { label: "battle entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
       { label: "style 6 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("熔炉守门人")`) },
-      { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) }
+      { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) },
+      { label: "battle qte suppresses stale overlays", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const scene = typeof battle !== "undefined" ? battle : null;
+        return !!(r && scene && !r.shouldDrawFloatingMessage(scene) && !r.shouldDrawTurnBanner(scene));
+      })()`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-start");
+    await closeTutorial(cdp);
+    await clickId(cdp, "touch-toggle");
+    await wait(120);
+    await clickVirtualKey(cdp, "6");
+    await wait(320);
+    await clickVirtualKey(cdp, "A");
+    await wait(420);
+    await captureScenario(cdp, "battle-virtual-controls-qte", [
+      { label: "virtual controls visible", ok: await evaluate(cdp, `!document.getElementById("touch-controls").classList.contains("hidden") && document.getElementById("touch-controls").getAttribute("aria-hidden") === "false"`) },
+      { label: "virtual controls avoid qte bar", ok: await evaluate(cdp, `document.getElementById("touch-controls").getBoundingClientRect().bottom < 590`) },
+      { label: "virtual style 6 entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
+      { label: "virtual style encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("熔炉守门人")`) }
     ]);
 
     await navigate(cdp, appUrl, desktop);
@@ -486,6 +529,32 @@ async function runVisualSmoke() {
     ]);
 
     await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-start");
+    await closeTutorial(cdp);
+    await pressKey(cdp, "6");
+    await wait(240);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.enemyHp = 0;
+      battle.activeEncounterPhaseId = "molten_core";
+      battle.battleStats.damageDealt = 132;
+      battle.battleStats.hits = 5;
+      battle.battleStats.attempts = 6;
+      battle.battleStats.perfectCount = 3;
+      battle.battleStats.maxCombo = 4;
+      battle.battleStats.hitsTaken = 1;
+      battle.setTurnState("game_over");
+      battle.setMessage("胜利！");
+    })()`);
+    await wait(320);
+    await captureScenario(cdp, "battle-result-summary", [
+      { label: "battle result state", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.turnState === "game_over"`) },
+      { label: "battle result has phase summary", ok: await evaluate(cdp, `battle.getBattleResultLines().some(line => line.includes("熔心压迫"))`) },
+      { label: "battle result has accuracy summary", ok: await evaluate(cdp, `battle.getBattleResultLines().some(line => line.includes("命中率：83%"))`) },
+      { label: "html result summary visible", ok: await evaluate(cdp, `document.getElementById("game-over").textContent.includes("战斗摘要") && document.getElementById("game-over").textContent.includes("熔心压迫")`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-demo");
     await closeTutorial(cdp);
     await pressKey(cdp, "3");
@@ -498,14 +567,31 @@ async function runVisualSmoke() {
     );
     await captureScenario(cdp, "demo-result-preview", [
       { label: "demo result preview visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("结算")`) },
-      { label: "replay hint visible", ok: await evaluate(cdp, `document.body.textContent.includes("R") && document.body.textContent.includes("重播")`) }
+      { label: "replay hint visible", ok: await evaluate(cdp, `document.body.textContent.includes("R") && document.body.textContent.includes("重播")`) },
+      { label: "demo result suppresses residual flash", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const scene = typeof demo !== "undefined" ? demo : null;
+        return !!(r && scene && scene.turnState === "demo_preview" && !r.shouldDrawScreenFlash(scene));
+      })()`) }
     ]);
     await pressKey(cdp, "R");
     await waitForEvaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`, 4000, "demo replay qte");
     await wait(500);
     await captureScenario(cdp, "demo-result-replay-qte", [
       { label: "demo replay entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
-      { label: "replayed item remains flame blade", ok: await evaluate(cdp, `document.body.textContent.includes("焰刃") || document.body.textContent.includes("熔甲")`) }
+      { label: "replayed item remains flame blade", ok: await evaluate(cdp, `document.body.textContent.includes("焰刃") || document.body.textContent.includes("熔甲")`) },
+      { label: "demo qte bar avoids detail drawer", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || !r.getDemoStageBounds) return false;
+        const stage = r.getDemoStageBounds();
+        if (stage.compact) return true;
+        const drawer = document.getElementById("demo-detail-drawer").getBoundingClientRect();
+        const canvas = document.getElementById("game-canvas").getBoundingClientRect();
+        const scaleX = canvas.width / 960;
+        const barW = Math.min(760, Math.max(520, stage.w - 36));
+        const barRight = canvas.left + (stage.centerX + barW / 2) * scaleX;
+        return barRight <= drawer.left - 8;
+      })()`) }
     ]);
 
     await navigate(cdp, appUrl, mobileLandscape);

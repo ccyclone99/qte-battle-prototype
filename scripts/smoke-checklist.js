@@ -21,9 +21,12 @@ const demoModeJs = fs.readFileSync(path.join(root, "js/demo-mode.js"), "utf8");
 const battleJs = fs.readFileSync(path.join(root, "js/battle.js"), "utf8");
 const inputJs = fs.readFileSync(path.join(root, "js/input.js"), "utf8");
 const rendererJs = fs.readFileSync(path.join(root, "js/renderer.js"), "utf8");
+const fxJs = fs.readFileSync(path.join(root, "js/fx.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
 const chainsJs = fs.readFileSync(path.join(root, "js/data/chains.js"), "utf8");
 const qteDebugJs = fs.readFileSync(path.join(root, "js/systems/qte-debug.js"), "utf8");
+const hitConfirmJs = fs.readFileSync(path.join(root, "js/systems/hit-confirm.js"), "utf8");
+const activeAttacksJs = fs.readFileSync(path.join(root, "js/systems/active-attacks.js"), "utf8");
 const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
 const readmeMd = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const specMd = fs.readFileSync(path.join(root, "SPEC.md"), "utf8");
@@ -53,6 +56,8 @@ check("index loads js/data/effects.js", scriptIndex("js/data/effects.js") >= 0);
 check("index loads js/data/encounters.js", scriptIndex("js/data/encounters.js") >= 0);
 check("index loads js/fx.js before effect queue", scriptIndex("js/fx.js") >= 0 && scriptIndex("js/fx.js") < scriptIndex("js/systems/effects.js"));
 check("index loads js/systems/chain-effects.js", scriptIndex("js/systems/chain-effects.js") >= 0);
+check("index loads hit-confirm before battle", scriptIndex("js/systems/hit-confirm.js") >= 0 && scriptIndex("js/systems/hit-confirm.js") < scriptIndex("js/battle.js"));
+check("index loads active-attacks before battle", scriptIndex("js/systems/active-attacks.js") >= 0 && scriptIndex("js/systems/active-attacks.js") < scriptIndex("js/battle.js"));
 check(
   "effect registry loads before effect system",
   scriptIndex("js/data/effects.js") >= 0 && scriptIndex("js/data/effects.js") < scriptIndex("js/systems/effects.js")
@@ -88,6 +93,8 @@ for (const id of ["caster", "armored", "swift", "shielded"]) {
 for (const id of ["ember_bulwark", "arcane_conduit", "knife_rain", "shield_rite"]) {
   check(`encounter exists: ${id}`, !!(EncounterDatabase.encounters && EncounterDatabase.encounters[id]));
 }
+check("encounters include low-hp phases", Object.values(EncounterDatabase.encounters || {}).every(encounter => Array.isArray(encounter.phases) && encounter.phases.length > 0));
+check("knife rain avoids opening double quick stab", EncounterDatabase.encounters.knife_rain.attackPattern.slice(0, 2).join(",") !== "quickStab,quickStab");
 
 check("fireBladeBurst has burst renderer data", !!(EffectEventDefinitions.fireBladeBurst && EffectEventDefinitions.fireBladeBurst.bursts));
 check("overflowBurst has burst renderer data", !!(EffectEventDefinitions.overflowBurst && EffectEventDefinitions.overflowBurst.bursts));
@@ -106,6 +113,7 @@ check("touch controls include click fallback", mainJs.includes('addEventListener
 check("touch controls include mouse fallback", mainJs.includes('addEventListener("mousedown"') && mainJs.includes("pressVirtualKey"));
 check("touch controls use delegated hit mapping", mainJs.includes("getVirtualKeyFromEvent") && mainJs.includes("nearestDistance"));
 check("touch controls handle virtual ESC", mainJs.includes("handleVirtualSystemKey") && mainJs.includes('appState === "battle"'));
+check("hidden touch controls are inaccessible", indexHtml.includes('aria-hidden="true"') && styleCss.includes("visibility: hidden") && mainJs.includes("setTouchControlsVisible") && mainJs.includes('setAttribute("aria-hidden"'));
 check("demo mode exposes system escape handler", demoModeJs.includes("handleSystemEscape") && mainJs.includes("demo.handleSystemEscape"));
 check("demo detail opens by default", mainJs.includes('demoDetailDrawer.classList.remove("hidden")'));
 check("demo detail uses status lines", mainJs.includes("demo.getStatusLines") && mainJs.includes("demo.getControlHint"));
@@ -119,11 +127,16 @@ check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check
 check("visual smoke script exists", !!visualSmokeJs);
 check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captureScreenshot"));
 check("visual smoke covers style 7 and replay", visualSmokeJs.includes("battle-style7-qte") && visualSmokeJs.includes("demo-result-replay-qte"));
+check("visual smoke covers battle result summary", visualSmokeJs.includes("battle-result-summary") && visualSmokeJs.includes("getBattleResultLines"));
+check("visual smoke covers virtual controls", visualSmokeJs.includes("battle-virtual-controls-qte") && visualSmokeJs.includes("clickVirtualKey"));
+check("visual smoke guards demo stage drawer overlap", visualSmokeJs.includes("demo stage avoids detail drawer") && visualSmokeJs.includes("demo qte bar avoids detail drawer"));
 check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
 check("small viewport compact rules exist", styleCss.includes("@media (max-width: 900px), (max-height: 520px)") && styleCss.includes("#demo-detail-drawer"));
 check("mobile demo detail uses bottom sheet layout", styleCss.includes("#demo-detail-drawer .drawer-content") && styleCss.includes("bottom: 8px"));
 check("main menu includes encounter select", indexHtml.includes('id="enemy-select"') && indexHtml.includes('value="encounter:arcane_conduit"') && indexHtml.includes('value="swift"'));
 check("battle supports encounter selection", battleJs.includes("encounterOverrideId") && battleJs.includes("applyEncounter") && battleJs.includes("pickEnemyAttackId"));
+check("battle supports encounter phases", battleJs.includes("getCurrentEncounterPhase") && battleJs.includes("maybeEnterEncounterPhase") && battleJs.includes("getEncounterAttackPattern"));
+check("battle result summary exists", battleJs.includes("getBattleResultLines") && rendererJs.includes("战斗摘要") && mainJs.includes("getBattleResultLines") && styleCss.includes("game-over-stats-title"));
 check("qte debug shows encounter rules", qteDebugJs.includes("getEncounterDebugLines"));
 check("SPEC includes visual smoke command", specMd.includes("node scripts\\visual-smoke.js"));
 check("SPEC syntax check targets source directories", specMd.includes("Get-ChildItem -Path .\\js,.\\scripts"));
@@ -133,12 +146,41 @@ check("verify script supports visual toggle", verifyJs.includes("--skip-visual")
 check("CI workflow runs verify", ciYml.includes("node scripts/verify.js --ci --skip-visual"));
 check("manual playtest checklist exists", manualChecklistMd.includes("Battle Feel") && manualChecklistMd.includes("Demo Direction") && manualChecklistMd.includes("Audio"));
 check("README documents verify command", readmeMd.includes("node scripts/verify.js") && readmeMd.includes("--skip-visual"));
+check("input reset protects virtual controls", inputJs.includes("reset()") && inputJs.includes("heldKeys.clear()") && inputJs.includes("options.fresh") && mainJs.includes("input.reset()") && mainJs.includes("pressVirtualKey(key)") && mainJs.includes("fresh: true") && mainJs.includes("tutorialOverlay.style.display !== \"none\""));
 check("R12 handfeel profiles exist", utilsJs.includes("getChainHandfeel") && utilsJs.includes("getDemoPacing") && utilsJs.includes("overflow_burst"));
+check("R14 battle qte pacing exists", utilsJs.includes("getBattleQTEPacing") && battleJs.includes("applyQTEPacing") && qteDebugJs.includes("实战节奏"));
+check("qte impact legacy path removed", !battleJs.includes("qteImpact") && !rendererJs.includes("drawQTEImpactPrompt") && !qteDebugJs.includes("动画结算"));
+check("enemy legacy hit resolver removed", !battleJs.includes("resolveEnemyHit"));
+check("active attack system exists", activeAttacksJs.includes("class ActiveAttackSystem") && activeAttacksJs.includes("resolveProfile") && activeAttacksJs.includes("reactionStart"));
+check("active attack emits reaction and impact visuals", activeAttacksJs.includes("emitReactionVisual") && activeAttacksJs.includes("emitImpactVisual"));
+check("battle commits qte active attacks", battleJs.includes('kind: "playerQTE"') && battleJs.includes("resolvePlayerQTEImpact") && battleJs.includes("finishPlayerQTEFlow"));
+check("battle commits enemy active attacks", battleJs.includes("commitEnemyActiveAttack") && battleJs.includes('kind: "enemyAttack"') && battleJs.includes("onActiveAttackReactionWindow"));
+check("renderer draws active attacks", rendererJs.includes("drawActiveAttacks") && rendererJs.includes("drawActiveAttackPrompt") && rendererJs.includes("攻击实体推进中"));
+check("renderer suppresses qte stale overlays", rendererJs.includes("shouldDrawFloatingMessage") && rendererJs.includes("shouldDrawTurnBanner") && rendererJs.includes('scene.turnState !== "qte_running"') && visualSmokeJs.includes("battle qte suppresses stale overlays"));
+check("qte debug shows active attacks", qteDebugJs.includes("activeAttackSystem.getDebugLines"));
 check("battle applies chain handfeel", battleJs.includes("Utils.getChainHandfeel(chainConfig") && battleJs.includes("Utils.getChainHandfeel(chain, { chainId, source: \"enemy\" })"));
+check("battle applies qte pacing", battleJs.includes("Utils.getBattleQTEPacing") && battleJs.includes("qteRunner.timeScale") && battleJs.includes("qteRunner.postNodePause"));
 check("demo applies chain pacing", demoModeJs.includes("Utils.getDemoPacing") && demoModeJs.includes("getActiveDirectorLines") && demoModeJs.includes("getPreviewSummaryLines"));
 check("renderer shows demo focus panel", rendererJs.includes("drawDemoFocusPanel") && rendererJs.includes("演示摘要"));
-check("R12 tuned core timings", chainsJs.includes("beats: [0.34, 0.72, 1.08, 1.42]") && chainsJs.includes("duration: 1.35") && chainsJs.includes("chargeMul: 1.08"));
+check("demo layout avoids detail drawer", rendererJs.includes("getDemoStageBounds") && rendererJs.includes("stage.compact") && rendererJs.includes("drawDemoQTEBar(scene, bounds)"));
+check("battle action HUD hides equipment noise", rendererJs.includes("isActionFocusedState") && rendererJs.includes("drawEquipmentChips") && rendererJs.includes('scene.turnState === "attack_active"'));
+check("demo result suppresses residual flash", rendererJs.includes("shouldDrawScreenFlash") && rendererJs.includes('scene.turnState !== "demo_preview"') && visualSmokeJs.includes("demo result suppresses residual flash"));
+check("demo action key prompt uses lower lane", rendererJs.includes("actionKeyPromptY = 365") && rendererJs.includes("drawBigKeyPrompt(scene, keyMatch[1], \"\", actionKeyPromptY"));
+check("demo action suppresses duplicate enemy readout", rendererJs.includes("suppressReadout: true") && rendererJs.includes("!options.suppressReadout"));
+check("demo qte uses compact result feedback", demoModeJs.includes('"qteResult"') && fxJs.includes('t.type === "qteResult"'));
+check("R14 accessible qte timings", chainsJs.includes("beats: [0.38, 0.82, 1.24]") && chainsJs.includes("duration: 1.18") && chainsJs.includes("perfect: 0.72") && chainsJs.includes("chargeMul: 1.08"));
 check("R13 style preferred encounters exist", StyleDatabase.flameforge.preferredEncounter === "ember_bulwark" && StyleDatabase.mirrorblade.preferredEncounter === "arcane_conduit");
+check("actor reactions include attack windup", fxJs.includes("attack: 0.28") && fxJs.includes("windup: 0.32") && fxJs.includes("rotation"));
+check("renderer draws actor motion lines", rendererJs.includes("drawActorMotionLines") && rendererJs.includes("drawEnemyAttackMotion") && rendererJs.includes("isSpellLikeAttack"));
+check("battle emits attack animation hooks", battleJs.includes('triggerActorReaction("player", "attack"') && battleJs.includes('triggerActorReaction("enemy", "attack"') && battleJs.includes("emitEnemyAttackVisual"));
+check("impact sparks exist", fxJs.includes("drawSpark") && battleJs.includes('kind: "spark"') && rendererJs.includes("burstRadius"));
+check("hit confirm system exists", hitConfirmJs.includes("class HitConfirmSystem") && hitConfirmJs.includes("confirmedTokens") && hitConfirmJs.includes("getHurtbox"));
+check("hit confirm supports dynamic trails", hitConfirmJs.includes("buildTrailHitbox") && hitConfirmJs.includes("trailRect") && hitConfirmJs.includes("window.impact"));
+check("battle routes damage through hit confirm", battleJs.includes("this.hitConfirmSystem = new HitConfirmSystem(this)") && battleJs.includes("confirmDamage(intent") && battleJs.includes("hitConfirmSystem.confirm"));
+check("battle passes qte hit metadata", battleJs.includes("buildQTEHitMeta") && battleJs.includes("visualEvents") && battleJs.includes("outcomes"));
+check("renderer draws hit confirm overlay", rendererJs.includes("drawHitConfirmOverlays") && rendererJs.includes("drawHitboxShape") && rendererJs.includes("drawHurtboxShape"));
+check("actor reactions accept impact offsets", fxJs.includes("direction: options.direction") && fxJs.includes("distance: options.distance") && fxJs.includes("reaction.distance"));
+check("qte debug shows hit confirm", qteDebugJs.includes("hitConfirmSystem.getDebugLines"));
 
 let failures = 0;
 console.log("Smoke checklist:");

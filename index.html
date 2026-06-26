@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QTE Battle Prototype</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=r19a">
 </head>
 <body>
   <div id="game-container">
@@ -134,7 +134,7 @@
     </div>
 
     <!-- 触屏/鼠标虚拟按键（默认隐藏，按 V 切换） -->
-    <div id="touch-controls" class="touch-controls hidden">
+    <div id="touch-controls" class="touch-controls hidden" aria-hidden="true">
       <div class="touch-row touch-row-numeric" aria-label="数字选择">
         <button data-key="1">1</button>
         <button data-key="2">2</button>
@@ -160,8 +160,8 @@
   <script src="js/utils.js"></script>
   <script src="js/difficulty.js"></script>
   <script src="js/audio.js"></script>
-  <script src="js/fx.js?v=r6c"></script>
-  <script src="js/input.js?v=r6d"></script>
+  <script src="js/fx.js?v=r6d"></script>
+  <script src="js/input.js?v=r16b"></script>
   <script src="js/data/chains.js"></script>
   <script src="js/data/weapons.js"></script>
   <script src="js/data/spells.js"></script>
@@ -169,17 +169,19 @@
   <script src="js/data/styles.js"></script>
   <script src="js/data/defenses.js"></script>
   <script src="js/data/enemies.js"></script>
-  <script src="js/data/encounters.js"></script>
+  <script src="js/data/encounters.js?v=r18a"></script>
   <script src="js/data/effects.js"></script>
   <script src="js/systems/effects.js"></script>
   <script src="js/systems/statuses.js"></script>
   <script src="js/systems/resources.js"></script>
+  <script src="js/systems/hit-confirm.js"></script>
+  <script src="js/systems/active-attacks.js"></script>
   <script src="js/systems/qte-debug.js"></script>
   <script src="js/systems/chain-effects.js"></script>
-  <script src="js/demo-mode.js?v=r6d"></script>
+  <script src="js/demo-mode.js?v=r6e"></script>
   <script src="js/qte-runner.js"></script>
-  <script src="js/battle.js"></script>
-  <script src="js/renderer.js?v=r6c"></script>
-  <script src="js/main.js?v=r6h"></script>
+  <script src="js/battle.js?v=r18b"></script>
+  <script src="js/renderer.js?v=r6i"></script>
+  <script src="js/main.js?v=r19a"></script>
 </body>
 </html>

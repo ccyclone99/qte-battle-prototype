@@ -8,10 +8,21 @@ const EncounterDatabase = {
       intent: "厚甲压迫，适合用火焰、破甲和大剑链打开缺口。",
       recommendedStyles: ["flameforge", "fire", "eastern", "desolo"],
       attackPattern: ["shieldBash", "heavySmash", "slash", "shieldBash"],
+      phases: [
+        {
+          id: "molten_core",
+          name: "熔心压迫",
+          hpBelow: 0.5,
+          attackPattern: ["heavySmash", "shieldBash", "heavySmash", "slash"],
+          ruleLines: [
+            "半血后进入熔心压迫：重击频率上升，但前摇仍然清楚。"
+          ]
+        }
+      ],
       modifiers: {
         startHeat: 12,
         enemyDamageMul: 1.05,
-        enemyWindupMul: 0.96,
+        enemyWindupMul: 1.0,
         responseWindowMul: 0.95,
         fireDamageMul: 1.06,
         armorBreakDamageMul: 1.08
@@ -31,9 +42,20 @@ const EncounterDatabase = {
       intent: "高频法术压迫，适合咒还吸收、镜咒反射和溢流爆发。",
       recommendedStyles: ["mirrorblade", "absorb"],
       attackPattern: ["spellCast", "arcaneBolt", "curseBurst", "arcaneBolt"],
+      phases: [
+        {
+          id: "overloaded_matrix",
+          name: "过载法阵",
+          hpBelow: 0.5,
+          attackPattern: ["curseBurst", "arcaneBolt", "spellCast", "curseBurst"],
+          ruleLines: [
+            "半血后进入过载法阵：咒爆更频繁，咒还和格挡价值上升。"
+          ]
+        }
+      ],
       modifiers: {
         startSpellEnergy: 36,
-        enemyWindupMul: 0.94,
+        enemyWindupMul: 1.02,
         responseWindowMul: 0.92,
         absorbEnergyMul: 1.25,
         absorbDamageMul: 1.08,
@@ -53,18 +75,29 @@ const EncounterDatabase = {
       terrain: "湿滑巷道",
       intent: "短预警多段快攻，适合双刃、闪避暴击和追加攻击练习。",
       recommendedStyles: ["desslo", "mirrorblade"],
-      attackPattern: ["quickStab", "quickStab", "slash", "thrust"],
+      attackPattern: ["quickStab", "slash", "quickStab", "thrust"],
+      phases: [
+        {
+          id: "close_quarters",
+          name: "贴身追刺",
+          hpBelow: 0.5,
+          attackPattern: ["quickStab", "thrust", "quickStab", "slash"],
+          ruleLines: [
+            "半血后进入贴身追刺：快刺仍然频繁，但不连续压同一节奏。"
+          ]
+        }
+      ],
       modifiers: {
         enemyDamageMul: 0.92,
-        enemyWindupMul: 0.88,
-        responseWindowMul: 0.90,
+        enemyWindupMul: 1.04,
+        responseWindowMul: 0.94,
         normalDamageMul: 1.04,
         swordDamageMul: 1.04
       },
       ruleLines: [
-        "敌人出手更快但单次伤害略低。",
+        "敌人短预警但单次伤害略低。",
         "武器链与普通攻击伤害 +4%，鼓励主动抢节奏。",
-        "连续快刺适合测试闪避、弹反和反击窗口。"
+        "快刺会穿插横扫/直刺，适合测试闪避、弹反和反击窗口。"
       ]
     },
 
@@ -76,6 +109,17 @@ const EncounterDatabase = {
       intent: "盾击与秘术混合，适合火盾反伤、格挡和咒还弹反。",
       recommendedStyles: ["fire", "flameforge", "absorb"],
       attackPattern: ["shieldBash", "arcaneBolt", "slash", "curseBurst"],
+      phases: [
+        {
+          id: "broken_oath",
+          name: "折盾誓约",
+          hpBelow: 0.5,
+          attackPattern: ["curseBurst", "shieldBash", "arcaneBolt", "slash"],
+          ruleLines: [
+            "半血后进入折盾誓约：盾击和咒爆交替，防御选择更重要。"
+          ]
+        }
+      ],
       modifiers: {
         startHeat: 6,
         startSpellEnergy: 18,

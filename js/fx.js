@@ -168,6 +168,7 @@ class EffectBurstSystem {
       else if (kind === "beam") this.drawBeam(ctx, burst, progress, alpha);
       else if (kind === "shield") this.drawShield(ctx, burst, progress, alpha);
       else if (kind === "pulse") this.drawPulse(ctx, burst, progress, alpha);
+      else if (kind === "spark") this.drawSpark(ctx, burst, progress, alpha);
       else this.drawRing(ctx, burst, progress, alpha);
     }
     ctx.restore();
@@ -303,6 +304,36 @@ class EffectBurstSystem {
     ctx.restore();
   }
 
+  drawSpark(ctx, burst, progress, alpha) {
+    const radius = burst.radius || 44;
+    const rays = burst.rays || 9;
+    const core = (burst.core || 10) * (1 - progress * 0.45);
+    ctx.save();
+    ctx.translate(burst.x, burst.y);
+    ctx.rotate((burst.angle || 0) + progress * 0.22);
+    ctx.globalAlpha = alpha * (burst.alpha || 0.95);
+    ctx.strokeStyle = burst.color || "#ffffff";
+    ctx.lineWidth = (burst.width || 4) * (1 - progress * 0.55);
+    ctx.lineCap = "round";
+    ctx.shadowColor = burst.color || "#ffffff";
+    ctx.shadowBlur = burst.glow || 18;
+    for (let i = 0; i < rays; i++) {
+      const a = (i / rays) * Math.PI * 2;
+      const start = core + radius * 0.12 * progress;
+      const end = radius * (0.45 + progress * 0.55) * (0.75 + (i % 3) * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * start, Math.sin(a) * start);
+      ctx.lineTo(Math.cos(a) * end, Math.sin(a) * end);
+      ctx.stroke();
+    }
+    ctx.fillStyle = burst.coreColor || "#ffffff";
+    ctx.globalAlpha *= 0.9;
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(1, core), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   withAlpha(color, alpha) {
     if (!color || color[0] !== "#") return color || `rgba(255,255,255,${alpha})`;
     const hex = color.slice(1);
@@ -335,6 +366,8 @@ class ActorReactionSystem {
     const durationByType = {
       hit: 0.24,
       crit: 0.34,
+      attack: 0.28,
+      windup: 0.32,
       guard: 0.28,
       dodge: 0.26,
       stagger: 0.32,
@@ -346,7 +379,10 @@ class ActorReactionSystem {
       intensity,
       duration: options.duration || durationByType[type] || 0.25,
       time: 0,
-      color: options.color || this.colorFor(type)
+      color: options.color || this.colorFor(type),
+      direction: options.direction,
+      distance: options.distance,
+      lift: options.lift
     };
   }
 
@@ -367,31 +403,50 @@ class ActorReactionSystem {
       offsetX: 0,
       offsetY: 0,
       scale: 1,
+      rotation: 0,
       flashAlpha: 0,
       ringAlpha: 0,
+      progress: 0,
+      type: null,
       color: "#ffffff"
     };
 
     const progress = Math.min(1, reaction.time / reaction.duration);
     const punch = Math.sin(progress * Math.PI);
     const fade = 1 - progress;
-    const direction = target === "enemy" ? 1 : -1;
+    const away = reaction.direction || (target === "enemy" ? 1 : -1);
+    const forward = target === "enemy" ? -1 : 1;
     const intensity = reaction.intensity || 1;
 
     let offsetX = 0;
     let offsetY = 0;
     let scale = 1;
+    let rotation = 0;
     let flashAlpha = 0;
     let ringAlpha = 0;
 
     if (reaction.type === "hit" || reaction.type === "crit" || reaction.type === "stagger") {
-      const strength = reaction.type === "crit" ? 44 : (reaction.type === "stagger" ? 30 : 24);
-      offsetX = direction * strength * intensity * punch;
-      offsetY = -5 * intensity * punch;
+      const strength = reaction.distance || (reaction.type === "crit" ? 44 : (reaction.type === "stagger" ? 30 : 24));
+      const lift = reaction.lift ?? (reaction.type === "crit" ? 8 : 5);
+      offsetX = away * strength * intensity * punch;
+      offsetY = -lift * intensity * punch;
       scale = 1 + (reaction.type === "crit" ? 0.12 : 0.06) * punch;
+      rotation = away * (reaction.type === "crit" ? 0.16 : 0.09) * punch;
       flashAlpha = (reaction.type === "crit" ? 0.55 : 0.38) * fade;
+    } else if (reaction.type === "attack") {
+      offsetX = forward * 32 * intensity * punch;
+      offsetY = -3 * intensity * punch;
+      scale = 1 + 0.05 * punch;
+      rotation = forward * 0.10 * punch;
+      ringAlpha = 0.20 * fade;
+    } else if (reaction.type === "windup") {
+      offsetX = -forward * 14 * intensity * punch;
+      offsetY = -4 * intensity * punch;
+      scale = 1 + 0.035 * punch;
+      rotation = -forward * 0.06 * punch;
+      ringAlpha = 0.28 * fade;
     } else if (reaction.type === "guard") {
-      offsetX = direction * 8 * intensity * punch;
+      offsetX = away * 8 * intensity * punch;
       scale = 1 + 0.05 * punch;
       ringAlpha = 0.55 * fade;
     } else if (reaction.type === "dodge") {
@@ -408,8 +463,11 @@ class ActorReactionSystem {
       offsetX,
       offsetY,
       scale,
+      rotation,
       flashAlpha,
       ringAlpha,
+      progress,
+      type: reaction.type,
       color: reaction.color
     };
   }
@@ -440,9 +498,9 @@ class FloatingTextManager {
       y: targetY - 30,
       type,
       time: 0,
-      maxTime: type === "status" ? 1.2 : (type === "popup" ? 0.7 : 0.9),
-      vy: type === "crit" ? -90 : (type === "popup" ? -30 : -60),
-      vx: type === "popup" ? 0 : (Math.random() - 0.5) * 30,
+      maxTime: type === "status" ? 1.2 : (type === "popup" ? 0.7 : (type === "qteResult" ? 0.55 : 0.9)),
+      vy: type === "crit" ? -90 : (type === "popup" || type === "qteResult" ? -30 : -60),
+      vx: type === "popup" || type === "qteResult" ? 0 : (Math.random() - 0.5) * 30,
       scale: type === "crit" ? 1.4 : 1.0
     };
     this.texts.push(text);
@@ -455,12 +513,17 @@ class FloatingTextManager {
       t.y += t.vy * dt;
       t.vy += 80 * dt; // gravity
       if (t.type === "crit") t.scale = 1.4 + Math.sin(t.time * 10) * 0.15;
-      if (t.type === "popup") {
+      if (t.type === "popup" || t.type === "qteResult") {
         const popupProgress = t.time / t.maxTime;
-        t.scale = 1 + Math.sin(popupProgress * Math.PI) * 0.45;
+        const popScale = t.type === "qteResult" ? 0.18 : 0.45;
+        t.scale = 1 + Math.sin(popupProgress * Math.PI) * popScale;
       }
     }
     this.texts = this.texts.filter(t => t.time < t.maxTime);
+  }
+
+  removeByType(type) {
+    this.texts = this.texts.filter(t => t.type !== type);
   }
 
   render(ctx) {
@@ -489,13 +552,13 @@ class FloatingTextManager {
         color = "#ffffff";
         font = "bold 18px sans-serif";
         shadow = "rgba(0,0,0,0.6)";
-      } else if (t.type === "popup") {
+      } else if (t.type === "popup" || t.type === "qteResult") {
         const val = String(t.value).toUpperCase();
         if (val.startsWith("PERFECT")) color = "#f1c40f";
         else if (val.startsWith("SUCCESS")) color = "#2ecc71";
         else if (val.startsWith("EARLY") || val.startsWith("LATE")) color = "#e67e22";
         else color = "#e74c3c"; // FAIL / TIMEOUT
-        font = "bold 42px sans-serif";
+        font = t.type === "qteResult" ? "bold 28px sans-serif" : "bold 42px sans-serif";
         shadow = color;
       }
 

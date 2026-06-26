@@ -2,36 +2,36 @@ const Difficulty = {
   presets: {
     easy: {
       name: "简单",
-      qteDurationMul: 1.25,
+      qteDurationMul: 1.32,
       qteWindowMul: 1.45,
-      enemyWindupMul: 1.45,
+      enemyWindupMul: 1.62,
       enemyResponseMul: 1.65,
       pointerSpeedMul: 0.65,
       enemyDamageMul: 0.5
     },
     normal: {
       name: "普通",
-      qteDurationMul: 1.0,
+      qteDurationMul: 1.08,
       qteWindowMul: 1.15,
-      enemyWindupMul: 1.20,
+      enemyWindupMul: 1.34,
       enemyResponseMul: 1.25,
       pointerSpeedMul: 0.9,
       enemyDamageMul: 0.75
     },
     hard: {
       name: "困难",
-      qteDurationMul: 0.92,
+      qteDurationMul: 0.98,
       qteWindowMul: 0.95,
-      enemyWindupMul: 1.0,
+      enemyWindupMul: 1.10,
       enemyResponseMul: 1.0,
       pointerSpeedMul: 1.05,
       enemyDamageMul: 0.95
     },
     extreme: {
       name: "极难",
-      qteDurationMul: 0.82,
+      qteDurationMul: 0.88,
       qteWindowMul: 0.82,
-      enemyWindupMul: 0.88,
+      enemyWindupMul: 0.96,
       enemyResponseMul: 0.85,
       pointerSpeedMul: 1.2,
       enemyDamageMul: 1.15

@@ -1501,6 +1501,9 @@ class DemoMode {
       this.log("敌人已复活（演示模式）");
     }
 
+    if (this.floatingTexts && this.floatingTexts.removeByType) {
+      this.floatingTexts.removeByType("qteResult");
+    }
     this.freezeTimer = this.activeDemoPacing ? this.activeDemoPacing.resultFreeze : 0.8;
     this.qteRunner = null;
     this.input.clear();
@@ -1590,9 +1593,9 @@ class DemoMode {
     this.floatingTexts.add(text, x, y, type);
   }
 
-  showOutcomeFeedback(outcome, x = 480, y = 360) {
+  showOutcomeFeedback(outcome, x = 180, y = 265) {
     const label = (outcome || "fail").toUpperCase();
-    this.spawnFloatingText(label, x, y, "popup");
+    this.spawnFloatingText(label, x, y, "qteResult");
     if (outcome === "perfect") {
       SFX.sfxPerfect();
       this.setCameraZoom(1.12, 0.3);

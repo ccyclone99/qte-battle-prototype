@@ -35,6 +35,8 @@ const QTEDebugFormatter = {
       lines.push("Runner：无");
       if (scene && scene.resourceSystem) lines.push(...scene.resourceSystem.getDebugLines());
       if (scene && scene.statusSystem) lines.push(...scene.statusSystem.getDebugLines(4));
+      if (scene && scene.hitConfirmSystem) lines.push(...scene.hitConfirmSystem.getDebugLines(4));
+      if (scene && scene.activeAttackSystem) lines.push(...scene.activeAttackSystem.getDebugLines(4));
       if (scene && scene.effectQueue) lines.push(...scene.effectQueue.getDebugLines(4));
       return lines;
     }
@@ -61,6 +63,7 @@ const QTEDebugFormatter = {
 
     const forced = runner.forcedOutcome ? this.formatOutcome(runner.forcedOutcome) : "手动";
     lines.push(`判定：${forced}`);
+    lines.push(`实战节奏：x${runner.timeScale.toFixed(2)} / 节点停顿 ${runner.postNodePause.toFixed(2)}s`);
     lines.push(`手感：press +${runner.handfeel.windowPad.toFixed(2)} / hold +${runner.handfeel.holdWindowPad.toFixed(2)} / P ±${runner.handfeel.perfectTolerance.toFixed(2)}`);
 
     if (runner.debug && runner.debug.lastInput) {
@@ -77,6 +80,8 @@ const QTEDebugFormatter = {
     lines.push(`已完成：${resultText}`);
     if (scene.resourceSystem) lines.push(...scene.resourceSystem.getDebugLines());
     if (scene.statusSystem) lines.push(...scene.statusSystem.getDebugLines(4));
+    if (scene.hitConfirmSystem) lines.push(...scene.hitConfirmSystem.getDebugLines(4));
+    if (scene.activeAttackSystem) lines.push(...scene.activeAttackSystem.getDebugLines(4));
     if (scene.effectQueue) lines.push(...scene.effectQueue.getDebugLines(4));
     return lines;
   }

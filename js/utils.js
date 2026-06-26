@@ -133,6 +133,73 @@ const Utils = {
     return profile;
   },
 
+  getBattleQTEPacing(chain, options = {}) {
+    const pacing = {
+      timeScale: 0.90,
+      postNodePause: 0.10
+    };
+    if (!chain) return pacing;
+
+    const id = options.chainId || "";
+    const family = chain.family || "";
+    const role = chain.role || "";
+    const tags = new Set(chain.tags || []);
+    const difficultyId = options.difficultyId || (typeof Difficulty !== "undefined" ? Difficulty.current : "normal");
+    const apply = values => Object.assign(pacing, values);
+
+    const difficultyPacing = {
+      easy: { timeScale: 0.86, postNodePause: 0.14 },
+      normal: { timeScale: 0.92, postNodePause: 0.10 },
+      hard: { timeScale: 0.98, postNodePause: 0.07 },
+      extreme: { timeScale: 1.04, postNodePause: 0.04 }
+    };
+    if (difficultyPacing[difficultyId]) apply(difficultyPacing[difficultyId]);
+
+    if (family === "dualBlades") {
+      apply({ timeScale: pacing.timeScale * 0.92, postNodePause: Math.max(pacing.postNodePause, 0.10) });
+    }
+    if (family === "greatsword") {
+      apply({ timeScale: pacing.timeScale * 0.95, postNodePause: Math.max(pacing.postNodePause, 0.13) });
+    }
+    if (family === "staff") {
+      apply({ timeScale: pacing.timeScale * 0.90, postNodePause: Math.max(pacing.postNodePause, 0.14) });
+    }
+    if (family === "fire") {
+      apply({ timeScale: pacing.timeScale * 0.94, postNodePause: Math.max(pacing.postNodePause, 0.12) });
+    }
+    if (family === "absorb") {
+      apply({ timeScale: pacing.timeScale * 0.92, postNodePause: Math.max(pacing.postNodePause, 0.14) });
+    }
+    if (tags.has("rhythm")) {
+      apply({ timeScale: pacing.timeScale * 0.94, postNodePause: Math.max(pacing.postNodePause, 0.14) });
+    }
+    if (tags.has("charge")) {
+      apply({ timeScale: Math.max(0.84, pacing.timeScale), postNodePause: Math.max(pacing.postNodePause, 0.12) });
+    }
+    if (tags.has("defense") || role === "defense" || options.source === "enemy") {
+      apply({ timeScale: pacing.timeScale * 0.88, postNodePause: Math.max(pacing.postNodePause, 0.08) });
+    }
+
+    const focusedPacing = {
+      staff_s: { timeScale: Math.min(pacing.timeScale, 0.74), postNodePause: 0.18 },
+      staff_d: { timeScale: Math.min(pacing.timeScale, 0.80), postNodePause: 0.16 },
+      absorb_siphon: { timeScale: Math.min(pacing.timeScale, 0.78), postNodePause: 0.18 },
+      dualblades_a_v2: { timeScale: Math.min(pacing.timeScale, 0.78), postNodePause: 0.12 },
+      dualblades_s_v2: { timeScale: Math.min(pacing.timeScale, 0.80), postNodePause: 0.12 },
+      dualblades_d_v2: { timeScale: Math.min(pacing.timeScale, 0.80), postNodePause: 0.14 },
+      fireball_evolution_v2: { timeScale: Math.max(0.84, pacing.timeScale), postNodePause: 0.12 },
+      overflow_burst: { timeScale: Math.min(pacing.timeScale, 0.82), postNodePause: 0.16 },
+      mirror_guard: { timeScale: Math.min(pacing.timeScale, 0.78), postNodePause: 0.08 },
+      shield_flare: { timeScale: Math.min(pacing.timeScale, 0.80), postNodePause: 0.08 }
+    };
+
+    if (focusedPacing[id]) apply(focusedPacing[id]);
+    if (options.pacing) apply(options.pacing);
+    pacing.timeScale = this.clamp(pacing.timeScale, 0.68, 1.08);
+    pacing.postNodePause = this.clamp(pacing.postNodePause, 0, 0.22);
+    return pacing;
+  },
+
   getDemoPacing(chain, item = {}) {
     const pacing = {
       timeScale: 0.94,

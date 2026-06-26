@@ -150,6 +150,147 @@ The prototype should become a content-extensible combat sandbox:
 9. Player chooses dodge, parry, guard, or special reaction.
 10. Result feeds back into the next player turn.
 
+### Hit Confirm And Collision Layer
+
+The combat loop should move from "result immediately applies damage" toward "result creates an authored hit, and the hit applies damage only when it overlaps a target hurtbox." This should make attacks feel more physical without turning the prototype into a full physics game.
+
+This layer is needed because the project now has readable attack, windup, hit, and recoil animation. Damage should line up with those visuals:
+
+- A sword chain should deal damage when its slash arc reaches the enemy hurtbox.
+- A spell should deal damage when its beam/projectile/pulse reaches the enemy hurtbox.
+- An enemy attack should damage the player only when the enemy hitbox overlaps the player hurtbox.
+- Defense, dodge, parry, guard, absorb, and iframe outcomes should still modify or cancel the hit before HP changes.
+
+Non-goals:
+
+- No free-movement physics.
+- No rigid-body simulation.
+- No continuous collision between every visual particle and every actor.
+- No engine migration for collision alone.
+
+Runtime model:
+
+- `hurtbox`: persistent logical body volume for player and enemy.
+- `hitbox`: short-lived authored volume created by an attack node, enemy attack, normal attack, or defense counter.
+- `hitToken`: unique id for one damaging swing/projectile/pulse, used to prevent repeated HP loss from the same hitbox.
+- `damageIntent`: the pending damage/effects produced by QTE outcome or enemy attack rules before HP is changed.
+- `hitConfirm`: overlap result that converts `damageIntent` into `applyDamage()`.
+
+Recommended logical coordinate model:
+
+- Use the existing battle-space anchors as the source of truth:
+  - `playerCore`
+  - `playerHand`
+  - `playerShield`
+  - `enemyCore`
+  - `enemyChest`
+- Hurtboxes can start as simple rectangles or capsules:
+  - player: center around `playerCore`, approximately `70w x 110h`
+  - enemy: center around `enemyCore`, approximately `90w x 130h`
+- Reactions/pose offsets may later influence hurtboxes, but phase 1 can use stable anchors to avoid visual jitter changing gameplay.
+
+Suggested data shape:
+
+```js
+{
+  id: "greatsword_s_v2.cleave.perfect",
+  source: "player",
+  target: "enemy",
+  token: "chainId/nodeId/outcome/runId",
+  shape: "arc", // rect | circle | capsule | beam | arc
+  anchor: "playerHand",
+  toAnchor: "enemyCore",
+  startTime: 0.12,
+  activeTime: 0.18,
+  damage: 42,
+  effects: {
+    stunEnemy: 0.2,
+    resource: { heat: 6 },
+    statuses: []
+  },
+  visualEvent: "greatswordCleavePerfect"
+}
+```
+
+Resolution rules:
+
+- QTE node resolution creates one or more `damageIntent` records instead of applying HP damage immediately.
+- A hitbox is active only during its authored active window.
+- A hitbox can hit each target at most once per `hitToken`.
+- If a hitbox overlaps the target hurtbox:
+  - apply encounter modifiers
+  - apply armor/status modifiers
+  - call `applyDamage()`
+  - emit impact spark, actor reaction, floating damage, and registered visual event
+- If no overlap occurs:
+  - emit a clear whiff/miss visual
+  - do not apply HP damage
+  - optionally preserve non-damage resource costs if the chain data says the resource was spent on cast, not on impact
+- Defense QTE outcomes must be resolved before enemy hitboxes apply damage:
+  - dodge/iframe: hitbox can overlap, but HP damage is canceled
+  - guard: overlap applies reduced damage and guard reaction
+  - parry/absorb: enemy damage is canceled or reflected according to current rules
+
+Phase 1 implementation scope:
+
+- Add `HitConfirmSystem`.
+- Add static hurtboxes for player/enemy.
+- Add hitbox creation for:
+  - player normal attack
+  - player QTE damage transitions
+  - enemy attacks
+  - defense counter damage
+- Keep existing QTE branch math and resources intact.
+- Convert `applyDamage()` calls behind player/enemy attacks to go through hit confirm.
+- Keep status/resource side effects that are explicitly pre-impact safe, but gate damage and impact feedback on confirmed overlap.
+
+Phase 2 implementation scope:
+
+- Implement authored trail/capsule hitboxes from current weapon, visual event, chain family, and enemy attack id.
+- Record startup/active/recovery windows per hit so debug output can show the timing contract.
+- Pass impact direction/force/distance into actor reactions so hit-confirmed damage creates readable knockback.
+- Add a short-lived renderer overlay for confirmed/missed trails and the relevant hurtbox.
+- Keep chain/enemy data compatible with the existing schema; explicit per-node `hitbox` metadata can still be added later where authored exceptions are needed.
+
+Phase 3 implementation scope:
+
+- Add whiff branches where useful.
+- Add multi-hit token groups for Dual Blades and damage-over-time pulses.
+- Let armor/shield systems read hit location or hit type.
+- Add optional per-node hitbox overrides for attacks whose visual arc should differ from the derived profile.
+
+Debug requirements:
+
+- QTE debug drawer should show:
+  - active hurtboxes
+  - active hitboxes
+  - hit token
+  - source/target
+  - overlap yes/no
+  - confirmed damage
+- Optional renderer overlay should draw:
+  - hurtboxes in blue/red translucent outlines
+  - active hitboxes in yellow/purple
+  - last confirmed hit as a short flash
+
+Acceptance criteria:
+
+- A normal player attack applies damage only after a player hitbox overlaps the enemy hurtbox.
+- A player QTE damaging transition applies damage only through hit confirm.
+- An enemy attack applies player damage only through hit confirm unless canceled by dodge/parry/guard/absorb.
+- A hit token cannot damage the same actor twice unless explicitly marked multi-hit.
+- Existing tests still pass:
+
+```powershell
+node scripts\verify.js
+```
+
+- Add new flow smoke coverage for:
+  - player hit confirms
+  - enemy hit confirms
+  - guarded/absorbed hit canceling damage
+  - no double damage from one token
+
 ## 6. Controls
 
 ### Global
@@ -1212,6 +1353,206 @@ Remaining cleanup after R12:
 - Run a longer manual playtest pass on hard/extreme to decide whether tight Dual Blades windows need difficulty-specific relief.
 - Decide whether the next animation step should remain pose-tag Canvas 2D or move toward a stronger animation layer.
 
+### R16 - Active Attack Resolution, Completed
+
+Goal: QTE completion should create an authored attack, not immediately settle combat. HP, enemy statuses, hit reactions, guard, dodge, absorb, and reflect are resolved only when the active attack reaches its impact frame or collision moment.
+
+Implemented direction:
+
+- Added `ActiveAttackSystem`.
+  - Tracks active attacks through `startup`, `reaction`, `impact`, `recovery`, and `canceled`.
+  - Supports melee, projectile, beam, and pulse profiles.
+  - Opens defender reaction windows from the attack timeline.
+  - Calls Battle only at impact or completion; QTE runner does not own hit timing.
+- QTE completion now creates a `playerQTE` active attack.
+  - QTE input decides branch, damage candidate, resources, statuses, and visual tags.
+  - The active attack handles travel/active timing.
+  - `resolvePlayerQTEImpact()` applies damage and enemy-facing effects only at impact.
+- Enemy attacks now create `enemyAttack` active attacks.
+  - The old `enemyAttackTimer` and `enemyAttackPhase` remain as UI-facing state.
+  - They are synchronized from active attack progress.
+  - The defense window opens close to the incoming impact.
+- Defense QTEs now pause/cancel the incoming active attack.
+  - Dodge/parry/guard still use the existing defense chain data.
+  - Counter, shield flare, and mirror/reflect outputs create outgoing active attacks.
+- Normal attacks also commit an active melee attack before damage.
+- Renderer now draws active projectiles, beams, pulses, melee trails, and an active attack progress prompt.
+- QTE debug now includes `活动攻击` lines.
+- Active attack timelines freeze during hit-stop, so impact pause does not secretly advance projectiles or recovery.
+- Enemy reaction windows are anchored near the real impact time (`windup + hitTime`) instead of the older windup marker.
+- Active attacks emit their own reaction-window and impact visuals, so defense timing and hit moments are visible even before HP text appears.
+- Smoke coverage now verifies:
+  - QTE completion creates an active attack.
+  - HP stays unchanged during travel.
+  - HP changes only after impact.
+  - Enemy active attacks reach a reaction phase before hit.
+  - Enemy reaction windows stay close to impact.
+  - Active attacks freeze during hit-stop.
+  - Every current damaging QTE chain resolves to a valid active attack profile.
+
+QTE chain extensibility contract:
+
+- QTE chains remain data-driven.
+- `QTEChainRunner` must only output:
+  - result log
+  - accumulated damage/resource/status candidates
+  - branch outcome
+  - `chainId`, `chainFamily`, `tags`, `visualEvent`, and optional `attackProfile`
+- QTE runner must not know:
+  - projectile travel
+  - melee hit arcs
+  - enemy reaction AI
+  - collision details
+  - final HP mutation
+- New chains should be added by data first:
+  - define nodes and transitions in `ChainDatabase`
+  - provide `family`, `tags`, and `visualEvent`
+  - optionally provide `attackProfile` only for unusual behavior
+- `ActiveAttackSystem.resolveProfile()` maps chain metadata into:
+  - `melee`
+  - `projectile`
+  - `beam`
+  - `pulse`
+- `HitConfirmSystem` remains the final collision and no-double-hit layer.
+
+Design note:
+
+- R15's delayed settlement prototype has been replaced and removed from runtime.
+- The intended model is:
+
+```text
+QTE result -> active attack -> defender reaction -> hit confirm -> damage/status/turn flow
+```
+
+### R17 - Result Readability And Battle HUD Noise, Completed
+
+Goal: keep the player focused on the current timing/action beat, and make demo result screens readable after the impact flash has done its job.
+
+Implemented direction:
+
+- Demo result preview no longer draws residual screen flash.
+  - Impact flash stays on the hit moment.
+  - The result-reading phase uses a stable dark overlay instead of inheriting the previous impact color.
+- Demo result preview now uses a tighter summary panel and a dedicated replay hint lane.
+  - `R` replay / return hint stays inside a readable bottom pill.
+  - Long summary rows are clipped to the visible stage lane.
+- Battle resource HUD is quieter during action-focused states.
+  - QTE, active attack, and enemy-turn states hide the equipped spell/art list.
+  - Fire styles no longer show an empty spell-energy meter unless Absorb is equipped or energy exists.
+  - Resource bars are compact meters with darker backing so the player stage remains primary.
+- Static and visual smoke now protect:
+  - action-state HUD equipment suppression
+  - demo result residual-flash suppression
+
+### R18 - Encounter Phase And Pressure Tuning, Completed
+
+Goal: named encounters should feel authored across the whole fight, and high-difficulty enemy pressure should be fast without becoming repeated unreadable spikes.
+
+Implemented direction:
+
+- Named encounters now support data-driven low-HP phases through `phases`.
+  - Each phase can define `id`, `name`, `hpBelow`, `attackPattern`, rule lines, and optional modifiers.
+  - `BattleSystem` selects the current phase from enemy HP ratio.
+  - Entering a new encounter phase resets that phase's attack cursor, logs the transition, and shows a floating phase callout.
+- All four named encounters now have a half-HP phase:
+  - `熔炉守门人`: `熔心压迫`
+  - `秘术回廊`: `过载法阵`
+  - `雨巷迅刺`: `贴身追刺`
+  - `折盾仪式`: `折盾誓约`
+- `雨巷迅刺` no longer opens with two consecutive `quickStab` attacks.
+  - Opening pattern changed from repeated quick stab pressure to quick stab -> slash -> quick stab -> thrust.
+  - The encounter still feels fast, but gives the player a broader rhythm before the next quick stab.
+  - Hard/Extreme quick-stab impact timing now stays above the strict pressure floor.
+- Balance audit now prints the tightest hard/extreme encounter enemy timings.
+- Strict balance now warns on:
+  - hard enemy impact below `0.90s`
+  - extreme enemy impact below `0.80s`
+  - response windows below `0.48s`
+  - consecutive hard/extreme fast-pressure attacks below `1.00s`
+- Flow smoke now proves:
+  - `雨巷迅刺` opening avoids double quick stab
+  - half-HP phase activation happens
+  - phase attack cursor resets into the new phase pattern
+
+### R19 - Battle Result Summary, Completed
+
+Goal: entering and finishing a battle should feel like a complete loop, not just a hard stop after the final hit.
+
+Implemented direction:
+
+- `BattleSystem.getBattleResultLines()` now exposes a compact result summary:
+  - encounter name
+  - reached phase
+  - total damage dealt
+  - QTE accuracy
+  - Perfect count
+  - max combo
+  - hits taken
+  - final player/enemy HP
+- Game-over rendering now shows a `战斗摘要` panel under the win/loss result.
+- Flow smoke protects phase and accuracy lines in the result summary.
+
+### R15 - Delayed Settlement Prototype, Superseded By R16
+
+Goal: prove that QTE input completion should not immediately settle combat. The player needs a visible attack, guard, or cast follow-through before HP, resources, statuses, and turn flow resolve.
+
+What it proved:
+
+- Final QTE input should only finish command entry.
+- HP, status, and resource effects should wait until the authored hit moment.
+- Greatsword/earth/armor hits need a longer follow-through than Dual Blades.
+- Staff, fire, and absorb chains need a clearer cast/release beat.
+- Turn flow should not advance while the authored action is still visually unresolved.
+
+Current status:
+
+- The old timer-only settlement phase has been removed from runtime.
+- R16 `ActiveAttackSystem` is now authoritative for travel, reaction windows, impact, and recovery.
+- `HitConfirmSystem` remains the layer that converts an authored hit into HP damage.
+- Smoke coverage now protects that QTE completion creates an active attack and that HP does not change until impact.
+
+Design note:
+
+- The rule is not “slow all turns down.” It is “input completes, action breathes, then combat resolves.”
+- Keep the authored attack timing short enough that controls still feel responsive: target range `0.28s - 0.68s` for most non-boss player follow-throughs.
+- Avoid applying damage at final keypress time unless a future node explicitly opts into an immediate-hit rule.
+
+### R14 - Accessible QTE Timing, Completed
+
+Goal: make QTE chains approachable for ordinary players without solving difficulty only by widening judgment ranges.
+
+Implemented direction:
+
+- Added `Utils.getBattleQTEPacing()` for real battle QTE playback.
+  - It slows the runner timer and adds short post-node pauses.
+  - It does not increase `windowPad`, `holdWindowPad`, `rhythmPad`, or Perfect tolerance.
+- Battle QTE runners now apply battle pacing for:
+  - player attack chains
+  - counter chains
+  - follow-up chains
+  - defense chains
+- QTE debug now shows `实战节奏` so playtesters can distinguish timer pacing from judgment width.
+- Reduced input density on the hardest rhythm chain:
+  - `staff_s` chant is now 3 beats instead of 4 beats.
+  - beat spacing is wider and easier to read.
+- Shortened long-feeling charge nodes:
+  - legacy `fireball_evolution` charge peak arrives earlier.
+  - `fireball_evolution_v2` charge peak arrives earlier.
+  - total charge duration is shorter, so staff/fire charge feels less like waiting.
+- Static and flow smoke now protect battle QTE pacing.
+
+Design note:
+
+- For accessibility, prefer:
+  - slower runner time scale
+  - more readable node pauses
+  - fewer rhythm beats
+  - earlier charge peaks
+- Avoid defaulting to:
+  - wider global judgment windows
+  - larger Perfect tolerances
+  - larger rhythm tolerance pads
+
 ### R13 - Encounter Depth, First Pass Completed
 
 - Added `EncounterDatabase` with four named encounters:
@@ -1273,6 +1614,8 @@ Remaining cleanup after R13 first pass:
 - Player and enemy react visibly to hit, crit, guard, dodge, stagger, and cast events.
 - Player/enemy stage silhouettes communicate weapon, guard, cast, and enemy archetype without relying only on text.
 - Key QTE nodes can specify pose tags so weapon and spell chains do not all share the same generic silhouette motion.
+- Battle action states keep secondary loadout text out of the timing area.
+- Demo result preview does not inherit residual impact screen flash.
 
 ### Combat
 
@@ -1282,7 +1625,9 @@ Remaining cleanup after R13 first pass:
 - Defense QTEs still resolve dodge, parry, and guard.
 - Style selection applies a preferred named encounter unless an explicit menu selection overrides it.
 - Named encounters can alter enemy HP, attack order, response windows, opening resources, and matchup-specific weapon/spell rewards.
+- Named encounters can change attack patterns at low HP.
 - Manual enemy archetype testing remains available and does not silently apply named encounter rules.
+- Game-over screen shows a battle result summary.
 
 ### Demo
 
@@ -1293,6 +1638,7 @@ Remaining cleanup after R13 first pass:
 - Demo includes Showcase entries that play staged Fire, Absorb, Flame Blade, and enemy-turn examples without needing list paging.
 - Demo QTE playback shows the current director focus on the main canvas.
 - Demo result preview shows focus, result summary, and actual timeline without requiring the detail drawer.
+- Demo result preview keeps the replay hint readable on the main canvas.
 - Enemy-turn demos show attack type, danger level, recommended key, and window countdown in the detail panel and attack bar.
 - Key combat events have distinct audio feedback.
 - Main menu can force named encounters or raw enemy archetypes for matchup testing without changing style loadouts.
@@ -1371,14 +1717,15 @@ Manual browser smoke test:
 - Should Dual Blades Perfect streak be global combo-based or chain-local?
 - Should named encounters get explicit phase changes at HP thresholds or stay as modifier-driven matchups?
 - Should future visuals remain Canvas 2D or introduce a stronger animation layer first?
+- Should hit confirm become mandatory for all damage immediately, or should phase 1 keep a fallback guaranteed-hit mode for existing content until chain hitbox metadata is complete?
+- Should whiffs consume full resource costs, partial costs, or only animation time?
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R14 encounter phases and armor depth next:
+The active-attack and hit-confirm layer is now in place. The next bottleneck is depth and tuning, not another timing-system rewrite:
 
-1. Add HP-threshold or rule-triggered second phases to at least two named encounters.
-2. Add deeper armor/shield mechanics beyond HP, status, and encounter damage multipliers.
-3. Run the manual playtest checklist on normal/hard/extreme across all four R13 encounters.
-4. Decide whether the next animation step should remain pose-tag Canvas 2D or move toward a stronger animation layer.
-
-R1-R13 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, data-driven pose specificity, one-command local verification, core CI, chain-specific handfeel, demo director focus, clearer weapon/spell synergy feedback, and named encounter rules. The next bottleneck is encounter phase depth and armor/shield systems.
+1. Run manual hard/extreme playtests against all four named encounters and tune subjective outliers that automated pressure floors cannot judge.
+2. Decide whether armor/shield should gain explicit armor stats instead of only status and encounter multipliers.
+3. Add explicit armor/shield stats only if manual playtesting shows status-only armor does not create enough decision pressure.
+4. Keep hit-confirm overlays available for debugging, but avoid turning them into always-on visual noise.
+5. Revisit the animation layer only if pose-tag Canvas 2D can no longer express attack/defense readability.

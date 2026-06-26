@@ -111,7 +111,7 @@ function showTutorialIfNeeded() {
 
 function hideTutorial() {
   tutorialOverlay.style.display = "none";
-  input.clear();
+  input.reset();
 }
 
 function logClassFor(msg) {
@@ -241,7 +241,7 @@ function showMenu() {
   hideTutorial();
   setTopBarVisible(false);
   hideAllDrawers();
-  input.clear();
+  input.reset();
   resetUICache();
   setDemoDetailHtml("<div>当前没有演示详情。</div>");
   setTurnIndicator("主菜单", "prep");
@@ -250,7 +250,7 @@ function showMenu() {
 
 function startBattle() {
   SFX.enable();
-  input.clear();
+  input.reset();
   Difficulty.set(difficultySelect.value);
   battle = new BattleSystem(input, { practiceMode: false, enemyId: selectedEnemyId() });
   battle.onLog = addLog;
@@ -272,7 +272,7 @@ function startBattle() {
 
 function startPractice() {
   SFX.enable();
-  input.clear();
+  input.reset();
   Difficulty.set(difficultySelect.value);
   battle = new BattleSystem(input, { practiceMode: true, enemyId: selectedEnemyId() });
   battle.onLog = addLog;
@@ -292,23 +292,26 @@ function startPractice() {
   showTutorialIfNeeded();
 }
 
-function showGameOver(won, isPractice, stats = null) {
+function showGameOver(won, isPractice, stats = null, resultLines = null) {
   gameOverTitle.textContent = isPractice ? "练习结束" : (won ? "胜利" : "战败");
   gameOverSubtitle.textContent = isPractice
     ? "敌人无限血量，继续挑战或返回菜单"
     : (won ? "敌人已被击败" : "玩家生命值耗尽");
   btnRestart.textContent = isPractice ? "继续练习" : "再来一局";
 
-  if (stats) {
+  if (Array.isArray(resultLines) && resultLines.length > 0) {
+    gameOverStats.innerHTML = [
+      `<div class="game-over-stats-title">战斗摘要</div>`,
+      ...resultLines.map(line => `<div>${line}</div>`)
+    ].join("");
+    gameOverStats.style.display = "grid";
+  } else if (stats) {
     const lines = [
-      `造成伤害：${stats.damageDealt}`,
-      `最大连击：×${stats.maxCombo}`,
-      `Perfect：${stats.perfectCount}`,
-      `受击次数：${stats.hitsTaken}`,
-      `命中率：${stats.accuracy}%`
+      `输出：${stats.damageDealt}  命中率：${stats.accuracy}%  Perfect：${stats.perfectCount}`,
+      `最大连击：×${stats.maxCombo}  受击：${stats.hitsTaken}`
     ];
     gameOverStats.innerHTML = lines.map(line => `<div>${line}</div>`).join("");
-    gameOverStats.style.display = "flex";
+    gameOverStats.style.display = "grid";
   } else {
     gameOverStats.innerHTML = "";
     gameOverStats.style.display = "none";
@@ -331,8 +334,8 @@ function restartCurrentMode() {
 
 function startDemo() {
   SFX.enable();
-  input.clear();
-  touchControls.classList.add("hidden");
+  input.reset();
+  setTouchControlsVisible(false);
   demo = new DemoMode(input, addLog);
   battle = null;
   appState = "demo";
@@ -389,7 +392,12 @@ function updateBattleUI() {
 
   if (battle.turnState === "game_over" && gameOverOverlay.style.display === "none") {
     const won = battle.enemyHp <= 0;
-    showGameOver(won, battle.practiceMode, battle.getBattleStats());
+    showGameOver(
+      won,
+      battle.practiceMode,
+      battle.getBattleStats(),
+      battle.getBattleResultLines ? battle.getBattleResultLines() : null
+    );
   }
 }
 
@@ -577,8 +585,13 @@ difficultySelect.addEventListener("change", () => {
   Difficulty.set(difficultySelect.value);
 });
 
+function setTouchControlsVisible(visible) {
+  touchControls.classList.toggle("hidden", !visible);
+  touchControls.setAttribute("aria-hidden", visible ? "false" : "true");
+}
+
 function toggleTouchControls() {
-  touchControls.classList.toggle("hidden");
+  setTouchControlsVisible(touchControls.classList.contains("hidden"));
 }
 
 function handleVirtualSystemKey(key) {
@@ -608,8 +621,13 @@ function handleVirtualSystemKey(key) {
 
 function pressVirtualKey(key) {
   SFX.enable();
+  if (tutorialOverlay.style.display !== "none") {
+    hideTutorial();
+    return false;
+  }
   if (handleVirtualSystemKey(key)) return false;
-  input.injectKey(key, "press");
+  input.injectKey(key, "press", { fresh: true });
+  markVirtualPress(key);
   return true;
 }
 
@@ -692,9 +710,31 @@ let activePointerKey = null;
 let activeMouseKey = null;
 let pointerSequenceActive = false;
 let suppressTouchClick = false;
+let lastVirtualPressKey = null;
+let lastVirtualPressAt = 0;
 
-touchControls.addEventListener("pointerdown", (e) => {
-  const key = getVirtualKeyFromEvent(e);
+function markVirtualPress(key) {
+  lastVirtualPressKey = key;
+  lastVirtualPressAt = performance.now();
+}
+
+function shouldSuppressVirtualClick(key) {
+  if (!suppressTouchClick) return false;
+  const sameRecentKey = lastVirtualPressKey === key && performance.now() - lastVirtualPressAt < 350;
+  suppressTouchClick = false;
+  return sameRecentKey;
+}
+
+function handleVirtualTap(key, e) {
+  if (!key) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (shouldSuppressVirtualClick(key)) return;
+  if (!pressVirtualKey(key)) return;
+  setTimeout(() => releaseVirtualKey(key), 70);
+}
+
+function handleVirtualPointerDown(key, e) {
   if (!key) return;
   e.preventDefault();
   e.stopPropagation();
@@ -702,15 +742,40 @@ touchControls.addEventListener("pointerdown", (e) => {
   activePointerKey = key;
   suppressTouchClick = true;
   pressVirtualKey(key);
-}, true);
+}
 
-touchControls.addEventListener("pointerup", (e) => {
+function handleVirtualPointerUp(e) {
   if (!activePointerKey) return;
   e.preventDefault();
   e.stopPropagation();
   releaseVirtualKey(activePointerKey);
   activePointerKey = null;
   setTimeout(() => { pointerSequenceActive = false; }, 0);
+}
+
+function handleVirtualMouseDown(key, e) {
+  if (pointerSequenceActive || !key) return;
+  e.preventDefault();
+  e.stopPropagation();
+  activeMouseKey = key;
+  suppressTouchClick = true;
+  pressVirtualKey(key);
+}
+
+function handleVirtualMouseUp(e) {
+  if (pointerSequenceActive || !activeMouseKey) return;
+  e.preventDefault();
+  e.stopPropagation();
+  releaseVirtualKey(activeMouseKey);
+  activeMouseKey = null;
+}
+
+touchControls.addEventListener("pointerdown", (e) => {
+  handleVirtualPointerDown(getVirtualKeyFromEvent(e), e);
+}, true);
+
+touchControls.addEventListener("pointerup", (e) => {
+  handleVirtualPointerUp(e);
 }, true);
 
 touchControls.addEventListener("pointerleave", () => {
@@ -726,22 +791,11 @@ touchControls.addEventListener("pointercancel", () => {
 });
 
 touchControls.addEventListener("mousedown", (e) => {
-  if (pointerSequenceActive) return;
-  const key = getVirtualKeyFromEvent(e);
-  if (!key) return;
-  e.preventDefault();
-  e.stopPropagation();
-  activeMouseKey = key;
-  suppressTouchClick = true;
-  pressVirtualKey(key);
+  handleVirtualMouseDown(getVirtualKeyFromEvent(e), e);
 }, true);
 
 touchControls.addEventListener("mouseup", (e) => {
-  if (pointerSequenceActive || !activeMouseKey) return;
-  e.preventDefault();
-  e.stopPropagation();
-  releaseVirtualKey(activeMouseKey);
-  activeMouseKey = null;
+  handleVirtualMouseUp(e);
 }, true);
 
 touchControls.addEventListener("mouseleave", () => {
@@ -752,15 +806,26 @@ touchControls.addEventListener("mouseleave", () => {
 
 touchControls.addEventListener("click", (e) => {
   const key = getVirtualKeyFromEvent(e);
-  if (!key) return;
-  e.preventDefault();
-  e.stopPropagation();
-  if (suppressTouchClick) {
-    suppressTouchClick = false;
-    return;
-  }
-  if (!pressVirtualKey(key)) return;
-  setTimeout(() => releaseVirtualKey(key), 70);
+  handleVirtualTap(key, e);
 }, true);
+
+for (const btn of touchControls.querySelectorAll("button[data-key]")) {
+  btn.addEventListener("pointerdown", (e) => {
+    handleVirtualPointerDown(btn.dataset.key, e);
+  }, true);
+  btn.addEventListener("pointerup", (e) => {
+    handleVirtualPointerUp(e);
+  }, true);
+  btn.addEventListener("mousedown", (e) => {
+    handleVirtualMouseDown(btn.dataset.key, e);
+  }, true);
+  btn.addEventListener("mouseup", (e) => {
+    handleVirtualMouseUp(e);
+  }, true);
+  btn.addEventListener("click", (e) => {
+    const key = btn.dataset.key;
+    handleVirtualTap(key, e);
+  }, true);
+}
 
 requestAnimationFrame(loop);

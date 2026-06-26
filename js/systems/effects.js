@@ -223,6 +223,15 @@ class EffectEventQueue {
       const reaction = lower.includes("perfect") || lower.includes("burst") || lower.includes("peak") ? "crit" : "hit";
       this.emit({
         type: "actorReaction",
+        target: "player",
+        reaction: "attack",
+        intensity: Math.min(1.8, 0.75 + transition.damage / 80),
+        color: reaction === "crit" ? "#f1c40f" : "#ffffff",
+        duration: reaction === "crit" ? 0.34 : 0.26,
+        label: eventName
+      });
+      this.emit({
+        type: "actorReaction",
         target: "enemy",
         reaction,
         intensity: Math.min(2.2, 0.65 + transition.damage / 50),

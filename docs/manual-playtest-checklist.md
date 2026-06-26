@@ -17,6 +17,9 @@ Use this after `node scripts/verify.js` passes when a change affects timing, vis
 - Green windows are readable before they become actionable.
 - Failed, Success, and Perfect results feel distinct without long lockouts.
 - Hit stop confirms impact without making short chains feel sticky.
+- `雨巷迅刺` feels fast without opening on two identical quick-stab checks.
+- Named encounters visibly shift attack rhythm after the enemy drops below half HP.
+- Win/loss screen shows encounter, phase reached, accuracy, Perfect count, max combo, damage, and hits taken.
 
 ## Visual Readability
 
