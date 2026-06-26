@@ -81,6 +81,7 @@ check("demo mode exposes system escape handler", demoModeJs.includes("handleSyst
 check("demo detail opens by default", mainJs.includes('demoDetailDrawer.classList.remove("hidden")'));
 check("demo detail uses status lines", mainJs.includes("demo.getStatusLines") && mainJs.includes("demo.getControlHint"));
 check("keyboard input includes style key 7", inputJs.includes('"7"'));
+check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check-timing.js")));
 
 let failures = 0;
 console.log("Smoke checklist:");

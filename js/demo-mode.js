@@ -59,10 +59,11 @@ class DemoMode {
     this.actionBarMax = 5;
 
     // 演示速度参数
-    this.normalDemoTimeScale = 0.65;
-    this.normalPostNodePause = 0.35;
-    this.defenseTimeScale = 0.45;
-    this.windupTimeScale = 0.50;
+    this.normalDemoTimeScale = 0.90;
+    this.normalPostNodePause = 0.18;
+    this.defenseTimeScale = 0.68;
+    this.defensePostNodePause = 0.32;
+    this.windupTimeScale = 0.75;
 
     // 防御演示专用：模拟敌方回合
     this.enemyAttack = null;
@@ -954,7 +955,7 @@ class DemoMode {
       chainFamily: item.chain ? item.chain.family : null,
       ...(item.context || {}),
       onNodeEffect: (node, outcome, transition) => {
-        this.freezeTimer = item.source === "enemy" ? 0.35 : 0.12;
+        this.freezeTimer = item.source === "enemy" ? 0.22 : 0.12;
         if (transition.message) this.log(transition.message);
         this.showOutcomeFeedback(outcome);
         this.emitTransitionVisual(transition);
@@ -970,7 +971,7 @@ class DemoMode {
     });
 
     this.qteRunner.timeScale = this.defenseTimeScale;
-    this.qteRunner.postNodePause = 0.8;
+    this.qteRunner.postNodePause = this.defensePostNodePause;
 
     const forceOutcome = item.forceOutcome || null;
     if (this.manualMode && !forceOutcome) {
@@ -1083,7 +1084,7 @@ class DemoMode {
       this.qteRunner.postNodePause = 0;
       this.message = `${item.name} — 手动试玩：请在判定窗口内按键`;
     } else {
-      // 自动演示：时间放慢到 0.45 倍，节点结算后停顿 0.6s
+      // 自动演示：轻微慢放并保留短停顿，避免蓄力/节奏链显得拖沓。
       this.qteRunner.timeScale = this.normalDemoTimeScale;
       this.qteRunner.postNodePause = this.normalPostNodePause;
       if (item.forceOutcome) {
@@ -1125,12 +1126,12 @@ class DemoMode {
           const isDefense = this.currentItem && this.currentItem.source === "enemy";
           if (this.manualMode) {
             this.qteRunner.timeScale = isDefense ? this.defenseTimeScale : 1;
-            this.qteRunner.postNodePause = isDefense ? 0.8 : 0;
+            this.qteRunner.postNodePause = isDefense ? this.defensePostNodePause : 0;
             this.qteRunner.forcedOutcome = null;
             this.message = `${this.previewTitle} — 手动试玩`;
           } else {
             this.qteRunner.timeScale = isDefense ? this.defenseTimeScale : this.normalDemoTimeScale;
-            this.qteRunner.postNodePause = isDefense ? 0.8 : this.normalPostNodePause;
+            this.qteRunner.postNodePause = isDefense ? this.defensePostNodePause : this.normalPostNodePause;
             this.qteRunner.forceOutcome(this.currentItem?.forceOutcome || "perfect");
             this.message = `${this.previewTitle} — 自动演示中`;
           }

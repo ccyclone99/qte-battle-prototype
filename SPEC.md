@@ -17,6 +17,8 @@ The prototype should become a content-extensible combat sandbox:
 - Main menu HUD bleed fixed.
 - QTE and demo layout moved into safer screen zones.
 - Demo playback speed and node pauses tuned.
+- Difficulty timing now keeps QTE speed close to base data and widens/narrows windows around the intended timing point.
+- Staff chant, Fire charge, and Absorb siphon timings tuned to avoid stalled charge/rhythm playback.
 - Fireball charge particles moved out of renderer-side draw calls.
 - QTE handfeel padding added for press, hold-release, rhythm, and timeout grace.
 - Chain metadata added to all current chains:
@@ -183,6 +185,20 @@ The current runner supports configurable handfeel:
 - `timeoutGrace`: `0.22`
 
 These values should remain globally tunable and later exposed in a debug panel.
+
+### Difficulty Timing Policy
+
+- Difficulty must not make chains feel slow by multiplying node duration aggressively.
+- Easy and Normal should mainly widen timing windows and enemy response windows.
+- Hard and Extreme may compress QTE duration slightly, but must keep first inputs readable.
+- Timing windows should scale around the Perfect point or window center, not shift later in the node.
+- Hold-release Perfect timing should stay within readable charge windows instead of waiting through long empty bar time.
+
+Current difficulty timing targets are enforced by:
+
+```powershell
+node scripts\check-timing.js
+```
 
 ### Press Nodes
 
@@ -805,6 +821,7 @@ Should display:
 Existing:
 
 - `node scripts/validate-data.js`
+- `node scripts/check-timing.js`
 
 Future:
 
@@ -1085,6 +1102,7 @@ Remaining cleanup after R6-B:
 node scripts\validate-data.js
 node scripts\sim-chain.js flame_blade perfect
 node scripts\sim-chain.js overflow_burst perfect
+node scripts\check-timing.js
 node scripts\check-balance.js
 node scripts\smoke-checklist.js
 node scripts\flow-smoke.js
