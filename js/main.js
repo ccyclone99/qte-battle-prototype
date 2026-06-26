@@ -16,6 +16,7 @@ const btnPractice = document.getElementById("btn-practice");
 const btnDemo = document.getElementById("btn-demo");
 const btnMenu = document.getElementById("btn-menu");
 const difficultySelect = document.getElementById("difficulty-select");
+const styleSelect = document.getElementById("style-select");
 const enemySelect = document.getElementById("enemy-select");
 
 const gameOverOverlay = document.getElementById("game-over");
@@ -101,6 +102,48 @@ let tutorialShownThisSession = false;
 function selectedEnemyId() {
   if (!enemySelect || enemySelect.value === "auto") return null;
   return enemySelect.value;
+}
+
+function styleOptionLabel(style) {
+  return `${style.number} · ${style.name} [${style.key}]`;
+}
+
+function syncStyleSelectOptions() {
+  if (!styleSelect || typeof StyleDatabase === "undefined") return;
+  const selected = styleSelect.value || "manual";
+  const manual = document.createElement("option");
+  manual.value = "manual";
+  manual.textContent = "进战斗后手动选择";
+  manual.selected = selected === "manual";
+  styleSelect.replaceChildren(manual);
+
+  for (const [id, style] of Object.entries(StyleDatabase)) {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = styleOptionLabel(style);
+    option.selected = id === selected;
+    styleSelect.appendChild(option);
+  }
+
+  if (selected !== "manual" && !StyleDatabase[selected]) {
+    styleSelect.value = "manual";
+  }
+}
+
+function selectedStyleId() {
+  if (!styleSelect || styleSelect.value === "manual") return null;
+  return StyleDatabase[styleSelect.value] ? styleSelect.value : null;
+}
+
+function applyMenuStyleSelection() {
+  const styleId = selectedStyleId();
+  if (!battle || !styleId) return false;
+
+  battle.applyStyle(styleId);
+  battle.startPlayerTurn();
+  const style = StyleDatabase[styleId];
+  addLog(`菜单风格：${style.name} [${style.key}]`);
+  return true;
 }
 
 function showTutorialIfNeeded() {
@@ -246,6 +289,7 @@ function showMenu() {
   setDemoDetailHtml("<div>当前没有演示详情。</div>");
   setTurnIndicator("主菜单", "prep");
   setDifficultyBadge(Difficulty.get().name);
+  syncStyleSelectOptions();
 }
 
 function startBattle() {
@@ -266,6 +310,7 @@ function startBattle() {
   setTurnIndicator("战前准备", "prep");
   setDifficultyBadge(Difficulty.get().name);
   addLog(`战斗开始 — 难度：${Difficulty.get().name}`);
+  applyMenuStyleSelection();
   setHelpContent(battleHelpHtml);
   showTutorialIfNeeded();
 }
@@ -288,6 +333,7 @@ function startPractice() {
   setTurnIndicator("战前准备", "prep");
   setDifficultyBadge(`${Difficulty.get().name} · 练习`);
   addLog(`练习模式开始 — 敌人无限血量`);
+  applyMenuStyleSelection();
   setHelpContent(battleHelpHtml);
   showTutorialIfNeeded();
 }
@@ -828,4 +874,5 @@ for (const btn of touchControls.querySelectorAll("button[data-key]")) {
   }, true);
 }
 
+syncStyleSelectOptions();
 requestAnimationFrame(loop);

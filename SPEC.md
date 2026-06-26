@@ -1752,6 +1752,25 @@ Acceptance criteria:
 - Static smoke protects the presence of these visual helpers and enemy model metadata.
 - Visual smoke still passes on desktop and mobile screenshots.
 
+### R21.1 - Menu Style Entry, Completed
+
+Goal: make newly added combat styles visible from the first online screen, not only through the pre-battle canvas keyboard selector.
+
+Implemented direction:
+
+- Main menu now includes a `战斗风格` dropdown.
+- The dropdown is synchronized from `StyleDatabase` at startup, with HTML options kept as a first-paint fallback.
+- The default remains `进战斗后手动选择`, preserving the existing `1-8` canvas selection flow.
+- Selecting a concrete style from the menu creates the battle, applies that style, and immediately enters the player turn.
+- `023 · 逆势双刃 [8]` is explicitly listed in the menu and still maps to `逆势试炼` through style data.
+- Resource query version was bumped so GitHub Pages clients pull the updated menu and startup script.
+
+Acceptance criteria:
+
+- Online menu visibly exposes `023 · 逆势双刃 [8]`.
+- Starting battle or practice with that menu option enters style `counterflow` without needing to press `8`.
+- Static smoke protects the style dropdown, the counterflow option, and the menu-start style application hook.
+
 ## 22. Verification Commands
 
 ```powershell

@@ -87,6 +87,10 @@ check("style flameforge exists on key 6", StyleDatabase.flameforge && StyleDatab
 check("style mirrorblade exists on key 7", StyleDatabase.mirrorblade && StyleDatabase.mirrorblade.key === "7");
 check("style counterflow exists on key 8", StyleDatabase.counterflow && StyleDatabase.counterflow.key === "8");
 check("counterflow uses counter dojo", StyleDatabase.counterflow.preferredEncounter === "counter_dojo");
+check("main menu exposes style select", indexHtml.includes('id="style-select"') && indexHtml.includes('value="manual"'));
+check("main menu exposes counterflow option", indexHtml.includes('value="counterflow"') && indexHtml.includes("逆势双刃 [8]"));
+check("main menu style select starts chosen style", mainJs.includes("selectedStyleId") && mainJs.includes("applyMenuStyleSelection") && mainJs.includes("battle.startPlayerTurn()"));
+check("main menu syncs style select from data", mainJs.includes("syncStyleSelectOptions") && mainJs.includes("Object.entries(StyleDatabase)") && mainJs.includes("styleOptionLabel"));
 check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.knifeFlurry);
 
 for (const id of ["caster", "armored", "swift", "shielded"]) {
