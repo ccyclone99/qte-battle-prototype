@@ -1722,6 +1722,36 @@ Remaining cleanup after R13 first pass:
 - Screenshot smoke covers main menu, Showcase, enemy readouts, battle style `6`, battle style `7`, result preview replay, and mobile landscape demo layout.
 - Mobile landscape keeps the 16:9 game container inside the viewport without clipping the demo category controls.
 
+### R21 - Visual Experience Pass: Stage, Models, And Readability
+
+Goal: make the current Canvas 2D presentation read more like an authored battle scene without replacing the combat engine or requiring external art assets.
+
+Scope:
+
+- Battle stage:
+  - Draw a perspective floor with encounter-colored lane light.
+  - Use a subtle response-window floor pulse during enemy reactions.
+  - Keep the stage full-screen and behind actors; it must not compete with QTE bars.
+- Player model:
+  - Draw weapon-dependent back gear, armor accents, headgear, and spell core.
+  - Greatsword, dual blades, and staff should have visibly different silhouettes even while idle.
+  - Fire and absorb spell loadouts should add a readable chest/core accent.
+- Enemy models:
+  - Enemy archetypes define a `model` data object.
+  - Renderer should prefer `model.type` over icon-only branching.
+  - Golem, caster, armored, swift, and shielded enemies should have distinct body shapes, gear, headgear, and accent layers.
+- Combat UI:
+  - Add compact actor nameplates near the combatants.
+  - Nameplates show player style/weapon and enemy name/model or encounter phase.
+  - Nameplates are canvas overlays and must not replace DOM HP bars or debug drawers.
+
+Acceptance criteria:
+
+- `EnemyDatabase` archetypes include `model` metadata.
+- `CanvasRenderer` contains battle-stage, actor-ground-sigil, actor-nameplate, player-gear, enemy-model-accent, and enemy-headgear helpers.
+- Static smoke protects the presence of these visual helpers and enemy model metadata.
+- Visual smoke still passes on desktop and mobile screenshots.
+
 ## 22. Verification Commands
 
 ```powershell

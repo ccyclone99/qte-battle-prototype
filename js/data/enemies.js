@@ -4,6 +4,12 @@ const EnemyDatabase = {
     maxHp: 200,
     color: "#c0392b",
     icon: "敌",
+    model: {
+      type: "golem",
+      build: "medium",
+      gear: "hammer",
+      armor: "stone"
+    },
     attacks: ["thrust", "slash", "heavySmash", "spellCast"]
   },
 
@@ -13,6 +19,12 @@ const EnemyDatabase = {
       maxHp: 200,
       color: "#c0392b",
       icon: "敌",
+      model: {
+        type: "golem",
+        build: "medium",
+        gear: "hammer",
+        armor: "stone"
+      },
       attacks: ["thrust", "slash", "heavySmash", "spellCast"]
     },
     caster: {
@@ -20,6 +32,12 @@ const EnemyDatabase = {
       maxHp: 170,
       color: "#8e44ad",
       icon: "术",
+      model: {
+        type: "caster",
+        build: "slim",
+        gear: "focus",
+        armor: "robe"
+      },
       attacks: ["spellCast", "arcaneBolt", "curseBurst"]
     },
     armored: {
@@ -27,6 +45,12 @@ const EnemyDatabase = {
       maxHp: 260,
       color: "#922b21",
       icon: "甲",
+      model: {
+        type: "armored",
+        build: "heavy",
+        gear: "greatsword",
+        armor: "plate"
+      },
       attacks: ["heavySmash", "shieldBash", "slash"]
     },
     swift: {
@@ -34,6 +58,12 @@ const EnemyDatabase = {
       maxHp: 160,
       color: "#27ae60",
       icon: "迅",
+      model: {
+        type: "swift",
+        build: "lean",
+        gear: "dualBlades",
+        armor: "cloak"
+      },
       attacks: ["quickStab", "thrust", "slash"]
     },
     shielded: {
@@ -41,6 +71,12 @@ const EnemyDatabase = {
       maxHp: 220,
       color: "#d4ac0d",
       icon: "盾",
+      model: {
+        type: "shielded",
+        build: "guard",
+        gear: "shield",
+        armor: "ward"
+      },
       attacks: ["shieldBash", "slash", "arcaneBolt"]
     }
   },

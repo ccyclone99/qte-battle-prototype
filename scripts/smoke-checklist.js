@@ -91,6 +91,7 @@ check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.a
 
 for (const id of ["caster", "armored", "swift", "shielded"]) {
   check(`enemy archetype exists: ${id}`, !!(EnemyDatabase.archetypes && EnemyDatabase.archetypes[id]));
+  check(`enemy archetype has model: ${id}`, !!(EnemyDatabase.archetypes && EnemyDatabase.archetypes[id] && EnemyDatabase.archetypes[id].model && EnemyDatabase.archetypes[id].model.type));
 }
 
 for (const id of ["ember_bulwark", "arcane_conduit", "knife_rain", "shield_rite", "counter_dojo"]) {
@@ -104,6 +105,9 @@ check("overflowBurst has burst renderer data", !!(EffectEventDefinitions.overflo
 check("greatswordCleavePerfect has burst renderer data", !!(EffectEventDefinitions.greatswordCleavePerfect && EffectEventDefinitions.greatswordCleavePerfect.bursts));
 check("renderer has player silhouette helper", rendererJs.includes("drawPlayerSilhouette"));
 check("renderer has enemy silhouette helper", rendererJs.includes("drawEnemySilhouette"));
+check("renderer has stage and nameplate helpers", rendererJs.includes("drawBattleStage") && rendererJs.includes("drawActorGroundSigil") && rendererJs.includes("drawCombatNameplates"));
+check("renderer has player equipment model helpers", rendererJs.includes("drawPlayerBackGear") && rendererJs.includes("drawPlayerArmorAccents") && rendererJs.includes("drawPlayerHeadgear"));
+check("renderer has enemy model accent helpers", rendererJs.includes("drawEnemyModelAccents") && rendererJs.includes("drawEnemyHeadgear") && rendererJs.includes("model.type"));
 check("renderer has node-timed action helper", rendererJs.includes("getActionTiming"));
 check("renderer supports node pose tags", rendererJs.includes("getCurrentPose") && rendererJs.includes("node.pose"));
 check("chains include R10 pose tags", chainsJs.includes('motion: "flameBladeCut"') && chainsJs.includes('motion: "overflowBurst"') && chainsJs.includes('motion: "greatswordEarthsplit"'));
