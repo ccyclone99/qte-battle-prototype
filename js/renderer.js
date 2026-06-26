@@ -427,13 +427,87 @@ class CanvasRenderer {
       weaponId,
       weapon,
       styleId: config.style || "",
+      styleKey: style ? style.key : "",
       styleNumber: style ? style.number : "",
+      styleName: style ? style.name : "",
       styleColor: style ? style.color : (weapon ? weapon.color : "#3498db"),
       armor,
       gear: weaponId || "unarmed",
       hasFire: spells.includes("fire"),
       hasAbsorb: spells.includes("absorb")
     };
+  }
+
+  getPlayerRigProfile(playerProfile = {}) {
+    const profile = playerProfile || {};
+    const weaponId = profile.weaponId || profile.weapon || "";
+    const armor = profile.armor || "standard";
+    const styleKey = profile.styleKey || "";
+    const base = {
+      weaponId,
+      armor,
+      silhouette: "standard-adventurer",
+      scaleX: 1,
+      scaleY: 1,
+      torsoW: 44,
+      torsoH: 56,
+      headRadius: 15,
+      legWidth: 9,
+      armWidth: 7,
+      shadowScale: 1,
+      stance: 1
+    };
+
+    if (weaponId === "greatsword" || armor === "heavy") {
+      return {
+        ...base,
+        silhouette: "vanguard-plate",
+        scaleX: 1.08,
+        scaleY: 1.03,
+        torsoW: 52,
+        torsoH: 60,
+        headRadius: 16,
+        legWidth: 10,
+        armWidth: 8,
+        shadowScale: 1.12,
+        stance: 1.12
+      };
+    }
+
+    if (weaponId === "staff" || armor === "caster") {
+      return {
+        ...base,
+        silhouette: "arcane-mantle",
+        scaleX: 0.96,
+        scaleY: 1.07,
+        torsoW: 42,
+        torsoH: 64,
+        headRadius: 14,
+        legWidth: 7,
+        armWidth: 6,
+        shadowScale: 0.88,
+        stance: 0.86
+      };
+    }
+
+    if (weaponId === "dualBlades") {
+      const counter = styleKey === "8";
+      return {
+        ...base,
+        silhouette: counter ? "counter-duelist" : "agile-duelist",
+        scaleX: counter ? 0.90 : 0.93,
+        scaleY: 0.98,
+        torsoW: counter ? 40 : 42,
+        torsoH: 54,
+        headRadius: 14,
+        legWidth: 7,
+        armWidth: 6,
+        shadowScale: counter ? 0.90 : 0.94,
+        stance: counter ? 1.34 : 1.22
+      };
+    }
+
+    return base;
   }
 
   getEnemyModelProfile(config = {}) {
@@ -2299,6 +2373,8 @@ class CanvasRenderer {
     const actionTiming = this.getActionTiming(scene, t);
     const pose = this.getCurrentPose(scene);
     const playerPerformance = this.getActorPerformance(scene, "player", playerReaction, pose);
+    const playerProfile = this.getPlayerModelProfile(scene);
+    const playerRig = this.getPlayerRigProfile(playerProfile);
 
     // 待机呼吸
     let bob = Math.sin(t * 2) * 2;
@@ -2322,7 +2398,7 @@ class CanvasRenderer {
     stanceOffset += playerPerformance.offsetX;
     px += stanceOffset;
 
-    this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42 * playerPerformance.shadowScale, "rgba(52, 152, 219, 0.3)");
+    this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42 * playerPerformance.shadowScale * playerRig.shadowScale, "rgba(52, 152, 219, 0.3)");
     this.drawActorGroundSigil(ctx, basePx + stanceOffset, basePy + 45, 50, styleColor, "player", t);
     const playerStatusVisuals = this.getActorStatusVisuals(scene, "player");
     this.drawActorPerformanceAfterimage(ctx, "player", px, py, styleColor, playerPerformance, t);
@@ -2339,6 +2415,8 @@ class CanvasRenderer {
       progress: actionTiming.progress,
       pose,
       performance: playerPerformance,
+      playerProfile,
+      playerRig,
       t
     });
     this.drawPlayerStatusOverlays(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
@@ -3194,6 +3272,8 @@ class CanvasRenderer {
       progress,
       pose,
       performance,
+      playerProfile: providedProfile,
+      playerRig: providedRig,
       t
     } = options;
     const perf = performance || {};
@@ -3207,7 +3287,6 @@ class CanvasRenderer {
     const stride = perf.stride || 0;
     const brace = perf.brace || 0;
     const castPower = perf.cast || 0;
-    const playerProfile = this.getPlayerModelProfile(scene);
     let lean = isAttack ? -0.14 + attackEase * 0.22 : (isShield ? -0.10 : (isCast ? -0.06 : 0));
     if (motion === "dualDash") lean = -0.24 + attackEase * 0.15;
     if (motion === "dualRetreat") lean = 0.08 - attackEase * 0.18;
@@ -3216,20 +3295,37 @@ class CanvasRenderer {
     lean += perf.lean || 0;
     const bodyColor = weaponId === "greatsword" ? "#33506f" : (weaponId === "dualBlades" ? "#255f69" : "#2f5b8f");
     const trimColor = styleColor || (weapon ? weapon.color : "#3498db");
+    const playerProfile = providedProfile || this.getPlayerModelProfile(scene);
+    const rig = providedRig || this.getPlayerRigProfile(playerProfile);
     const hasFire = playerProfile.hasFire;
     const hasAbsorb = playerProfile.hasAbsorb;
+    const torsoW = rig.torsoW || 44;
+    const torsoH = rig.torsoH || 56;
+    const headRadius = rig.headRadius || 15;
+    const legWidth = rig.legWidth || 9;
+    const armWidth = rig.armWidth || 7;
+    const stance = rig.stance || 1;
+    const torsoTop = -24;
+    const torsoBottom = torsoTop + torsoH;
+    const hipY = torsoBottom - 10;
+    const footY = torsoBottom + 18;
+    const shoulderX = Math.max(14, torsoW * 0.36);
+    const shoulderY = torsoTop + 14;
+    const headY = torsoTop - headRadius - 9;
+    const chestY = torsoTop + torsoH * 0.45;
 
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
-    ctx.scale(perf.scaleX || 1, perf.scaleY || 1);
+    ctx.scale((perf.scaleX || 1) * (rig.scaleX || 1), (perf.scaleY || 1) * (rig.scaleY || 1));
     ctx.rotate(lean + (reaction.rotation || 0));
 
+    this.drawPlayerRigBackDetails(ctx, playerProfile, rig, trimColor, motion, attackEase, t);
     this.drawPlayerBackGear(ctx, weaponId, trimColor, motion, attackEase);
 
     // legs
-    this.drawLimb(ctx, -12, 22, -22 - stride * 0.25, 50, "#24364d", 9);
-    this.drawLimb(ctx, 10, 22, 20 + stride * 0.38, 50 - Math.min(8, stride * 0.12), "#24364d", 9);
+    this.drawLimb(ctx, -torsoW * 0.24, hipY, -22 * stance - stride * 0.25, footY, "#24364d", legWidth);
+    this.drawLimb(ctx, torsoW * 0.22, hipY, 20 * stance + stride * 0.38, footY - Math.min(8, stride * 0.12), "#24364d", legWidth);
 
     // torso
     ctx.fillStyle = bodyColor;
@@ -3238,7 +3334,7 @@ class CanvasRenderer {
     ctx.shadowColor = trimColor;
     ctx.shadowBlur = isCast ? 14 : 0;
     ctx.beginPath();
-    ctx.roundRect(-22, -24, 44, 56, 10);
+    ctx.roundRect(-torsoW / 2, torsoTop, torsoW, torsoH, torsoW > 48 ? 12 : 9);
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
@@ -3248,7 +3344,7 @@ class CanvasRenderer {
     // head
     ctx.fillStyle = "#d7e7ff";
     ctx.beginPath();
-    ctx.arc(0, -48, 15, 0, Math.PI * 2);
+    ctx.arc(0, headY, headRadius, 0, Math.PI * 2);
     ctx.fill();
     this.drawPlayerHeadgear(ctx, weaponId, trimColor);
 
@@ -3257,28 +3353,28 @@ class CanvasRenderer {
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(weapon ? (weapon.icon || weapon.name[0]) : "?", 0, 1);
+    ctx.fillText(weapon ? (weapon.icon || weapon.name[0]) : "?", 0, chestY);
 
     if (isShield) {
       const shieldX = (motion === "mirrorGuard" ? 58 : 50) + brace * 9;
-      this.drawLimb(ctx, 18, -10, shieldX - 8, -6, "#d7e7ff", 7);
+      this.drawLimb(ctx, shoulderX, shoulderY, shieldX - 8, -6, "#d7e7ff", armWidth);
       this.drawShieldSilhouette(ctx, shieldX, -4, trimColor, t);
       if (motion === "mirrorGuard") this.drawCastFocus(ctx, shieldX + 6, -4, trimColor, t);
-      this.drawLimb(ctx, -16, -8, -34, 10, "#d7e7ff", 7);
+      this.drawLimb(ctx, -shoulderX, shoulderY + 2, -34, 10, "#d7e7ff", armWidth);
     } else if (isCast) {
       if (motion === "overflowCompress") {
-        this.drawLimb(ctx, 16, -10, 34 + castPower * 8, -5 - castPower * 4, "#d7e7ff", 7);
-        this.drawLimb(ctx, -16, -8, -34 - castPower * 8, -5 - castPower * 4, "#d7e7ff", 7);
+        this.drawLimb(ctx, shoulderX, shoulderY, 34 + castPower * 8, -5 - castPower * 4, "#d7e7ff", armWidth);
+        this.drawLimb(ctx, -shoulderX, shoulderY + 2, -34 - castPower * 8, -5 - castPower * 4, "#d7e7ff", armWidth);
         this.drawCastFocus(ctx, 0, -18 - castPower * 4, trimColor, t);
       } else if (motion === "absorbSiphon" || motion === "absorbRelease" || motion === "overflowBurst") {
-        this.drawLimb(ctx, 16, -10, 52 + attackEase * 10 + armReach * 0.2, -18 - castPower * 5, "#d7e7ff", 7);
+        this.drawLimb(ctx, shoulderX, shoulderY, 52 + attackEase * 10 + armReach * 0.2, -18 - castPower * 5, "#d7e7ff", armWidth);
         this.drawCastFocus(ctx, 62 + attackEase * 10 + armReach * 0.2, -20 - castPower * 5, trimColor, t);
-        this.drawLimb(ctx, -16, -8, -46, -18, "#d7e7ff", 7);
+        this.drawLimb(ctx, -shoulderX, shoulderY + 2, -46, -18, "#d7e7ff", armWidth);
         this.drawCastFocus(ctx, -54, -20, trimColor, t);
       } else {
-        this.drawLimb(ctx, 16, -10, 43 + armReach * 0.25, -30 - castPower * 8, "#d7e7ff", 7);
+        this.drawLimb(ctx, shoulderX, shoulderY, 43 + armReach * 0.25, -30 - castPower * 8, "#d7e7ff", armWidth);
         this.drawCastFocus(ctx, 52 + armReach * 0.25, -35 - castPower * 8, trimColor, t);
-        this.drawLimb(ctx, -16, -8, -38, -22, "#d7e7ff", 7);
+        this.drawLimb(ctx, -shoulderX, shoulderY + 2, -38, -22, "#d7e7ff", armWidth);
       }
       if (weaponId === "staff") {
         const staffAngle = motion === "fireRelease" ? -0.48 : -0.22;
@@ -3288,8 +3384,8 @@ class CanvasRenderer {
       if (weaponId === "dualBlades") {
         const retreat = motion === "dualRetreat";
         const finisher = motion === "dualFinisher";
-        this.drawLimb(ctx, 16, -10, 42 + attackEase * (retreat ? -16 : 28) + armReach * 0.45, -18 + attackEase * (finisher ? -8 : 12), "#d7e7ff", 7);
-        this.drawLimb(ctx, -16, -8, -38 + attackEase * (retreat ? -18 : 16) + armReach * 0.18, -4 + attackEase * 8, "#d7e7ff", 7);
+        this.drawLimb(ctx, shoulderX, shoulderY, 42 + attackEase * (retreat ? -16 : 28) + armReach * 0.45, -18 + attackEase * (finisher ? -8 : 12), "#d7e7ff", armWidth);
+        this.drawLimb(ctx, -shoulderX, shoulderY + 2, -38 + attackEase * (retreat ? -18 : 16) + armReach * 0.18, -4 + attackEase * 8, "#d7e7ff", armWidth);
         this.drawWeaponSilhouette(ctx, weaponId, 48 + attackEase * (retreat ? -16 : 28) + armReach * 0.45, -18 + attackEase * (finisher ? -8 : 12), trimColor, -0.55 + attackEase * 0.9, finisher ? 1.1 : 0.95);
         this.drawWeaponSilhouette(ctx, weaponId, -44 + attackEase * (retreat ? -18 : 16) + armReach * 0.18, -4 + attackEase * 8, trimColor, Math.PI - 0.35 - attackEase * 0.65, finisher ? 1.0 : 0.85);
       } else {
@@ -3307,14 +3403,14 @@ class CanvasRenderer {
           angle = -1.05 + attackEase * 1.2;
           weaponScale = 1.15;
         }
-        this.drawLimb(ctx, 16, -10, weaponX - 6, weaponY + 4, "#d7e7ff", 7);
-        this.drawLimb(ctx, -16, -8, -32 + attackEase * 10, 2, "#d7e7ff", 7);
+        this.drawLimb(ctx, shoulderX, shoulderY, weaponX - 6, weaponY + 4, "#d7e7ff", armWidth);
+        this.drawLimb(ctx, -shoulderX, shoulderY + 2, -32 + attackEase * 10, 2, "#d7e7ff", armWidth);
         this.drawWeaponSilhouette(ctx, weaponId, weaponX, weaponY, trimColor, angle, weaponScale);
       }
     } else if (brace > 0.05) {
       const guardX = 36 + brace * 18;
-      this.drawLimb(ctx, 16, -8, guardX, -14, "#d7e7ff", 7);
-      this.drawLimb(ctx, -16, -8, guardX - 18, 4, "#d7e7ff", 7);
+      this.drawLimb(ctx, shoulderX, shoulderY + 2, guardX, -14, "#d7e7ff", armWidth);
+      this.drawLimb(ctx, -shoulderX, shoulderY + 2, guardX - 18, 4, "#d7e7ff", armWidth);
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha = 0.18 + brace * 0.22;
@@ -3325,9 +3421,99 @@ class CanvasRenderer {
       ctx.stroke();
       ctx.restore();
     } else {
-      this.drawLimb(ctx, 16, -8, 36, 7, "#d7e7ff", 7);
-      this.drawLimb(ctx, -16, -8, -36, 10, "#d7e7ff", 7);
+      this.drawLimb(ctx, shoulderX, shoulderY + 2, 36, 7, "#d7e7ff", armWidth);
+      this.drawLimb(ctx, -shoulderX, shoulderY + 2, -36, 10, "#d7e7ff", armWidth);
       this.drawWeaponSilhouette(ctx, weaponId, 38, 10, trimColor, 0.25, 0.78);
+    }
+
+    ctx.restore();
+  }
+
+  drawPlayerRigBackDetails(ctx, profile, rig, color, motion, progress, t) {
+    const silhouette = rig.silhouette || "standard-adventurer";
+    const torsoW = rig.torsoW || 44;
+    const torsoH = rig.torsoH || 56;
+    const top = -26;
+    const bottom = top + torsoH;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = this.hexToRgba(color || "#3498db", 0.52);
+    ctx.fillStyle = this.hexToRgba(color || "#3498db", 0.13);
+    ctx.shadowColor = color || "#3498db";
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 2;
+
+    if (silhouette === "vanguard-plate") {
+      ctx.beginPath();
+      ctx.roundRect(-torsoW * 0.78, top + 8, torsoW * 0.34, 20, 6);
+      ctx.roundRect(torsoW * 0.44, top + 8, torsoW * 0.34, 20, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 0.42;
+      ctx.beginPath();
+      ctx.moveTo(-torsoW * 0.44, bottom - 4);
+      ctx.lineTo(-torsoW * 0.62, bottom + 22);
+      ctx.lineTo(torsoW * 0.62, bottom + 20);
+      ctx.lineTo(torsoW * 0.44, bottom - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (profile.hasFire) {
+        ctx.strokeStyle = "#e67e22";
+        ctx.globalAlpha = 0.58;
+        for (let i = 0; i < 3; i++) {
+          const x = -16 + i * 16;
+          ctx.beginPath();
+          ctx.moveTo(x, bottom + 8);
+          ctx.lineTo(x + Math.sin(t * 7 + i) * 3, bottom + 25);
+          ctx.stroke();
+        }
+      }
+    } else if (silhouette === "counter-duelist" || silhouette === "agile-duelist") {
+      const counter = silhouette === "counter-duelist";
+      ctx.lineWidth = counter ? 3 : 2;
+      ctx.strokeStyle = this.hexToRgba(counter ? "#2fffd1" : (color || "#3498db"), counter ? 0.62 : 0.48);
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        const sway = Math.sin(t * 5 + i) * (counter ? 5 : 3);
+        ctx.beginPath();
+        ctx.moveTo(side * 7, top + 20);
+        ctx.bezierCurveTo(side * (28 + progress * 8), top + 38, side * (36 + sway), bottom + 12, side * (22 + sway), bottom + 34);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = counter ? 0.34 : 0.22;
+      ctx.beginPath();
+      ctx.arc(7, -6, 48 + progress * 10, -0.85, 0.62);
+      ctx.stroke();
+      if (counter) {
+        ctx.beginPath();
+        ctx.moveTo(-34, 16);
+        ctx.lineTo(34, -16);
+        ctx.moveTo(-28, -16);
+        ctx.lineTo(30, 16);
+        ctx.stroke();
+      }
+    } else if (silhouette === "arcane-mantle") {
+      ctx.beginPath();
+      ctx.moveTo(-torsoW * 0.52, top + 10);
+      ctx.quadraticCurveTo(-torsoW * 0.72, bottom - 2, -torsoW * 0.42, bottom + 28);
+      ctx.lineTo(torsoW * 0.42, bottom + 28);
+      ctx.quadraticCurveTo(torsoW * 0.72, bottom - 2, torsoW * 0.52, top + 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 0.48;
+      ctx.beginPath();
+      ctx.arc(0, -47, 24 + Math.sin(t * 3.2) * 2, Math.PI * 0.02, Math.PI * 0.98);
+      ctx.stroke();
+      this.drawStageGlyph(ctx, 0, -10, 13, color, t * 0.7, 0.18);
+    } else {
+      ctx.globalAlpha = 0.22;
+      ctx.beginPath();
+      ctx.moveTo(-torsoW * 0.45, bottom - 2);
+      ctx.lineTo(0, bottom + 18);
+      ctx.lineTo(torsoW * 0.45, bottom - 2);
+      ctx.stroke();
     }
 
     ctx.restore();

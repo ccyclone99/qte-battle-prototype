@@ -2016,6 +2016,27 @@ Acceptance criteria:
 - Static smoke protects all five rig silhouette families.
 - Visual smoke verifies armored and caster enemy rig profiles during existing battle screenshots.
 
+### R33 Player Rig Silhouette Pass, Completed
+
+Goal: player weapon styles should read from body proportions, stance, and back silhouette before the player looks at UI labels or weapon trails.
+
+Implemented direction:
+
+- `CanvasRenderer.getPlayerRigProfile()` maps player weapon/style data into render rig values: silhouette family, scale, torso size, head radius, limb width, stance, and shadow scale.
+- Player rendering now uses the rig profile for shadow weight, body proportions, leg stance, limb width, and head size.
+- `drawPlayerRigBackDetails()` adds style-readable back layers:
+  - greatsword/heavy styles: `vanguard-plate` shoulder bulk, plate skirt, and fire vents when fire is equipped
+  - normal dual-blade styles: `agile-duelist` sash motion and slim stance
+  - style 8: `counter-duelist` wider footwork, counter arc, and crossed guard lines
+  - staff/caster styles: `arcane-mantle` robe panels, halo, and glyph
+- This pass is render-only and does not change player stats, QTE timing, hit confirm, damage, movement, or input handling.
+
+Acceptance criteria:
+
+- Renderer exposes player rig profile and back-detail helpers.
+- Static smoke protects player rig silhouette families.
+- Visual smoke verifies greatsword, dual-blade, and style 8 counter player rig profiles during existing battle screenshots.
+
 ## 22. Verification Commands
 
 ```powershell

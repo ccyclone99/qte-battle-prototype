@@ -641,6 +641,12 @@ async function runVisualSmoke() {
         const p = r.getPlayerModelProfile(battle);
         return !!(p && p.weaponId === "greatsword" && p.armor === "heavy" && p.hasFire);
       })()`) },
+      { label: "greatsword player rig silhouette", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerRigProfile) return false;
+        const rig = r.getPlayerRigProfile(r.getPlayerModelProfile(battle));
+        return !!(rig && rig.silhouette === "vanguard-plate" && rig.torsoW >= 50 && rig.shadowScale > 1.05 && rig.legWidth >= 10);
+      })()`) },
       { label: "enemy model profile reads armored gear", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || typeof battle === "undefined" || !r.getEnemyModelProfile) return false;
@@ -712,6 +718,12 @@ async function runVisualSmoke() {
         if (!r || !r.getActorStatusVisuals) return false;
         const player = r.getActorStatusVisuals(battle, "player");
         return player.spellRatio > 0.9 && player.absorbReady && player.shieldEnchant && player.overload;
+      })()`) },
+      { label: "dual blades player rig silhouette", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerRigProfile) return false;
+        const rig = r.getPlayerRigProfile(r.getPlayerModelProfile(battle));
+        return !!(rig && rig.silhouette === "agile-duelist" && rig.scaleX < 1 && rig.stance > 1.15 && rig.armWidth <= 6);
       })()`) }
     ]);
 
@@ -739,6 +751,12 @@ async function runVisualSmoke() {
       { label: "style 8 dojo stage theme", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "dojo");
+      })()`) },
+      { label: "style 8 player counter rig", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerRigProfile) return false;
+        const rig = r.getPlayerRigProfile(r.getPlayerModelProfile(battle));
+        return !!(rig && rig.silhouette === "counter-duelist" && rig.stance > 1.25 && rig.scaleX < 0.95 && rig.shadowScale < 1);
       })()`) },
       { label: "enemy response cinematic focus", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
