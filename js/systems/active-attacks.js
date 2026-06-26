@@ -305,7 +305,7 @@ class ActiveAttackSystem {
       else if (isSpell && isEnemy) type = "projectile";
       else type = "melee";
     }
-    if (includes(["fireblade", "flame_blade", "slash", "cleave", "cut"]) && !includes(["fireball"])) {
+    if (!intent.attackType && includes(["fireblade", "flame_blade", "slash", "cleave", "cut"]) && !includes(["fireball"])) {
       type = includes(["burst"]) ? "pulse" : "melee";
     }
 

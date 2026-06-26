@@ -44,6 +44,7 @@ class BattleSystem {
 
     // 敌人状态
     this.enemyAttack = null;
+    this.enemyAttackChain = null;
     this.enemyAttackTimer = 0;
     this.enemyAttackPhase = "none";
     this.enemyStunTimer = 0;
@@ -55,13 +56,14 @@ class BattleSystem {
     // QTE
     this.qteRunner = null;
     this.pendingFollowUp = false; // 荒芜之地追加攻击待触发
+    this.compressedPlayerTurn = false;
 
     // 结算
     this.resolveTimer = 0;
     this.resolveDuration = 0.68;
 
     // 消息
-    this.message = `按 1-7 选择战斗风格｜遭遇：${this.getEnemySelectionLabel()}`;
+    this.message = `按 1-8 选择战斗风格｜遭遇：${this.getEnemySelectionLabel()}`;
     this.messageTimer = 0;
     this.flashMessage = null;
 
@@ -311,6 +313,7 @@ class BattleSystem {
     this.playerConfig.weapon = style.weapon || null;
     this.playerConfig.spells = style.spells ? [...style.spells] : [];
     this.playerConfig.combatArts = style.combatArts ? [...style.combatArts] : [];
+    this.actionBarMax = style.actionBarMax || 6.8;
     const encounterId = this.encounterOverrideId || (!this.enemyOverrideId ? style.preferredEncounter : null);
     if (encounterId && this.applyEncounter(encounterId)) {
       const encounterMode = this.encounterOverrideId ? "指定遭遇" : "推荐遭遇";
@@ -332,6 +335,7 @@ class BattleSystem {
     this.enemyMaxHp = enemy.maxHp || EnemyDatabase.base.maxHp;
     this.enemyHp = this.enemyMaxHp;
     this.enemyAttack = null;
+    this.enemyAttackChain = null;
     this.enemyAttackPhase = "none";
     this.enemyStunTimer = 0;
     this.enemyAttackCursor = 0;
@@ -457,10 +461,7 @@ class BattleSystem {
       applyMul(mods.armorBreakDamageMul, "遭遇·破甲");
     }
 
-    if (labels.length > 0 && nextDamage > damage) {
-      this.spawnFloatingText(`+${Math.round((nextDamage / damage - 1) * 100)}% ${labels[labels.length - 1]}`, 740, 180, "status");
-      this.log(`${this.encounterConfig.name}规则触发：${labels.join(" / ")}`);
-    }
+    if (labels.length > 0 && nextDamage > damage) this.log(`${this.encounterConfig.name}规则触发：${labels.join(" / ")}`);
     return nextDamage;
   }
 
@@ -499,17 +500,18 @@ class BattleSystem {
         this.resetCombo();
         this.setMessage("追加机会已错过");
       }
-      this.performNormalAttack();
+      this.performNormalAttack({ automatic: true });
     }
   }
 
   // ========== 敌方回合 ==========
 
   updateEnemyTurn(dt) {
-    if (!this.enemyAttack) return;
+    if (!this.enemyAttack && this.getActiveEnemyAttacks().length === 0) return;
 
     const active = this.getIncomingActiveAttack();
     if (active) {
+      this.enemyAttack = active.intent.attack || this.enemyAttack;
       this.enemyAttackTimer = active.elapsed;
       if (active.phase === "reaction" && !this.defenseTriggered) {
         this.enemyAttackPhase = "response";
@@ -535,9 +537,10 @@ class BattleSystem {
     }
   }
 
-  commitEnemyActiveAttack(attack) {
+  commitEnemyActiveAttack(attack, options = {}) {
     if (!attack || !this.activeAttackSystem) return null;
-    const timing = this.getEnemyActiveAttackTiming(attack);
+    const offset = Math.max(0, options.timelineOffset || attack.offset || 0);
+    const timing = this.getEnemyActiveAttackTiming(attack, offset);
     return this.activeAttackSystem.commit({
       kind: "enemyAttack",
       source: "enemy",
@@ -552,19 +555,23 @@ class BattleSystem {
       fromAnchor: "enemyCore",
       toAnchor: "playerCore",
       timeline: {
-        startup: attack.windup,
+        startup: offset + attack.windup,
         travel: Math.max(0.001, attack.hitTime),
         reactionStart: timing.responseStart,
         reactionDuration: timing.responseDuration,
         impactTime: timing.impactTime,
         recovery: 0.32
       },
+      chainId: attack.chainId,
+      chainIndex: attack.chainIndex,
+      chainCount: attack.chainCount,
+      chainNodeId: attack.chainNodeId,
       attack
     });
   }
 
-  getEnemyActiveAttackTiming(attack) {
-    const impactTime = (attack ? attack.windup : 0) + (attack ? attack.hitTime : 0);
+  getEnemyActiveAttackTiming(attack, offset = 0) {
+    const impactTime = offset + (attack ? attack.windup : 0) + (attack ? attack.hitTime : 0);
     const readableCap = Utils.clamp((attack ? attack.hitTime : 0.2) + 0.28, 0.48, 0.92);
     const responseDuration = Math.min(attack && attack.responseDuration ? attack.responseDuration : Difficulty.responseDuration(), readableCap);
     const responseStart = Math.max(0, impactTime - responseDuration);
@@ -582,10 +589,33 @@ class BattleSystem {
     return this.activeAttackSystem.commit(intent);
   }
 
+  getActiveEnemyAttacks(options = {}) {
+    if (!this.activeAttackSystem || !Array.isArray(this.activeAttackSystem.active)) return [];
+    return this.activeAttackSystem.active
+      .filter(attack => {
+        if (!attack || attack.completed) return false;
+        if (attack.source !== "enemy" || attack.target !== "player") return false;
+        if (!options.includeCanceled && attack.canceled) return false;
+        if (!options.includeResolved && attack.resolved) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const ai = a.profile && Number.isFinite(a.profile.impactTime) ? a.profile.impactTime : Infinity;
+        const bi = b.profile && Number.isFinite(b.profile.impactTime) ? b.profile.impactTime : Infinity;
+        if (ai !== bi) return ai - bi;
+        return a.id.localeCompare(b.id);
+      });
+  }
+
   getIncomingActiveAttack() {
-    return this.activeAttackSystem
-      ? this.activeAttackSystem.getPrimary({ source: "enemy", target: "player" })
-      : null;
+    const active = this.getActiveEnemyAttacks();
+    if (active.length === 0) return null;
+    const reaction = active.find(attack => attack.phase === "reaction");
+    return reaction || active[0];
+  }
+
+  hasPendingEnemyActiveAttacks(exceptAttack = null) {
+    return this.getActiveEnemyAttacks({ includeResolved: true }).some(attack => attack !== exceptAttack);
   }
 
   getPlayerActiveAttack() {
@@ -597,10 +627,15 @@ class BattleSystem {
   onActiveAttackReactionWindow(attack) {
     if (!attack || attack.completed) return;
     if (attack.source === "enemy" && attack.target === "player") {
+      const sourceAttack = attack.intent.attack || this.enemyAttack;
+      this.enemyAttack = sourceAttack || this.enemyAttack;
       this.enemyAttackPhase = "response";
       this.enemyAttackTimer = attack.elapsed;
       this.input.clear();
-      this.setMessage("敌方攻击：命中前窗口按 SPACE/F 防御");
+      const chainText = sourceAttack && sourceAttack.chainCount > 1
+        ? ` ${sourceAttack.chainIndex + 1}/${sourceAttack.chainCount}`
+        : "";
+      this.setMessage(`敌方攻势${chainText}：命中前窗口按 SPACE/F，或用战技反制`);
       this.triggerActorReaction("enemy", "windup", 1.0, {
         color: attack.profile.color || "#e74c3c",
         duration: Math.min(0.42, Math.max(0.24, attack.profile.reactionDuration || 0.3))
@@ -718,6 +753,7 @@ class BattleSystem {
   onActiveAttackComplete(attack) {
     if (!attack || this.turnState === "game_over") return;
     if (attack.intent.kind === "playerQTE") {
+      if (attack.intent.suppressFlowComplete) return;
       if (attack.canceled && !attack.result) {
         this.finishPlayerQTEFlow(attack.intent.flowEffects || attack.intent.effects || {}, attack.intent.context || {}, { confirmed: false });
       } else {
@@ -732,6 +768,7 @@ class BattleSystem {
     }
     if (attack.intent.kind === "enemyAttack") {
       if (this.playerHp <= 0 || this.turnState === "game_over") return;
+      if (this.hasPendingEnemyActiveAttacks(attack)) return;
       if (attack.canceled || (attack.result && attack.result.defended)) return;
       if (attack.result && attack.result.absorbed) return;
       this.startResolving(() => this.startPlayerTurn());
@@ -833,6 +870,11 @@ class BattleSystem {
         return;
       }
 
+      if (this.handleEnemyTurnCounterInput(key)) {
+        this.input.consume();
+        return;
+      }
+
       for (const defenseId of attack.allowedResponses || []) {
         const defense = DefenseDatabase[defenseId];
         if (defense && defense.key === key) {
@@ -862,8 +904,29 @@ class BattleSystem {
     }
   }
 
+  handleEnemyTurnCounterInput(key) {
+    const incoming = this.getIncomingActiveAttack();
+    const attack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    if (!incoming || !attack) return false;
+
+    const style = this.getCurrentStyle();
+    const counterChainId = style && style.counterChain;
+    const counterChain = counterChainId ? ChainDatabase[counterChainId] : null;
+    if (counterChain && counterChain.key === key && this.isIncomingSpellAttack(attack)) {
+      this.triggerCounterSpellQTE(counterChainId);
+      return true;
+    }
+
+    if (!this.hasAttackAnytime() && !(style && style.counterCoverage)) return false;
+    const chains = this.getEffectiveChains();
+    if (!chains[key]) return false;
+    this.triggerClashCounter(key);
+    return true;
+  }
+
   consumeQTECombatArtInputs() {
     if (!this.qteRunner) return;
+    if (this.qteRunner.context && this.qteRunner.context.counterSpell) return;
 
     const node = this.qteRunner.currentNode();
     if (!node) return;
@@ -962,6 +1025,246 @@ class BattleSystem {
     this.applyQTEPacing(chainConfig, chainId, { source: "player" });
 
     this.setMessage(this.getQTEStageMessage(chainConfig));
+  }
+
+  getCounterCoverageCount() {
+    const style = this.getCurrentStyle();
+    const weapon = this.playerConfig.weapon || "";
+    const coverage = style && style.counterCoverage;
+    if (coverage) {
+      return coverage[weapon] || coverage.default || 1;
+    }
+    if (weapon === "dualBlades") return 2;
+    return 1;
+  }
+
+  getCounterCoverageTargets() {
+    const incoming = this.getIncomingActiveAttack();
+    if (!incoming) return [];
+    const count = Math.max(1, this.getCounterCoverageCount());
+    const attacks = this.getActiveEnemyAttacks()
+      .filter(attack => !attack.canceled && !attack.resolved);
+    return attacks.slice(0, count);
+  }
+
+  cancelEnemyAttacks(attacks, reason = "clash") {
+    if (!this.activeAttackSystem) return [];
+    const canceled = [];
+    for (const attack of attacks || []) {
+      if (!attack || attack.canceled || attack.completed) continue;
+      this.activeAttackSystem.cancel(attack, reason);
+      canceled.push(attack);
+    }
+    return canceled;
+  }
+
+  triggerClashCounter(chainKey) {
+    const targets = this.getCounterCoverageTargets();
+    if (targets.length === 0) return;
+
+    this.defenseTriggered = true;
+    this.playerState.currentState = "swordAttack";
+    this.input.clear();
+    this.cancelEnemyAttacks(targets, "clash");
+
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    const coveredSpell = targets.some(attack => this.isIncomingSpellAttack(attack.intent && attack.intent.attack));
+    const damage = Math.max(8, Math.floor((weapon.normalAttack || 10) + targets.length * 5 + (coveredSpell ? 4 : 0)));
+    const isCrit = this.hasCombatArt("desslo") || (this.getCurrentStyle() && this.getCurrentStyle().manualQteCrit);
+    const label = `clash:${chainKey}:${targets.map(attack => attack.intent.attackId || attack.id).join("+")}`;
+    const finishClash = () => {
+      if (this.checkEnemyDefeated()) return;
+      this.startResolving(() => this.startPlayerTurn());
+    };
+
+    SFX.sfxCounter();
+    this.triggerActorReaction("player", "attack", targets.length > 1 ? 1.18 : 1.0, {
+      color: weapon.color || "#2ecc71",
+      duration: targets.length > 1 ? 0.42 : 0.30
+    });
+    this.spawnFloatingText(`拼刀 x${targets.length}`, 220, 300, "status");
+    this.log(`拼刀覆盖 ${targets.length} 段敌方攻势`);
+
+    const token = `${label}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`;
+    const segments = this.buildClashCounterSegments(targets, damage);
+    if (segments.length > 1) {
+      this.commitClashCounterSegments({
+        segments,
+        token,
+        label,
+        weapon,
+        isCrit,
+        finishClash
+      });
+      this.setMessage(`拼刀覆盖 ${targets.length} 段 · 双刃连续反击`);
+      return;
+    }
+
+    this.commitActiveAttack({
+      kind: "defenseCounter",
+      source: "player",
+      target: "enemy",
+      token,
+      attackType: "melee",
+      shape: "arc",
+      fromAnchor: "playerHand",
+      anchor: "playerHand",
+      toAnchor: "enemyCore",
+      damage,
+      label,
+      visualEvent: label,
+      motion: targets.length > 1 ? "dualClash" : "clash",
+      chainFamily: "counter",
+      weapon: this.playerConfig.weapon,
+      color: weapon.color || "#2ecc71",
+      onComplete: finishClash,
+      damageIntent: {
+        source: "player",
+        target: "enemy",
+        token,
+        shape: "arc",
+        anchor: "playerHand",
+        toAnchor: "enemyCore",
+        damage,
+        label,
+        visualEvent: label,
+        motion: targets.length > 1 ? "dualClash" : "clash",
+        chainFamily: "counter",
+        weapon: this.playerConfig.weapon,
+        options: { isCrit }
+      }
+    });
+    this.setMessage(`拼刀覆盖 ${targets.length} 段 · 反击推进中`);
+  }
+
+  getClashCounterHitCount(targets) {
+    if (!Array.isArray(targets) || targets.length <= 1) return 1;
+    if (this.playerConfig.weapon === "dualBlades") return Math.min(2, targets.length);
+    return 1;
+  }
+
+  buildClashCounterSegments(targets = [], totalDamage = 0) {
+    const hitCount = this.getClashCounterHitCount(targets);
+    if (hitCount <= 1) return [];
+
+    const base = Math.floor(totalDamage / hitCount);
+    let remainder = totalDamage - base * hitCount;
+    return Array.from({ length: hitCount }, (_, index) => {
+      const damage = base + (remainder > 0 ? 1 : 0);
+      remainder -= remainder > 0 ? 1 : 0;
+      const startup = 0.06 + index * 0.13;
+      const travel = 0.10;
+      const impactTime = startup + travel;
+      return {
+        damage,
+        hitIndex: index + 1,
+        hitCount,
+        motion: index === 0 ? "dualClashLead" : "dualClashFollow",
+        timeline: {
+          startup,
+          travel,
+          impactTime,
+          reactionStart: Math.max(0, impactTime - 0.08),
+          reactionDuration: 0.08,
+          recovery: index === hitCount - 1 ? 0.24 : 0.12
+        }
+      };
+    });
+  }
+
+  commitClashCounterSegments({ segments = [], token, label, weapon = {}, isCrit = false, finishClash }) {
+    segments.forEach((segment, index) => {
+      const isFinalHit = index === segments.length - 1;
+      const segmentToken = `${token}:hit${segment.hitIndex}`;
+      const segmentLabel = `${label}:hit${segment.hitIndex}`;
+      const segmentMeta = {
+        attackType: "melee",
+        shape: "arc",
+        motion: segment.motion,
+        chainFamily: "counter",
+        weapon: this.playerConfig.weapon,
+        color: weapon.color || "#2ecc71",
+        hitIndex: segment.hitIndex,
+        hitCount: segment.hitCount,
+        strikeCount: 1
+      };
+
+      this.commitActiveAttack({
+        kind: "defenseCounter",
+        source: "player",
+        target: "enemy",
+        token: segmentToken,
+        fromAnchor: "playerHand",
+        anchor: "playerHand",
+        toAnchor: "enemyCore",
+        damage: segment.damage,
+        label: segmentLabel,
+        visualEvent: segmentLabel,
+        ...segmentMeta,
+        timeline: segment.timeline,
+        onComplete: isFinalHit ? finishClash : undefined,
+        damageIntent: {
+          source: "player",
+          target: "enemy",
+          token: segmentToken,
+          anchor: "playerHand",
+          toAnchor: "enemyCore",
+          damage: segment.damage,
+          label: segmentLabel,
+          visualEvent: segmentLabel,
+          ...segmentMeta,
+          options: { isCrit: isFinalHit && isCrit }
+        }
+      });
+    });
+  }
+
+  triggerCounterSpellQTE(chainId) {
+    const chainConfig = ChainDatabase[chainId];
+    if (!chainConfig) return;
+    if (!this.canPayChainCost(chainConfig)) return;
+
+    const targets = this.getActiveEnemyAttacks({ includeResolved: true }).filter(attack => !attack.canceled);
+    const covered = this.cancelEnemyAttacks(targets, "counterspell");
+    this.defenseTriggered = true;
+    this.playerState.currentState = "casting";
+    SFX.sfxMagic();
+    this.setTurnState("qte_running");
+    this.input.clear();
+    this.input.ignoreHeldUntilRelease(chainConfig.key || "S");
+    this.triggerActorReaction("player", "cast", 1.0, {
+      color: chainConfig.color || "#16a085",
+      duration: 0.32
+    });
+    this.log(`反咒接管 ${covered.length} 段敌方攻势`);
+    this.qteRunner = new QTEChainRunner(Difficulty.scaleChain(chainId), {
+      source: "player",
+      chainId,
+      chainFamily: chainConfig.family,
+      counterSpell: true,
+      coveredEnemyAttacks: covered.map(attack => attack.intent.attackId || attack.id),
+      isSwordChain: false,
+      handfeel: Utils.getChainHandfeel(chainConfig, { chainId, source: "player", counterSpell: true }),
+      onNodeEffect: (node, outcome, transition) => {
+        if (node.input.type === "hold_release" || node.id === "slip") {
+          this.playerState.currentState = "charge";
+          SFX.sfxCharge();
+        }
+        if (transition.message) this.setMessage(transition.message);
+        this.showOutcomeFeedback(outcome);
+        this.emitTransitionVisual(transition);
+      },
+      onRhythmHit: (idx, diff) => {
+        this.setMessage(`节拍 ${idx + 1} 命中`);
+        SFX.sfxSuccess();
+      },
+      onRhythmMiss: (idx) => {
+        this.setMessage(idx >= 0 ? `节拍 ${idx + 1} 没踩准` : "按错键了");
+        SFX.sfxFail();
+      }
+    });
+    this.applyQTEPacing(chainConfig, chainId, { source: "player", counterSpell: true });
+    this.setMessage(`反咒反制 · ${this.getQTEStageMessage(chainConfig)}`);
   }
 
   triggerCounterAttack(chainKey) {
@@ -1107,6 +1410,7 @@ class BattleSystem {
     this.defenseTriggered = true;
     this.playerState.lastAttackTime = 0;
     this.playerState.currentState = "shield";
+    this.cancelEnemyAttacks(this.getActiveEnemyAttacks(), "guard");
     this.triggerActorReaction("player", "guard", 1.0, { color: "#2ecc71" });
     this.spawnFloatingText(CombatArtDatabase.eastern.attackGuardMessage, 220, 300, "status");
     this.spawnParticles("guard", 220, 360, 1.4);
@@ -1143,16 +1447,29 @@ class BattleSystem {
     return "#ffffff";
   }
 
+  shouldManualQTECrit(context = {}, resultLog = [], effects = {}) {
+    const style = this.getCurrentStyle();
+    if (!style || !style.manualQteCrit) return false;
+    if (!context || context.source !== "player") return false;
+    if (context.counterAttack || context.counterSpell || context.followUp) return false;
+    if (!context.isSwordChain) return false;
+    if ((effects.damage || 0) <= 0) return false;
+    return resultLog.some(entry => entry.outcome === "perfect" || entry.outcome === "success");
+  }
+
   resolvePlayerQTE(effects, context) {
     // 计算最终伤害
     let damage = effects.damage;
+    const resultLog = this.qteRunner && Array.isArray(this.qteRunner.resultLog)
+      ? this.qteRunner.resultLog.map(entry => ({ ...entry }))
+      : [];
+    const manualQteCrit = this.shouldManualQTECrit(context || {}, resultLog, effects || {});
 
     // 连击增伤
     if (damage > 0) {
       const comboMul = this.getComboDamageMultiplier();
       if (comboMul > 1) {
         damage = Math.floor(damage * comboMul);
-        this.spawnFloatingText(`+${Math.round((comboMul - 1) * 100)}% 连击`, 740, 300, "status");
       }
     }
 
@@ -1164,10 +1481,7 @@ class BattleSystem {
         : (1 + SpellDatabase.fire.armorBreakDamageBonus);
       damage = Math.floor(damage * statusMul);
       if (damage > 0) {
-        const bonusLabel = `+${Math.round((statusMul - 1) * 100)}% 破甲`;
-        this.spawnFloatingText(bonusLabel, 740, 235, "status");
         if (context && (context.chainFamily === "fire" || context.chainFamily === "absorb")) {
-          this.spawnFloatingText("武器×咒术协同", 740, 205, "status");
           this.log(`破甲协同触发：${context.chainFamily === "fire" ? "火焰" : "咒还"}链获得增伤`);
         }
       }
@@ -1178,8 +1492,10 @@ class BattleSystem {
       damage = Math.floor(damage * 1.5);
     }
 
-    // 德斯洛：Perfect 暴击
-    if (this.hasCombatArt("desslo") && effects.perfectHit) {
+    // 手动 QTE / 德斯洛：暴击
+    if (manualQteCrit) {
+      damage = Math.floor(damage * 1.5);
+    } else if (this.hasCombatArt("desslo") && effects.perfectHit) {
       damage = Math.floor(damage * 1.5);
     }
 
@@ -1194,23 +1510,21 @@ class BattleSystem {
       const heatMul = this.resourceSystem.getHeatDamageMultiplier();
       if (heatMul > 1.01) {
         damage = Math.floor(damage * heatMul);
-        this.spawnFloatingText(`+${Math.round((heatMul - 1) * 100)}% 热量`, 740, 260, "status");
       }
     }
 
     damage = this.applyEncounterDamageModifiers(damage, context || {});
 
     // 是否暴击
-    const isCrit = (this.hasCombatArt("desslo") && effects.perfectHit) || easternCrit;
+    const isCrit = manualQteCrit || (this.hasCombatArt("desslo") && effects.perfectHit) || easternCrit;
     const qteHitMeta = this.buildQTEHitMeta(effects, context || {});
 
-    const resultLog = this.qteRunner && Array.isArray(this.qteRunner.resultLog)
-      ? this.qteRunner.resultLog.map(entry => ({ ...entry }))
-      : [];
     const tokenSuffix = resultLog.length > 0
       ? resultLog.map(entry => `${entry.nodeId}:${entry.outcome}`).join("|")
       : String(this.battleStats.attempts);
     const split = this.splitQTEEffectsForActiveAttack(effects);
+    const qteColor = this.getQTEAttackColor(context || {});
+    const hitSegments = this.buildQTEHitSegments(effects, context || {}, resultLog, damage, qteHitMeta);
 
     this.applyQTECommitEffects(split.commit, context);
     this.applyPlayerQTECommitSideEffects(effects, context);
@@ -1219,6 +1533,26 @@ class BattleSystem {
     this.input.clear();
 
     if (damage > 0) {
+      this.triggerActorReaction("player", qteHitMeta.shape === "arc" ? "attack" : "cast", hitSegments.length > 1 ? 1.08 : 0.96, {
+        color: qteColor,
+        duration: hitSegments.length > 1 ? 0.46 : 0.34
+      });
+
+      if (hitSegments.length > 1) {
+        this.commitSegmentedQTEActiveAttacks({
+          context,
+          effects,
+          split,
+          qteHitMeta,
+          hitSegments,
+          tokenBase: `qte:${context && context.chainId ? context.chainId : "chain"}:${tokenSuffix}`,
+          color: qteColor,
+          isCrit
+        });
+        this.setMessage(`${effects.messages && effects.messages.length ? effects.messages[effects.messages.length - 1] : "连击成型"} · 逐段命中中`);
+        return;
+      }
+
       this.commitActiveAttack({
         kind: "playerQTE",
         source: "player",
@@ -1235,7 +1569,7 @@ class BattleSystem {
         flowEffects: effects,
         resultLog,
         ...qteHitMeta,
-        color: this.getQTEAttackColor(context || {}),
+        color: qteColor,
         options: { isCrit },
         damageIntent: {
           source: "player",
@@ -1247,6 +1581,7 @@ class BattleSystem {
           damage,
           label: context && context.chainId ? context.chainId : "qte",
           ...qteHitMeta,
+          color: qteColor,
           options: { isCrit }
         }
       });
@@ -1259,8 +1594,8 @@ class BattleSystem {
     this.finishPlayerQTEFlow(effects, context, { confirmed: true });
   }
 
-  splitQTEEffectsForActiveAttack(effects = {}) {
-    const make = () => ({
+  createQTEEffectShell(effects = {}) {
+    return {
       damage: 0,
       chargeMul: effects.chargeMul || 1,
       selfStun: 0,
@@ -1276,9 +1611,12 @@ class BattleSystem {
       visualEvents: [...(effects.visualEvents || [])],
       messages: [...(effects.messages || [])],
       perfectHit: !!effects.perfectHit
-    });
-    const commit = make();
-    const impact = make();
+    };
+  }
+
+  splitQTEEffectsForActiveAttack(effects = {}) {
+    const commit = this.createQTEEffectShell(effects);
+    const impact = this.createQTEEffectShell(effects);
     impact.damage = effects.damage || 0;
     impact.selfStun = effects.selfStun || 0;
     impact.stunEnemy = effects.stunEnemy || 0;
@@ -1302,6 +1640,159 @@ class BattleSystem {
     }
     commit.absorbReady = !!effects.absorbReady;
     return { commit, impact };
+  }
+
+  shouldSplitQTEIntoMeleeHits(context = {}, qteHitMeta = {}, resultLog = []) {
+    const damagingCount = resultLog.filter(entry => entry.transition && entry.transition.damage > 0).length;
+    if (damagingCount <= 1) return false;
+
+    const text = [
+      context.chainId,
+      context.chainFamily,
+      context.isSwordChain ? "sword" : "",
+      qteHitMeta.shape,
+      qteHitMeta.visualEvent,
+      qteHitMeta.motion,
+      ...(qteHitMeta.visualEvents || [])
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    if (qteHitMeta.shape === "beam" || qteHitMeta.shape === "circle") return false;
+    if (["absorb", "staff"].includes(context.chainFamily)) return false;
+    if (["fireball", "overflow", "spell", "arcane", "curse", "siphon", "release"].some(key => text.includes(key))) {
+      return false;
+    }
+
+    return !!(
+      context.isSwordChain
+      || context.chainFamily === "greatsword"
+      || context.chainFamily === "dualBlades"
+      || ["slash", "blade", "cleave", "cut", "dash", "flurry", "finisher"].some(key => text.includes(key))
+    );
+  }
+
+  buildQTEHitSegments(effects = {}, context = {}, resultLog = [], totalDamage = 0, qteHitMeta = {}) {
+    if (totalDamage <= 0 || !this.shouldSplitQTEIntoMeleeHits(context, qteHitMeta, resultLog)) return [];
+
+    let currentMul = 1;
+    const rows = [];
+    for (const entry of resultLog) {
+      const transition = entry.transition || {};
+      if (transition.chargeMul !== undefined) currentMul *= transition.chargeMul;
+      if (transition.damage === undefined || transition.damage <= 0) continue;
+      const rawDamage = Math.floor(transition.damage * currentMul);
+      if (rawDamage <= 0) continue;
+      rows.push({
+        entry: { ...entry, transition: { ...transition } },
+        rawDamage,
+        nodeId: entry.nodeId,
+        outcome: entry.outcome,
+        visualEvent: transition.visualEvent || qteHitMeta.visualEvent || "",
+        message: transition.message || ""
+      });
+    }
+
+    if (rows.length <= 1) return [];
+    const rawTotal = rows.reduce((sum, row) => sum + row.rawDamage, 0);
+    if (rawTotal <= 0) return [];
+
+    const allocations = rows.map((row, index) => {
+      const exact = totalDamage * row.rawDamage / rawTotal;
+      const damage = Math.floor(exact);
+      return { ...row, index, damage, fraction: exact - damage };
+    });
+
+    let remaining = totalDamage - allocations.reduce((sum, row) => sum + row.damage, 0);
+    [...allocations]
+      .sort((a, b) => b.fraction - a.fraction)
+      .forEach(row => {
+        if (remaining <= 0) return;
+        row.damage += 1;
+        remaining -= 1;
+      });
+
+    const hits = allocations.filter(row => row.damage > 0);
+    if (hits.length <= 1) return [];
+
+    const isDual = context.chainFamily === "dualBlades";
+    const isHeavy = context.chainFamily === "greatsword" || this.playerConfig.weapon === "greatsword";
+    const step = isDual ? 0.15 : (isHeavy ? 0.23 : 0.18);
+    const travel = isDual ? 0.10 : (isHeavy ? 0.16 : 0.12);
+
+    return hits.map((row, index) => {
+      const startup = 0.08 + index * step;
+      const impactTime = startup + travel;
+      return {
+        ...row,
+        hitIndex: index + 1,
+        hitCount: hits.length,
+        timeline: {
+          startup,
+          travel,
+          impactTime,
+          reactionStart: Math.max(0, impactTime - (isDual ? 0.12 : 0.14)),
+          reactionDuration: isDual ? 0.12 : 0.14,
+          recovery: index === hits.length - 1 ? (isHeavy ? 0.34 : 0.26) : 0.16
+        }
+      };
+    });
+  }
+
+  commitSegmentedQTEActiveAttacks({ context = {}, effects = {}, split, qteHitMeta = {}, hitSegments = [], tokenBase, color, isCrit }) {
+    hitSegments.forEach((segment, index) => {
+      const isFinalHit = index === hitSegments.length - 1;
+      const token = `${tokenBase}:hit${index + 1}`;
+      const segmentEvents = segment.visualEvent ? [segment.visualEvent] : (qteHitMeta.visualEvents || []);
+      const segmentMeta = {
+        ...qteHitMeta,
+        shape: "arc",
+        attackType: "melee",
+        visualEvent: segment.visualEvent || qteHitMeta.visualEvent,
+        visualEvents: segmentEvents,
+        motion: segment.nodeId || qteHitMeta.motion,
+        outcomes: [segment.outcome].filter(Boolean),
+        strikeCount: 1,
+        hitIndex: segment.hitIndex,
+        hitCount: segment.hitCount
+      };
+
+      this.commitActiveAttack({
+        kind: "playerQTE",
+        source: "player",
+        target: "enemy",
+        token,
+        attackType: "melee",
+        shape: "arc",
+        fromAnchor: "playerHand",
+        anchor: "playerHand",
+        toAnchor: "enemyCore",
+        damage: segment.damage,
+        label: `${context && context.chainId ? context.chainId : "qte"}:${segment.nodeId || segment.hitIndex}`,
+        context: { ...(context || {}) },
+        effects: isFinalHit ? split.impact : this.createQTEEffectShell(effects),
+        flowEffects: isFinalHit ? effects : this.createQTEEffectShell(effects),
+        suppressFlowComplete: !isFinalHit,
+        suppressImpactSideEffects: !isFinalHit,
+        resultLog: [segment.entry],
+        ...segmentMeta,
+        color,
+        timeline: segment.timeline,
+        options: { isCrit: isFinalHit && isCrit },
+        damageIntent: {
+          source: "player",
+          target: "enemy",
+          token,
+          shape: "arc",
+          attackType: "melee",
+          anchor: "playerHand",
+          toAnchor: "enemyCore",
+          damage: segment.damage,
+          label: `${context && context.chainId ? context.chainId : "qte"}:${segment.nodeId || segment.hitIndex}`,
+          ...segmentMeta,
+          color,
+          options: { isCrit: isFinalHit && isCrit }
+        }
+      });
+    });
   }
 
   applyQTECommitEffects(effects, context = {}) {
@@ -1356,7 +1847,9 @@ class BattleSystem {
     if (result.confirmed) {
       if (damageIntent.options && damageIntent.options.isCrit) this.flashScreen("#f1c40f", 0.18);
       this.applyQTEImpactEffects(intent.effects || {}, intent.context || {}, result);
-      this.applyPlayerQTEImpactSideEffects(intent.flowEffects || intent.effects || {}, intent.context || {}, result);
+      if (!intent.suppressImpactSideEffects) {
+        this.applyPlayerQTEImpactSideEffects(intent.flowEffects || intent.effects || {}, intent.context || {}, result);
+      }
       if (intent.guardMul) this.setMessage("敌人防御，伤害降低");
     } else if (attack.defenderResponse === "dodge") {
       this.setMessage("敌人闪避，攻击落空");
@@ -1381,7 +1874,7 @@ class BattleSystem {
 
   resolveEnemyActiveAttackImpact(attack) {
     const sourceAttack = attack.intent.attack || this.enemyAttack;
-    if (this.defenseTriggered || attack.canceled) {
+    if (attack.canceled || (!attack.intent.chainId && this.defenseTriggered)) {
       return { confirmed: false, defended: true };
     }
     if (sourceAttack && this.tryAbsorbIncomingSpell(sourceAttack)) {
@@ -1487,14 +1980,26 @@ class BattleSystem {
     this.startResolving(() => this.startEnemyTurn());
   }
 
+  finishEnemyResponseOrPlayerTurn() {
+    if (this.checkEnemyDefeated()) return;
+    if (this.hasPendingEnemyActiveAttacks()) {
+      this.defenseTriggered = false;
+      this.qteRunner = null;
+      this.playerState.currentState = "idle";
+      this.setTurnState("enemy_turn");
+      this.setMessage("敌方连段继续");
+      return;
+    }
+    this.startResolving(() => this.startPlayerTurn());
+  }
+
   resolveDefenseQTE(effects) {
     const attack = this.enemyAttack;
     const incoming = this.getIncomingActiveAttack();
     if (incoming) this.activeAttackSystem.cancel(incoming, "defense");
     let delayedByCounter = false;
     const finishDefenseAfterCounter = () => {
-      if (this.checkEnemyDefeated()) return;
-      this.startResolving(() => this.startPlayerTurn());
+      this.finishEnemyResponseOrPlayerTurn();
     };
     let finalDamage = 0;
 
@@ -1628,32 +2133,34 @@ class BattleSystem {
     if (this.checkEnemyDefeated()) return;
 
     if (effects.stunEnemy > 0) {
+      this.cancelEnemyAttacks(this.getActiveEnemyAttacks(), "stun");
       this.enemyStunTimer = effects.stunEnemy;
       this.startResolving(() => this.startPlayerTurn());
       return;
     }
 
-    this.startResolving(() => this.startPlayerTurn());
+    this.finishEnemyResponseOrPlayerTurn();
   }
 
   // ========== 普通攻击与回合切换 ==========
 
-  performNormalAttack() {
+  performNormalAttack(options = {}) {
     const weapon = WeaponDatabase[this.playerConfig.weapon];
     if (!weapon) return;
 
     let damage = weapon.normalAttack || 10;
+    const style = this.getCurrentStyle();
+    const automaticNoBonus = !!(options.automatic && style && style.autoAttackNoBonus);
 
     // 连击增伤
-    const comboMul = this.getComboDamageMultiplier();
+    const comboMul = automaticNoBonus ? 1 : this.getComboDamageMultiplier();
     if (comboMul > 1) {
       damage = Math.floor(damage * comboMul);
-      this.spawnFloatingText(`+${Math.round((comboMul - 1) * 100)}% 连击`, 740, 300, "status");
     }
 
     // 护甲破坏增伤
     const armorBreakStatus = this.statusSystem && this.statusSystem.has("armorBreak", "enemy");
-    if (this.armorBreakActive || armorBreakStatus) {
+    if (!automaticNoBonus && (this.armorBreakActive || armorBreakStatus)) {
       const statusMul = this.statusSystem
         ? (this.statusSystem.getDefinition("armorBreak").damageTakenMul || 1 + SpellDatabase.fire.armorBreakDamageBonus)
         : (1 + SpellDatabase.fire.armorBreakDamageBonus);
@@ -1661,12 +2168,14 @@ class BattleSystem {
     }
 
     // 东方：连续闪避后暴击
-    if (this.hasCombatArt("eastern") && this.playerState.consecutiveDodges >= CombatArtDatabase.eastern.consecutiveDodgeCrit) {
+    if (!automaticNoBonus && this.hasCombatArt("eastern") && this.playerState.consecutiveDodges >= CombatArtDatabase.eastern.consecutiveDodgeCrit) {
       damage = Math.floor(damage * 1.5);
       this.playerState.consecutiveDodges = 0;
     }
 
-    damage = this.applyEncounterDamageModifiers(damage, { normalAttack: true, isSwordChain: true });
+    if (!automaticNoBonus) {
+      damage = this.applyEncounterDamageModifiers(damage, { normalAttack: true, isSwordChain: true });
+    }
 
     this.triggerActorReaction("player", "attack", 0.95, {
       color: weapon.color || "#f1c40f",
@@ -1719,7 +2228,7 @@ class BattleSystem {
         chainFamily: "normal"
       }
     });
-    this.setMessage("普通攻击");
+    this.setMessage(automaticNoBonus ? "自动攻击" : "普通攻击");
   }
 
   startEnemyTurn() {
@@ -1742,6 +2251,7 @@ class BattleSystem {
     this.defenseTriggered = false;
     this.resetCombo();
     this.pendingFollowUp = false;
+    this.enemyAttackChain = null;
     this.playerState.currentState = "idle";
     this.input.clear();
 
@@ -1755,12 +2265,13 @@ class BattleSystem {
 
     this.maybeEnterEncounterPhase();
     const attackId = this.pickEnemyAttackId();
+    if (this.isEnemyAttackChainId(attackId)) {
+      this.startEnemyAttackChain(attackId);
+      return;
+    }
+
     this.enemyAttack = this.buildEnemyAttack(attackId);
-    const allowed = this.enemyAttack.allowedResponses || [];
-    const keys = [];
-    if (allowed.includes("dodge") || allowed.includes("parry")) keys.push("SPACE");
-    if (allowed.includes("guard")) keys.push("F");
-    this.enemyAttack.responseKey = keys.join(" / ") || "SPACE";
+    this.decorateEnemyAttackResponse(this.enemyAttack);
     this.enemyAttackTimer = 0;
     this.enemyAttackPhase = "windup";
     this.commitEnemyActiveAttack(this.enemyAttack);
@@ -1773,11 +2284,57 @@ class BattleSystem {
     if (Array.isArray(encounterPattern) && encounterPattern.length > 0) {
       const attackId = encounterPattern[this.enemyAttackCursor % encounterPattern.length];
       this.enemyAttackCursor++;
-      if (EnemyDatabase.attacks[attackId]) return attackId;
+      if (EnemyDatabase.attacks[attackId] || this.isEnemyAttackChainId(attackId)) return attackId;
     }
 
     const attackIds = (this.enemyConfig && this.enemyConfig.attacks) || EnemyDatabase.base.attacks;
     return attackIds[Math.floor(Math.random() * attackIds.length)];
+  }
+
+  isEnemyAttackChainId(id) {
+    return !!(EnemyDatabase.attackChains && EnemyDatabase.attackChains[id]);
+  }
+
+  getEnemyAttackChain(chainId) {
+    return (EnemyDatabase.attackChains && EnemyDatabase.attackChains[chainId]) || null;
+  }
+
+  startEnemyAttackChain(chainId) {
+    const chain = this.getEnemyAttackChain(chainId);
+    if (!chain || !Array.isArray(chain.nodes) || chain.nodes.length === 0) {
+      this.enemyAttack = this.buildEnemyAttack("thrust");
+      this.decorateEnemyAttackResponse(this.enemyAttack);
+      this.commitEnemyActiveAttack(this.enemyAttack);
+      this.setMessage("敌方回合：绿色窗口出现按 SPACE/F 防御");
+      return;
+    }
+
+    this.enemyAttackChain = { id: chainId, ...chain };
+    const attacks = chain.nodes
+      .map((node, index) => this.buildEnemyAttackChainNode(chainId, chain, node, index))
+      .filter(Boolean);
+    this.enemyAttack = attacks[0] || null;
+    this.enemyAttackTimer = 0;
+    this.enemyAttackPhase = "windup";
+    for (const attack of attacks) {
+      this.commitEnemyActiveAttack(attack, { timelineOffset: attack.offset || 0 });
+    }
+    this.setMessage(`敌方连段：${chain.name} · ${attacks.length} 段攻势`);
+  }
+
+  buildEnemyAttackChainNode(chainId, chain, node, index) {
+    if (!node || !EnemyDatabase.attacks[node.attackId]) return null;
+    const attack = this.buildEnemyAttack(node.attackId);
+    attack.chainId = chainId;
+    attack.chainName = chain.name || chainId;
+    attack.chainIcon = chain.icon || attack.icon;
+    attack.chainNodeId = node.id || `${index + 1}`;
+    attack.chainIndex = index;
+    attack.chainCount = chain.nodes.length;
+    attack.offset = Math.max(0, node.offset || 0);
+    attack.name = `${attack.chainIndex + 1}/${attack.chainCount} ${attack.name}`;
+    this.decorateEnemyAttackResponse(attack);
+    return attack;
   }
 
   buildEnemyAttack(attackId) {
@@ -1792,6 +2349,17 @@ class BattleSystem {
       attack.hitTime *= mods.enemyWindupMul;
     }
     attack.responseDuration = Difficulty.responseDuration() * (mods.responseWindowMul || 1);
+    this.decorateEnemyAttackResponse(attack);
+    return attack;
+  }
+
+  decorateEnemyAttackResponse(attack) {
+    if (!attack) return attack;
+    const allowed = attack.allowedResponses || [];
+    const keys = [];
+    if (allowed.includes("dodge") || allowed.includes("parry")) keys.push("SPACE");
+    if (allowed.includes("guard")) keys.push("F");
+    attack.responseKey = keys.join(" / ") || "SPACE";
     return attack;
   }
 
@@ -1802,8 +2370,11 @@ class BattleSystem {
     if (this.playerHp <= 0 || this.turnState === "game_over") return;
 
     this.actionBar = 0;
+    const style = this.getCurrentStyle();
+    this.compressedPlayerTurn = !!(style && style.actionBarMax && style.actionBarMax < 6.8);
     // 连击由超时或受击重置，额外回合保留
     this.enemyAttack = null;
+    this.enemyAttackChain = null;
     this.enemyAttackPhase = "none";
     this.defenseTriggered = false;
     this.qteRunner = null;
@@ -1811,7 +2382,9 @@ class BattleSystem {
     this.playerState.currentState = "idle";
     this.input.clear();
 
-    this.setMessage("玩家回合：按 A/S/D 选择攻击链");
+    this.setMessage(this.compressedPlayerTurn
+      ? "压缩己方回合：A/S/D 手动追击，否则自动攻击"
+      : "玩家回合：按 A/S/D 选择攻击链");
   }
 
   startResolving(callback) {
@@ -2156,6 +2729,10 @@ class BattleSystem {
     return this.playerConfig.spells.includes(id);
   }
 
+  getCurrentStyle() {
+    return this.playerConfig.style ? StyleDatabase[this.playerConfig.style] : null;
+  }
+
   hasCombatArt(id) {
     return this.playerConfig.combatArts.includes(id);
   }
@@ -2268,7 +2845,7 @@ class BattleSystem {
     const attack = this.enemyAttack;
     if (!attack) return "success";
 
-    const timing = this.getEnemyActiveAttackTiming(attack);
+    const timing = this.getEnemyActiveAttackTiming(attack, attack.offset || 0);
     const responseStart = timing.responseStart;
     const remaining = timing.impactTime - triggerTime;
 
@@ -2299,7 +2876,6 @@ class BattleSystem {
 
   showOutcomeFeedback(outcome, x = 480, y = 360) {
     const label = (outcome || "fail").toUpperCase();
-    this.spawnFloatingText(label, x, y, "popup");
 
     // 统计
     this.battleStats.attempts++;
@@ -2309,6 +2885,8 @@ class BattleSystem {
       this.battleStats.misses++;
     }
     if (outcome === "perfect") this.battleStats.perfectCount++;
+
+    if (outcome !== "success") this.spawnFloatingText(label, x, y, "popup");
 
     if (outcome === "perfect") {
       SFX.sfxPerfect();

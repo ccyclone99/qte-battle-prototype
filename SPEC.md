@@ -302,7 +302,7 @@ node scripts\verify.js
 
 ### Combat
 
-- `1-7`: select combat style
+- `1-8`: select combat style
 - `A/S/D`: weapon or spell chains
 - `SPACE`: dodge/parry where allowed
 - `F`: guard
@@ -1491,6 +1491,83 @@ Implemented direction:
   - final player/enemy HP
 - Game-over rendering now shows a `战斗摘要` panel under the win/loss result.
 - Flow smoke protects phase and accuracy lines in the result summary.
+
+### R20 - Counterflow, Enemy Attack Chains, And Coverage Frames
+
+Goal: support counter-focused styles where the meaningful decision often happens inside the enemy turn, while still keeping the current QTE chain system extensible.
+
+Player-facing model:
+
+- Enemy turns may contain an `attackChain`, not only one attack.
+  - Example: `法术 -> 快刺 -> 快刺`.
+  - Every node is still an authored active attack with windup, response window, impact, and hit confirm.
+- Player counter actions are coverage frames, not instant HP settlement.
+  - Attack during an incoming enemy attack can create a clash.
+  - Shield/guard can cover the currently targeted node.
+  - Dodge can clear or iframe a node while preserving charge when the style allows it.
+  - Absorb/counterspell can catch an enemy spell, continue through a dodge beat, then release a projectile that deals damage only on impact.
+- Own-turn compression is style-specific.
+  - The counterflow style has a shorter player action bar.
+  - If the player does nothing, automatic attack happens with no style bonus.
+  - If the player manually starts a QTE chain on own turn, the style can grant its manual-QTE crit bonus.
+
+Weapon distinction:
+
+- Single heavy sword coverage target:
+  - `coverageCount = 1`.
+  - The player is expected to combine attack, shield, dodge, and parry across multiple enemy nodes.
+- Dual blades coverage target:
+  - `coverageCount = 2-3` depending on style data.
+  - A well-timed attack can clash through rapid enemy follow-up hits because the weapon emits faster consecutive coverage frames.
+  - Multi-node clash must be shown as consecutive melee hit segments, not as one remote-looking settlement.
+- Staff coverage target:
+  - `coverageCount = 1`.
+  - Its enemy-turn advantage should come mainly from prepared casting, absorb, and counterspell chains.
+
+Combat art clarification:
+
+- `001 · 德斯洛大陆剑术`
+  - Enemy attack incoming: attack into it to clash, reduce/negate damage, and deal counter damage.
+  - Own turn: manual weapon QTE can replace automatic attack and crit when the style enables that rule.
+  - Enemy casting: attack or counterspell can interrupt the cast.
+- `008 · 东方诸国剑术`
+  - Shield parry supports directional dodge.
+  - Consecutive dodge enables crit.
+  - After sword attack, guard within its short window neutralizes enemy attacks.
+- `097 · 荒芜之地的剑术`
+  - Attack anytime.
+  - Follow-up attack can neutralize an enemy attack, crit, and interrupt.
+  - While casting, parry/absorb remains available where the chain allows it.
+
+Data contract:
+
+```js
+EnemyDatabase.attackChains = {
+  spellDoubleCut: {
+    nodes: [
+      { id: "cast", attackId: "arcaneBolt", offset: 0 },
+      { id: "firstCut", attackId: "quickStab", offset: 1.02 },
+      { id: "secondCut", attackId: "quickStab", offset: 1.38 }
+    ]
+  }
+}
+```
+
+- `attackPattern` entries may reference either `EnemyDatabase.attacks` or `EnemyDatabase.attackChains`.
+- Chain node offsets are seconds from enemy-turn start.
+- Runtime expands a chain into multiple active enemy attacks.
+- The current incoming node is the earliest non-canceled enemy active attack by impact time.
+
+Acceptance criteria:
+
+- Style `8` selects `逆势双刃` and enters `逆势试炼`.
+- `逆势试炼` can start an enemy turn with a multi-node enemy attack chain.
+- Pressing an attack key during the response window can clash and cancel only the covered enemy attack nodes.
+- Dual blades can cover multiple rapid enemy nodes with consecutive hit segments; single heavy sword coverage remains one node by default.
+- Pressing `S` during the opening spell pressure can enter `counterspell_reversal`.
+- Counterspell QTE completion creates an active attack; damage resolves at hit impact, not at final keypress.
+- Automatic attack on the compressed own turn does not receive the manual-QTE crit bonus.
+- Data validation, flow smoke, and static smoke cover the new style, encounter, attack-chain references, and counterflow flow.
 
 ### R15 - Delayed Settlement Prototype, Superseded By R16
 

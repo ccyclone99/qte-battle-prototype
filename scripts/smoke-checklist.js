@@ -73,7 +73,7 @@ check(
     && scriptIndex("js/systems/chain-effects.js") < scriptIndex("js/qte-runner.js")
 );
 
-for (const id of ["greatsword_a_v2", "dualblades_a_v2", "flame_blade", "mirror_guard", "overflow_burst"]) {
+for (const id of ["greatsword_a_v2", "dualblades_a_v2", "flame_blade", "mirror_guard", "overflow_burst", "counterspell_reversal"]) {
   check(`required chain exists: ${id}`, hasChain(id));
 }
 
@@ -85,12 +85,15 @@ check("absorb spell maps greatsword D to overflow_burst", SpellDatabase.absorb.c
 
 check("style flameforge exists on key 6", StyleDatabase.flameforge && StyleDatabase.flameforge.key === "6");
 check("style mirrorblade exists on key 7", StyleDatabase.mirrorblade && StyleDatabase.mirrorblade.key === "7");
+check("style counterflow exists on key 8", StyleDatabase.counterflow && StyleDatabase.counterflow.key === "8");
+check("counterflow uses counter dojo", StyleDatabase.counterflow.preferredEncounter === "counter_dojo");
+check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.knifeFlurry);
 
 for (const id of ["caster", "armored", "swift", "shielded"]) {
   check(`enemy archetype exists: ${id}`, !!(EnemyDatabase.archetypes && EnemyDatabase.archetypes[id]));
 }
 
-for (const id of ["ember_bulwark", "arcane_conduit", "knife_rain", "shield_rite"]) {
+for (const id of ["ember_bulwark", "arcane_conduit", "knife_rain", "shield_rite", "counter_dojo"]) {
   check(`encounter exists: ${id}`, !!(EncounterDatabase.encounters && EncounterDatabase.encounters[id]));
 }
 check("encounters include low-hp phases", Object.values(EncounterDatabase.encounters || {}).every(encounter => Array.isArray(encounter.phases) && encounter.phases.length > 0));
@@ -106,7 +109,7 @@ check("renderer supports node pose tags", rendererJs.includes("getCurrentPose") 
 check("chains include R10 pose tags", chainsJs.includes('motion: "flameBladeCut"') && chainsJs.includes('motion: "overflowBurst"') && chainsJs.includes('motion: "greatswordEarthsplit"'));
 check("qte debug shows active pose", qteDebugJs.includes("姿态："));
 
-for (const key of ["1", "2", "3", "4", "5", "6", "7"]) {
+for (const key of ["1", "2", "3", "4", "5", "6", "7", "8"]) {
   check(`touch controls include numeric key ${key}`, indexHtml.includes(`data-key="${key}"`));
 }
 check("touch controls include click fallback", mainJs.includes('addEventListener("click"') && mainJs.includes("suppressTouchClick"));
@@ -122,7 +125,7 @@ check("demo help advertises showcase", mainJs.includes("亮点演示 Showcase") 
 check("enemy readout renderer exists", rendererJs.includes("drawEnemyAttackReadout") && rendererJs.includes("推荐"));
 check("audio has R7 feedback cues", audioJs.includes("sfxWindowOpen") && audioJs.includes("sfxResourceGain") && audioJs.includes("sfxTransition"));
 check("audio has R9 quieter mix baseline", audioJs.includes("masterVolume: 0.30") && audioJs.includes("sfxChargePeak") && audioJs.includes("volume: 0.42"));
-check("keyboard input includes style key 7", inputJs.includes('"7"'));
+check("keyboard input includes style key 8", inputJs.includes('"8"'));
 check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check-timing.js")));
 check("visual smoke script exists", !!visualSmokeJs);
 check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captureScreenshot"));
@@ -155,7 +158,11 @@ check("active attack system exists", activeAttacksJs.includes("class ActiveAttac
 check("active attack emits reaction and impact visuals", activeAttacksJs.includes("emitReactionVisual") && activeAttacksJs.includes("emitImpactVisual"));
 check("battle commits qte active attacks", battleJs.includes('kind: "playerQTE"') && battleJs.includes("resolvePlayerQTEImpact") && battleJs.includes("finishPlayerQTEFlow"));
 check("battle commits enemy active attacks", battleJs.includes("commitEnemyActiveAttack") && battleJs.includes('kind: "enemyAttack"') && battleJs.includes("onActiveAttackReactionWindow"));
-check("renderer draws active attacks", rendererJs.includes("drawActiveAttacks") && rendererJs.includes("drawActiveAttackPrompt") && rendererJs.includes("攻击实体推进中"));
+check("battle supports enemy attack chains", battleJs.includes("startEnemyAttackChain") && battleJs.includes("EnemyDatabase.attackChains") && battleJs.includes("triggerClashCounter"));
+check("battle splits dual clash counter hits", battleJs.includes("buildClashCounterSegments") && battleJs.includes("commitClashCounterSegments") && battleJs.includes("dualClashFollow"));
+check("renderer draws target-anchored melee active attacks", rendererJs.includes("drawActiveAttacks") && rendererJs.includes("drawMeleeActiveAttack") && !rendererJs.includes("drawActiveAttackPrompt") && !rendererJs.includes("攻击实体推进中"));
+check("battle splits melee qte hits", battleJs.includes("buildQTEHitSegments") && battleJs.includes("commitSegmentedQTEActiveAttacks") && battleJs.includes("suppressFlowComplete") && battleJs.includes("suppressImpactSideEffects"));
+check("battle trims qte floating text noise", battleJs.includes('if (outcome !== "success")') && !battleJs.includes("% 连击`, 740, 300"));
 check("renderer suppresses qte stale overlays", rendererJs.includes("shouldDrawFloatingMessage") && rendererJs.includes("shouldDrawTurnBanner") && rendererJs.includes('scene.turnState !== "qte_running"') && visualSmokeJs.includes("battle qte suppresses stale overlays"));
 check("qte debug shows active attacks", qteDebugJs.includes("activeAttackSystem.getDebugLines"));
 check("battle applies chain handfeel", battleJs.includes("Utils.getChainHandfeel(chainConfig") && battleJs.includes("Utils.getChainHandfeel(chain, { chainId, source: \"enemy\" })"));

@@ -996,6 +996,75 @@ const ChainDatabase = {
     ]
   },
 
+  counterspell_reversal: {
+    key: "S",
+    name: "反咒·接引返还",
+    description: "敌方回合内接住法术，蓄力中闪避近身压制，再把反咒释放回去并打断攻势。",
+    color: "#16a085",
+    family: "absorb",
+    role: "counter",
+    visual: "counterspellReversal",
+    tags: ["absorb", "counter", "charge", "dodge", "interrupt"],
+    nodes: [
+      {
+        id: "catch",
+        name: "接住法术",
+        duration: 0.52,
+        input: { type: "press", key: "S" },
+        pose: { state: "casting", motion: "absorbSigil" },
+        window: { start: 0.15, end: 0.40 },
+        perfect: 0.27,
+        onPerfect: { next: "slip", effect: "counterspell_catch_perfect", damage: 0, chargeMul: 1.15, resource: { spellEnergy: 18 }, message: "法术被接住", visualEvent: "absorbGlyph" },
+        onSuccess: { next: "slip", effect: "counterspell_catch", damage: 0, resource: { spellEnergy: 12 }, message: "接住法术", visualEvent: "absorbGlyph" },
+        onEarly: { next: "slip", effect: "counterspell_catch_early", damage: 0, resource: { spellEnergy: 6 }, message: "提前接印", visualEvent: "absorbFlicker" },
+        onLate: { next: "leak", effect: "counterspell_catch_late", damage: 0, message: "接印慢了", visualEvent: "absorbLeak" },
+        onFail: { next: "leak", effect: "counterspell_catch_fail", damage: 0, message: "法术擦过", visualEvent: "absorbBacklash" }
+      },
+      {
+        id: "slip",
+        name: "蓄力中闪避",
+        duration: 0.62,
+        input: { type: "press", key: "SPACE" },
+        pose: { state: "charge", motion: "absorbSiphon" },
+        window: { start: 0.18, end: 0.48 },
+        perfect: 0.34,
+        onPerfect: { next: "release", effect: "counterspell_slip_perfect", damage: 0, chargeMul: 1.2, iframe: 0.18, resource: { spellEnergy: 12 }, message: "闪身不断蓄", visualEvent: "absorbSiphonPeak" },
+        onSuccess: { next: "release", effect: "counterspell_slip", damage: 0, iframe: 0.14, resource: { spellEnergy: 8 }, message: "蓄力中闪避", visualEvent: "absorbSiphon" },
+        onEarly: { next: "release", effect: "counterspell_slip_early", damage: 0, iframe: 0.10, resource: { spellEnergy: 4 }, message: "闪得偏早", visualEvent: "absorbSiphon" },
+        onLate: { next: "leak", effect: "counterspell_slip_late", damage: 0, selfStun: 0.18, message: "闪避拖慢", visualEvent: "absorbLeak" },
+        onFail: { next: "leak", effect: "counterspell_slip_fail", damage: 0, selfStun: 0.25, message: "蓄力被扰乱", visualEvent: "absorbBacklash" }
+      },
+      {
+        id: "release",
+        name: "反咒释放",
+        duration: 0.54,
+        input: { type: "press", key: "S" },
+        pose: { state: "casting", motion: "absorbRelease" },
+        window: { start: 0.16, end: 0.42 },
+        perfect: 0.29,
+        onPerfect: { next: null, effect: "counterspell_release_perfect", damage: 38, stunEnemy: 0.65, openPlayerTurn: true, resource: { spellEnergy: 18 }, absorbReady: true, message: "反咒返还！", status: { target: "player", type: "absorbReady", turns: 1 }, visualEvent: "absorbReleasePeak" },
+        onSuccess: { next: null, effect: "counterspell_release", damage: 28, stunEnemy: 0.35, openPlayerTurn: true, resource: { spellEnergy: 12 }, absorbReady: true, message: "反咒命中", status: { target: "player", type: "absorbReady", turns: 1 }, visualEvent: "absorbRelease" },
+        onEarly: { next: null, effect: "counterspell_release_early", damage: 14, openPlayerTurn: true, resource: { spellEnergy: 6 }, message: "反咒提前释放", visualEvent: "absorbLeak" },
+        onLate: { next: null, effect: "counterspell_release_late", damage: 8, selfStun: 0.24, resource: { spellEnergy: 4 }, message: "反咒迟滞", visualEvent: "absorbBacklash" },
+        onFail: { next: null, effect: "counterspell_release_fail", damage: 4, selfStun: 0.35, message: "反咒泄漏", visualEvent: "absorbBacklash" }
+      },
+      {
+        id: "leak",
+        name: "泄流补正",
+        duration: 0.42,
+        input: { type: "press", key: "S" },
+        pose: { state: "casting", motion: "absorbLeak" },
+        window: { start: 0.13, end: 0.32 },
+        perfect: 0.22,
+        onPerfect: { next: null, effect: "counterspell_leak_control", damage: 12, resource: { spellEnergy: 12 }, message: "泄流压回", visualEvent: "absorbSiphon" },
+        onSuccess: { next: null, effect: "counterspell_leak", damage: 6, resource: { spellEnergy: 6 }, message: "回收残咒", visualEvent: "absorbLeak" },
+        onEarly: { next: null, effect: "counterspell_leak_early", damage: 3, message: "补正过早", visualEvent: "absorbFlicker" },
+        onLate: { next: null, effect: "counterspell_leak_late", damage: 2, selfStun: 0.2, message: "泄流拖慢", visualEvent: "absorbBacklash" },
+        onFail: { next: null, effect: "counterspell_leak_fail", damage: 0, selfStun: 0.3, message: "反制失败", visualEvent: "absorbBacklash" }
+      }
+    ]
+  },
+
   flame_blade: {
     key: "A",
     name: "焰刃·熔甲三连",

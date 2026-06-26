@@ -275,10 +275,12 @@ function verifyActiveAttackQteResolution() {
   battle.qteRunner.forceOutcome("success");
 
   assert("active attack qte creates attack", runUntil(battle, () => battle.turnState === "attack_active" && battle.activeAttackSystem.active.length > 0, 8), battle.turnState);
+  const qteAttacks = battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "playerQTE");
+  assert("active attack qte splits melee hits", qteAttacks.length >= 2 && qteAttacks.some(attack => attack.intent.suppressFlowComplete), `${qteAttacks.length} hits`);
   assert("active attack qte clears runner", !battle.qteRunner, "runner still set");
   assert("active attack qte keeps hp before travel", battle.enemyHp === enemyStart, `${battle.enemyHp}/${enemyStart}`);
 
-  const active = battle.activeAttackSystem.active[0];
+  const active = qteAttacks[0];
   tick(battle, Math.max(0.05, active.profile.impactTime * 0.5));
   assert("active attack qte holds damage before impact", battle.enemyHp === enemyStart, `${battle.enemyHp}/${enemyStart}`);
   assert("active attack qte eventually applies damage", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
@@ -297,6 +299,59 @@ function verifyEnemyActiveAttackTiming() {
   tick(battle, 0.4);
   assert("enemy active attack no early damage", battle.playerHp === playerStart, `${battle.playerHp}/${playerStart}`);
   assert("enemy active attack reaches reaction", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
+}
+
+function verifyCounterflowEnemyAttackChain() {
+  const { input, battle } = createBattle();
+  tap(input, battle, "8");
+  assert("counterflow style selected", battle.playerConfig.style === "counterflow", battle.playerConfig.style);
+  assert("counterflow encounter active", battle.activeEncounterId === "counter_dojo", battle.activeEncounterId || "none");
+
+  battle.startEnemyTurn();
+  assert("counterflow enemy chain active", battle.enemyAttackChain && battle.enemyAttackChain.id === "spellDoubleCut", battle.enemyAttackChain?.id || "none");
+  assert("counterflow commits multi enemy attacks", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack").length >= 3, String(battle.activeAttackSystem.active.length));
+  assert("counterflow reaches response", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
+
+  const enemyStart = battle.enemyHp;
+  input.injectKey("A", "press", { fresh: true });
+  tick(battle, 0.08);
+  input.injectKey("A", "release");
+  tick(battle, 0.08);
+  const canceledEnemies = battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled).length;
+  assert("counterflow clash cancels covered nodes", canceledEnemies >= 2, String(canceledEnemies));
+  assert("counterflow clash creates counter attack", battle.activeAttackSystem.active.some(attack => attack.intent.kind === "defenseCounter"), battle.turnState);
+  const clashCounters = battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "defenseCounter");
+  assert("counterflow dual clash splits counter hits", clashCounters.length >= 2 && clashCounters.some(attack => attack.intent.hitIndex === 1) && clashCounters.some(attack => attack.intent.hitIndex === 2), `${clashCounters.length} hits`);
+  assert("counterflow clash eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
+  assert("counterflow clash returns player turn", runUntil(battle, () => battle.turnState === "player_turn", 8), battle.turnState);
+}
+
+function verifyCounterspellEnemyTurnQTE() {
+  const { input, battle } = createBattle();
+  tap(input, battle, "8");
+  battle.startEnemyTurn();
+  assert("counterspell setup reaches spell response", runUntil(battle, () => {
+    const incoming = battle.getIncomingActiveAttack();
+    return incoming
+      && incoming.phase === "reaction"
+      && incoming.intent
+      && incoming.intent.attackId === "arcaneBolt";
+  }, 4), battle.enemyAttackPhase);
+
+  const enemyStart = battle.enemyHp;
+  input.injectKey("S", "press", { fresh: true });
+  tick(battle, 0.08);
+  input.injectKey("S", "release");
+  tick(battle, 0.08);
+  assert("counterspell starts qte", battle.turnState === "qte_running" && battle.qteRunner, battle.turnState);
+  assert("counterspell qte chain", battle.qteRunner.context.chainId === "counterspell_reversal", battle.qteRunner.context.chainId);
+  assert("counterspell cancels enemy chain nodes", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled).length >= 2, String(battle.activeAttackSystem.active.length));
+
+  battle.qteRunner.forceOutcome("success");
+  assert("counterspell creates active attack", runUntil(battle, () => battle.turnState === "attack_active" && battle.activeAttackSystem.active.some(attack => attack.intent.kind === "playerQTE"), 8), battle.turnState);
+  assert("counterspell holds hp before impact", battle.enemyHp === enemyStart, `${battle.enemyHp}/${enemyStart}`);
+  assert("counterspell eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
+  assert("counterspell opens player turn", runUntil(battle, () => battle.turnState === "player_turn", 8), battle.turnState);
 }
 
 function verifyActiveAttackHitStopFreeze() {
@@ -451,6 +506,7 @@ try {
   verifyInputResetReleasesHeldKeys();
   verifyBattleStyle("6", "flameforge", 280, "A", "flame_blade", "ember_bulwark");
   verifyBattleStyle("7", "mirrorblade", 190, "S", "absorb_siphon", "arcane_conduit");
+  verifyBattleStyle("8", "counterflow", 210, "S", "absorb_siphon", "counter_dojo");
   verifyManualEnemyOverride();
   verifyEncounterOverride();
   verifyEncounterEnemyTurnFlow();
@@ -460,6 +516,8 @@ try {
   verifyCombatPacing();
   verifyActiveAttackQteResolution();
   verifyEnemyActiveAttackTiming();
+  verifyCounterflowEnemyAttackChain();
+  verifyCounterspellEnemyTurnQTE();
   verifyActiveAttackHitStopFreeze();
   verifyAllDamageChainsResolveActiveProfiles();
   verifyHitConfirmSystem();

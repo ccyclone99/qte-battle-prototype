@@ -39,10 +39,10 @@ const touchControls = document.getElementById("touch-controls");
 const touchToggle = document.getElementById("touch-toggle");
 
 const battleHelpHtml = `
-  <div><b>开局</b>：按 1-7 选择战斗风格</div>
+  <div><b>开局</b>：按 1-8 选择战斗风格</div>
   <div><b>遭遇</b>：主菜单可选自动推荐、命名遭遇或敌人测试</div>
   <div><b>我方回合</b>：按 A/S/D 触发对应 QTE 链（精准按键 / 按住蓄力 / 节奏连击）</div>
-  <div><b>敌方回合</b>：绿色窗口按 SPACE 闪避/弹反，F 格挡；命中后进入第二段 QTE</div>
+  <div><b>敌方回合</b>：绿色窗口按 SPACE 闪避/弹反，F 格挡；部分战技可按 A/S/D 拼刀或反制</div>
   <div><b>连击</b>：每次成功命中增加连击，伤害随连击提升，受击会打断</div>
   <div><b>追加</b>：荒芜之地等战技在剑攻击后按 A 触发追加攻击窗口</div>
   <div><b>通用</b>：H 帮助，L 日志，T 调试，ESC 返回菜单</div>

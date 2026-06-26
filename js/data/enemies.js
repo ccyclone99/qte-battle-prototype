@@ -131,5 +131,28 @@ const EnemyDatabase = {
       color: "#d4ac0d",
       hint: "可闪避 [SPACE] / 格挡 [F]"
     }
+  },
+
+  attackChains: {
+    spellDoubleCut: {
+      name: "秘术双斩压制",
+      icon: "連",
+      description: "法术起手压反应，接两段近身快攻；用于测试咒还反制、拼刀覆盖和双持连续攻击。",
+      nodes: [
+        { id: "cast", attackId: "arcaneBolt", offset: 0 },
+        { id: "firstCut", attackId: "quickStab", offset: 1.02 },
+        { id: "secondCut", attackId: "quickStab", offset: 1.38 }
+      ]
+    },
+
+    knifeFlurry: {
+      name: "连环快斩",
+      icon: "双",
+      description: "短间隔双物理攻击；单手需要防御组合，双持可用连续拼刀覆盖。",
+      nodes: [
+        { id: "left", attackId: "quickStab", offset: 0 },
+        { id: "right", attackId: "slash", offset: 0.42 }
+      ]
+    }
   }
 };

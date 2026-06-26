@@ -120,19 +120,41 @@ function getEncounterPatterns(encounter) {
   return patterns;
 }
 
-function buildEncounterAttack(attackId, modifiers) {
-  const source = EnemyDatabase.attacks[attackId];
-  const attack = Difficulty.scaleAttack({ id: attackId, ...source });
+function expandAttackPattern(attackPattern = []) {
+  const rows = [];
+  for (const attackId of attackPattern) {
+    const chain = EnemyDatabase.attackChains && EnemyDatabase.attackChains[attackId];
+    if (chain) {
+      for (const [idx, node] of (chain.nodes || []).entries()) {
+        rows.push({
+          attackId: node.attackId,
+          chainId: attackId,
+          offset: node.offset || 0,
+          label: `${attackId}:${node.id || idx + 1}`
+        });
+      }
+    } else {
+      rows.push({ attackId, chainId: null, offset: 0, label: attackId });
+    }
+  }
+  return rows;
+}
+
+function buildEncounterAttack(ref, modifiers) {
+  const source = EnemyDatabase.attacks[ref.attackId];
+  const attack = Difficulty.scaleAttack({ id: ref.attackId, ...source });
   if (modifiers.enemyWindupMul) {
     attack.windup *= modifiers.enemyWindupMul;
     attack.hitTime *= modifiers.enemyWindupMul;
   }
   attack.responseDuration = Difficulty.responseDuration() * (modifiers.responseWindowMul || 1);
+  attack.offset = ref.offset || 0;
+  attack.label = ref.label || ref.attackId;
   return attack;
 }
 
 function getEnemyAttackTiming(attack) {
-  const impactTime = attack.windup + attack.hitTime;
+  const impactTime = (attack.offset || 0) + attack.windup + attack.hitTime;
   const readableCap = Utils.clamp(attack.hitTime + 0.28, 0.48, 0.92);
   const responseDuration = Math.min(attack.responseDuration || Difficulty.responseDuration(), readableCap);
   return {
@@ -147,14 +169,14 @@ function validateEncounterPressure(encounterId, encounter) {
     Difficulty.set(difficultyId);
     for (const pattern of getEncounterPatterns(encounter)) {
       let previousFastAttack = null;
-      for (const [idx, attackId] of (pattern.attackPattern || []).entries()) {
-        const attack = buildEncounterAttack(attackId, pattern.modifiers || {});
+      for (const [idx, ref] of expandAttackPattern(pattern.attackPattern || []).entries()) {
+        const attack = buildEncounterAttack(ref, pattern.modifiers || {});
         const timing = getEnemyAttackTiming(attack);
         encounterPressure.push({
           difficultyId,
           encounterId,
           phaseId: pattern.id,
-          attackId,
+          attackId: ref.label,
           impactTime: timing.impactTime,
           responseDuration: timing.responseDuration
         });
@@ -164,7 +186,7 @@ function validateEncounterPressure(encounterId, encounter) {
             chainId: `encounter:${encounterId}:${pattern.id}`,
             chainName: encounter.name,
             outcome: difficultyId,
-            message: `${attackId} impact ${timing.impactTime.toFixed(2)}s is too fast for hard`
+            message: `${ref.label} impact ${timing.impactTime.toFixed(2)}s is too fast for hard`
           });
         }
         if (difficultyId === "extreme" && timing.impactTime < 0.8) {
@@ -172,7 +194,7 @@ function validateEncounterPressure(encounterId, encounter) {
             chainId: `encounter:${encounterId}:${pattern.id}`,
             chainName: encounter.name,
             outcome: difficultyId,
-            message: `${attackId} impact ${timing.impactTime.toFixed(2)}s is too fast for extreme`
+            message: `${ref.label} impact ${timing.impactTime.toFixed(2)}s is too fast for extreme`
           });
         }
         if (["hard", "extreme"].includes(difficultyId) && timing.responseDuration < 0.48) {
@@ -180,7 +202,7 @@ function validateEncounterPressure(encounterId, encounter) {
             chainId: `encounter:${encounterId}:${pattern.id}`,
             chainName: encounter.name,
             outcome: difficultyId,
-            message: `${attackId} response window ${timing.responseDuration.toFixed(2)}s is below readable floor`
+            message: `${ref.label} response window ${timing.responseDuration.toFixed(2)}s is below readable floor`
           });
         }
 
@@ -190,10 +212,10 @@ function validateEncounterPressure(encounterId, encounter) {
             chainId: `encounter:${encounterId}:${pattern.id}`,
             chainName: encounter.name,
             outcome: difficultyId,
-            message: `fast pressure chain ${previousFastAttack.attackId}->${attackId} at slots ${previousFastAttack.index + 1}/${idx + 1}`
+            message: `fast pressure chain ${previousFastAttack.attackId}->${ref.label} at slots ${previousFastAttack.index + 1}/${idx + 1}`
           });
         }
-        previousFastAttack = isFast ? { attackId, index: idx } : null;
+        previousFastAttack = isFast ? { attackId: ref.label, index: idx } : null;
       }
     }
   }

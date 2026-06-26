@@ -96,5 +96,29 @@ const StyleDatabase = {
     combatArts: [],
     preferredEnemy: "caster",
     preferredEncounter: "arcane_conduit"
+  },
+
+  counterflow: {
+    key: "8",
+    number: "023",
+    name: "逆势双刃",
+    description: "压缩己方回合，以敌方回合内拼刀、咒还反制和短追击为核心；自动攻击无加成，手动 QTE 追击必暴。",
+    icon: "反",
+    color: "#16a085",
+    weapon: "dualBlades",
+    spells: ["absorb"],
+    combatArts: ["desslo"],
+    preferredEnemy: "caster",
+    preferredEncounter: "counter_dojo",
+    actionBarMax: 3.35,
+    manualQteCrit: true,
+    autoAttackNoBonus: true,
+    counterChain: "counterspell_reversal",
+    counterCoverage: {
+      dualBlades: 3,
+      greatsword: 1,
+      staff: 1,
+      default: 1
+    }
   }
 };

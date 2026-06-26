@@ -277,9 +277,12 @@ function validateReferences() {
     assertChainExists(`DefenseDatabase.${defenseId}.chainId`, defense.chainId);
   }
 
+  const isKnownEnemyAttackRef = attackId => {
+    return !!(EnemyDatabase.attacks[attackId] || (EnemyDatabase.attackChains && EnemyDatabase.attackChains[attackId]));
+  };
   const validateEnemyAttackList = (owner, enemy) => {
     for (const attackId of enemy.attacks || []) {
-      if (!EnemyDatabase.attacks[attackId]) fail(`${owner}: unknown attack "${attackId}"`);
+      if (!isKnownEnemyAttackRef(attackId)) fail(`${owner}: unknown attack "${attackId}"`);
     }
   };
   const validateAttackPattern = (owner, pattern) => {
@@ -288,13 +291,42 @@ function validateReferences() {
       return;
     }
     for (const attackId of pattern) {
-      if (!EnemyDatabase.attacks[attackId]) fail(`${owner}: unknown attack "${attackId}"`);
+      if (!isKnownEnemyAttackRef(attackId)) fail(`${owner}: unknown attack "${attackId}"`);
+    }
+  };
+  const validateEnemyAttackChains = () => {
+    for (const [chainId, chain] of Object.entries(EnemyDatabase.attackChains || {})) {
+      if (!chain || !Array.isArray(chain.nodes) || chain.nodes.length === 0) {
+        fail(`EnemyDatabase.attackChains.${chainId}: nodes must be non-empty`);
+        continue;
+      }
+      const nodeIds = new Set();
+      for (const node of chain.nodes) {
+        if (!node || typeof node !== "object") {
+          fail(`EnemyDatabase.attackChains.${chainId}: node must be an object`);
+          continue;
+        }
+        if (!node.id || typeof node.id !== "string") {
+          fail(`EnemyDatabase.attackChains.${chainId}: node id is required`);
+        } else if (nodeIds.has(node.id)) {
+          fail(`EnemyDatabase.attackChains.${chainId}: duplicate node id "${node.id}"`);
+        } else {
+          nodeIds.add(node.id);
+        }
+        if (!EnemyDatabase.attacks[node.attackId]) {
+          fail(`EnemyDatabase.attackChains.${chainId}.${node.id || "node"}: unknown attack "${node.attackId}"`);
+        }
+        if (!isNumber(node.offset) || node.offset < 0) {
+          fail(`EnemyDatabase.attackChains.${chainId}.${node.id || "node"}: offset must be a non-negative number`);
+        }
+      }
     }
   };
   validateEnemyAttackList("EnemyDatabase.base", EnemyDatabase.base);
   for (const [enemyId, enemy] of Object.entries(EnemyDatabase.archetypes || {})) {
     validateEnemyAttackList(`EnemyDatabase.archetypes.${enemyId}`, enemy);
   }
+  validateEnemyAttackChains();
 
   for (const [encounterId, encounter] of Object.entries((EncounterDatabase && EncounterDatabase.encounters) || {})) {
     if (!encounter.enemyId || !EnemyDatabase.archetypes[encounter.enemyId]) {

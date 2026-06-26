@@ -116,7 +116,6 @@ class CanvasRenderer {
     } else if (scene.turnState === "attack_active") {
       this.drawPlayerState(scene);
       this.drawStatusIcons(scene);
-      this.drawActiveAttackPrompt(scene, t);
     } else if (scene.turnState === "game_over") {
       this.drawGameOver(scene);
     }
@@ -544,18 +543,7 @@ class CanvasRenderer {
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
       } else {
-        const mx = from.x + (to.x - from.x) * progress;
-        const my = from.y + (to.y - from.y) * progress;
-        const width = attack.source === "enemy" ? 72 : 86;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = attack.phase === "impact" ? 9 : 6;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 18;
-        ctx.beginPath();
-        ctx.moveTo(mx - width * 0.4, my - 40);
-        ctx.quadraticCurveTo(mx, my - 70, mx + width * 0.5, my + 24);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        this.drawMeleeActiveAttack(ctx, attack, from, to, color, progress, t);
       }
 
       if (attack.phase === "reaction") {
@@ -569,6 +557,72 @@ class CanvasRenderer {
       }
     }
     ctx.restore();
+  }
+
+  drawMeleeActiveAttack(ctx, attack, from, to, color, progress, t) {
+    const profile = attack.profile || {};
+    const approach = Math.sign(to.x - from.x) || (attack.source === "enemy" ? -1 : 1);
+    const hitIndex = Math.max(1, attack.intent.hitIndex || 1);
+    const hitCount = Math.max(1, attack.intent.hitCount || 1);
+    const alternate = hitIndex % 2 === 0 ? -1 : 1;
+    const wind = Utils.clamp(progress, 0, 1);
+    const swing = Math.sin(wind * Math.PI);
+    const heavy = (profile.radius || 0) > 38 || String(attack.intent.weapon || "").includes("greatsword");
+    const span = (heavy ? 124 : 92) + Math.min(18, hitCount * 4);
+    const center = {
+      x: to.x - approach * (heavy ? 34 : 28) + approach * swing * 8,
+      y: to.y - (heavy ? 10 : 18) + alternate * (hitCount > 1 ? 7 : 0)
+    };
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (attack.phase === "startup") {
+      const glow = 10 + Math.sin(t * 14 + hitIndex) * 3;
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = heavy ? 6 : 4;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.moveTo(from.x - approach * 14, from.y - 34 * alternate);
+      ctx.quadraticCurveTo(from.x + approach * 20, from.y - 18 * alternate, from.x + approach * 38, from.y + 18 * alternate);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(from.x + approach * 30, from.y - 10 * alternate, glow, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      return;
+    }
+
+    const alpha = attack.phase === "recovery" ? 0.48 : (attack.phase === "reaction" ? 0.72 : 0.92);
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = attack.phase === "impact" || attack.resolved ? (heavy ? 10 : 8) : (heavy ? 7 : 5);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = attack.phase === "impact" || attack.resolved ? 26 : 18;
+    ctx.beginPath();
+    ctx.moveTo(center.x - approach * span * 0.38, center.y - alternate * 48);
+    ctx.quadraticCurveTo(
+      center.x + approach * span * 0.05,
+      center.y - alternate * 8 - swing * 16,
+      center.x + approach * span * 0.48,
+      center.y + alternate * 40
+    );
+    ctx.stroke();
+
+    if (hitCount > 1) {
+      ctx.globalAlpha = alpha * 0.38;
+      ctx.lineWidth = Math.max(2, ctx.lineWidth - 3);
+      ctx.beginPath();
+      ctx.moveTo(center.x - approach * span * 0.30, center.y + alternate * 34);
+      ctx.quadraticCurveTo(center.x + approach * span * 0.10, center.y + alternate * 2, center.x + approach * span * 0.38, center.y - alternate * 36);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
   }
 
   getBattleAnchor(anchor) {
@@ -1529,55 +1583,6 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawActiveAttackPrompt(scene, t = performance.now() / 1000) {
-    const system = scene.activeAttackSystem;
-    const attack = system && system.active && system.active[0];
-    if (!attack) return;
-
-    const ctx = this.ctx;
-    const x = this.width / 2;
-    const y = this.layout.qteBarY;
-    const barW = 620;
-    const barH = 16;
-    const barX = x - barW / 2;
-    const progress = Utils.clamp((attack.elapsed || 0) / Math.max(0.001, attack.profile.total || 1), 0, 1);
-    const color = attack.profile.color || "#f1c40f";
-    const phaseLabel = attack.phase === "reaction"
-      ? "防御窗口"
-      : (attack.phase === "impact" || attack.phase === "recovery" ? "命中结算" : "攻击推进");
-
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 22px sans-serif";
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10 + Math.sin(t * 12) * 3;
-    ctx.fillText(phaseLabel, x, y - 34);
-    ctx.shadowBlur = 0;
-
-    ctx.fillStyle = "rgba(18, 22, 31, 0.86)";
-    ctx.fillRect(barX, y, barW, barH);
-    ctx.strokeStyle = "rgba(255,255,255,0.28)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(barX, y, barW, barH);
-
-    ctx.fillStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
-    ctx.fillRect(barX, y, Math.max(4, barW * progress), barH);
-    ctx.shadowBlur = 0;
-
-    ctx.textBaseline = "top";
-    ctx.fillStyle = "#d7d9e5";
-    ctx.font = "bold 14px sans-serif";
-    const helper = attack.phase === "reaction"
-      ? "攻击即将命中，防守方可响应"
-      : "攻击实体推进中，命中帧才结算伤害";
-    ctx.fillText(helper, x, y + barH + 12);
-    ctx.restore();
-  }
-
   drawWeaponSelection(battle) {
     const ctx = this.ctx;
 
@@ -1920,9 +1925,13 @@ class CanvasRenderer {
     if (!scene.enemyAttack) return;
 
     const attack = scene.enemyAttack;
-    const active = scene.activeAttackSystem && scene.activeAttackSystem.active
-      ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
-      : null;
+    const active = scene.getIncomingActiveAttack
+      ? scene.getIncomingActiveAttack()
+      : (
+        scene.activeAttackSystem && scene.activeAttackSystem.active
+          ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
+          : null
+      );
     const barW = 760;
     const barH = 30;
     const x = (this.width - barW) / 2;
@@ -2024,9 +2033,13 @@ class CanvasRenderer {
   drawEnemyAttackReadout(scene, attack, x, y, barW, totalTime) {
     const ctx = this.ctx;
     const meta = this.getEnemyAttackMeta(attack);
-    const active = scene.activeAttackSystem && scene.activeAttackSystem.active
-      ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
-      : null;
+    const active = scene.getIncomingActiveAttack
+      ? scene.getIncomingActiveAttack()
+      : (
+        scene.activeAttackSystem && scene.activeAttackSystem.active
+          ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
+          : null
+      );
     const impactTime = active ? active.profile.impactTime : attack.windup + attack.hitTime;
     const currentTime = active ? active.elapsed : scene.enemyAttackTimer;
     const responseStart = active
