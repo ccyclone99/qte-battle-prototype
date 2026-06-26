@@ -47,6 +47,7 @@ const QTEDebugFormatter = {
     if (node) {
       lines.push(`节点：${runner.nodeIndex + 1}/${runner.chain.nodes.length} ${node.name}`);
       lines.push(`输入：${this.describeNodeInput(node)}`);
+      if (node.pose) lines.push(`姿态：${node.pose.state} / ${node.pose.motion}`);
       lines.push(`计时：${Math.max(0, runner.nodeTimer).toFixed(2)}s / ${node.duration.toFixed(2)}s`);
       if (bounds) {
         lines.push(`窗口：${bounds.start.toFixed(2)}s - ${bounds.end.toFixed(2)}s`);

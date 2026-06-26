@@ -53,6 +53,36 @@ function isNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+const allowedPoseStates = new Set(["idle", "swordAttack", "casting", "charge", "shield"]);
+const allowedPoseMotions = new Set([
+  "greatswordDraw",
+  "greatswordCharge",
+  "greatswordCleave",
+  "greatswordEarthsplit",
+  "greatswordOvercharge",
+  "dualDash",
+  "dualFlurry",
+  "dualFinisher",
+  "dualRetreat",
+  "fireKindle",
+  "fireCharge",
+  "fireRelease",
+  "fireSpark",
+  "fireOverheat",
+  "absorbSigil",
+  "absorbSiphon",
+  "absorbRelease",
+  "absorbLeak",
+  "flameBladeIgnite",
+  "flameBladeCut",
+  "flameBladeBurst",
+  "flameBladeEmber",
+  "mirrorGuard",
+  "overflowCompress",
+  "overflowBurst",
+  "overflowVent"
+]);
+
 function validateTransition(chainId, node, key, transition, nodeIds) {
   if (!isObject(transition)) {
     fail(`${chainId}.${node.id}.${key}: transition must be an object`);
@@ -147,6 +177,19 @@ function validateNode(chainId, node, nodeIds) {
 
   if (node.perfect !== null && node.perfect !== undefined && !isNumber(node.perfect)) {
     fail(`${chainId}.${node.id}: perfect must be null or number`);
+  }
+
+  if (node.pose !== undefined) {
+    if (!isObject(node.pose)) {
+      fail(`${chainId}.${node.id}: pose must be an object`);
+    } else {
+      if (typeof node.pose.state !== "string" || !allowedPoseStates.has(node.pose.state)) {
+        fail(`${chainId}.${node.id}: pose.state must be one of ${Array.from(allowedPoseStates).join(", ")}`);
+      }
+      if (typeof node.pose.motion !== "string" || !allowedPoseMotions.has(node.pose.motion)) {
+        fail(`${chainId}.${node.id}: pose.motion "${node.pose.motion}" is not registered`);
+      }
+    }
   }
 
   const transitionKeys = Object.keys(node).filter(key => /^on[A-Z]/.test(key));

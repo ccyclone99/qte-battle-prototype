@@ -321,7 +321,8 @@ class CanvasRenderer {
     const py = this.height - 190;
     const ex = this.width - 220;
     const ey = this.height - 190;
-    const pState = scene.playerState ? scene.playerState.currentState : "idle";
+    const pose = this.getCurrentPose(scene);
+    const pState = pose.state;
 
     // 剑攻击轨迹
     if (pState === "swordAttack") {
@@ -329,7 +330,7 @@ class CanvasRenderer {
       const weapon = weaponId ? WeaponDatabase[weaponId] : null;
       const color = weapon ? weapon.color : "#f1c40f";
       const timing = this.getActionTiming(scene, t);
-      this.drawWeaponTrail(ctx, px, py, weaponId, weapon, color, timing.progress, timing.active);
+      this.drawWeaponTrail(ctx, px, py, weaponId, weapon, color, timing.progress, timing.active, pose.motion);
     }
 
     // 火球蓄力特效：蓄力越久，火球越大越烈
@@ -401,23 +402,58 @@ class CanvasRenderer {
     };
   }
 
-  drawWeaponTrail(ctx, x, y, weaponId, weapon, color, progress, active) {
+  getCurrentPose(scene) {
+    const fallbackState = scene.playerState ? scene.playerState.currentState : "idle";
+    const pose = {
+      state: fallbackState,
+      motion: fallbackState,
+      source: "fallback"
+    };
+
+    if (!scene.qteRunner) return pose;
+
+    const node = scene.qteRunner.currentNode();
+    if (!node) return pose;
+
+    if (node.pose) {
+      return {
+        state: node.pose.state || fallbackState,
+        motion: node.pose.motion || node.id || fallbackState,
+        source: "node"
+      };
+    }
+
+    if (node.input && (node.input.type === "hold_release" || node.input.type === "rhythm")) {
+      return {
+        state: "charge",
+        motion: `${scene.qteRunner.chain.family || "qte"}Charge`,
+        source: "inferred"
+      };
+    }
+
+    return pose;
+  }
+
+  drawWeaponTrail(ctx, x, y, weaponId, weapon, color, progress, active, motion = "") {
     const eased = this.easeOutCubic(Utils.clamp(progress, 0, 1));
     const alpha = active ? Math.max(0.08, 0.75 * (1 - Math.abs(eased - 0.62))) : 0.45 * (1 - progress);
+    const motionName = String(motion);
 
     if (weaponId === "dualBlades") {
+      const isFinisher = motionName === "dualFinisher";
+      const isRetreat = motionName === "dualRetreat";
       for (let i = 0; i < 2; i++) {
         const sign = i === 0 ? 1 : -1;
         ctx.save();
-        ctx.translate(x + 18, y - 3 + sign * 10);
-        ctx.rotate(-0.4 + eased * 1.35 * sign);
+        ctx.translate(x + 18 - (isRetreat ? eased * 26 : 0), y - 3 + sign * (isFinisher ? 14 : 10));
+        ctx.rotate((isRetreat ? 0.65 : -0.4) + eased * (isFinisher ? 1.9 : 1.35) * sign);
         ctx.strokeStyle = i === 0 ? color : "#ffffff";
         ctx.lineWidth = i === 0 ? 4 : 2;
         ctx.globalAlpha = alpha * (i === 0 ? 0.9 : 0.55);
         ctx.shadowColor = color;
         ctx.shadowBlur = 14;
         ctx.beginPath();
-        ctx.arc(0, 0, 62 + eased * 28, -0.55, 0.62);
+        ctx.arc(0, 0, (isFinisher ? 78 : 62) + eased * (isFinisher ? 38 : 28), -0.55, 0.62);
         ctx.stroke();
         ctx.restore();
       }
@@ -425,10 +461,16 @@ class CanvasRenderer {
     }
 
     const isGreatsword = weaponId === "greatsword";
-    const startAngle = isGreatsword ? -Math.PI * 0.72 : -Math.PI * 0.38;
-    const endAngle = isGreatsword ? Math.PI * 0.28 : Math.PI * 0.42;
+    const isEarthsplit = motionName === "greatswordEarthsplit" || motionName === "flameBladeBurst";
+    const isDraw = motionName === "greatswordDraw";
+    const startAngle = isGreatsword
+      ? (isDraw ? -Math.PI * 0.95 : (isEarthsplit ? -Math.PI * 0.9 : -Math.PI * 0.72))
+      : -Math.PI * 0.38;
+    const endAngle = isGreatsword
+      ? (isDraw ? -Math.PI * 0.28 : (isEarthsplit ? Math.PI * 0.36 : Math.PI * 0.28))
+      : Math.PI * 0.42;
     const angle = startAngle + (endAngle - startAngle) * eased;
-    const radius = isGreatsword ? 82 + eased * 52 : 58 + eased * 38;
+    const radius = isGreatsword ? (isEarthsplit ? 104 : 82) + eased * (isEarthsplit ? 64 : 52) : 58 + eased * 38;
 
     ctx.save();
     ctx.translate(x + (isGreatsword ? 8 : 0), y);
@@ -513,6 +555,7 @@ class CanvasRenderer {
     const style = scene.playerConfig && scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
     const styleColor = style ? style.color : (weapon ? weapon.color : "#3498db");
     const actionTiming = this.getActionTiming(scene, t);
+    const pose = this.getCurrentPose(scene);
 
     // 待机呼吸
     let bob = Math.sin(t * 2) * 2;
@@ -520,10 +563,18 @@ class CanvasRenderer {
     let py = basePy + bob + playerReaction.offsetY;
 
     // 架势位移
-    const pState = scene.playerState ? scene.playerState.currentState : "idle";
+    const pState = pose.state;
+    const motion = pose.motion || "";
     let stanceOffset = 0;
-    if (pState === "swordAttack") stanceOffset = 24 + this.easeOutCubic(actionTiming.progress) * 28;
-    else if (pState === "casting" || pState === "charge") stanceOffset = 14;
+    if (pState === "swordAttack") {
+      const ease = this.easeOutCubic(actionTiming.progress);
+      if (motion === "dualDash") stanceOffset = 36 + ease * 34;
+      else if (motion === "dualRetreat") stanceOffset = 18 - ease * 24;
+      else if (motion === "greatswordDraw") stanceOffset = 10 + ease * 18;
+      else stanceOffset = 24 + ease * 28;
+    } else if (pState === "casting" || pState === "charge") {
+      stanceOffset = motion === "overflowCompress" ? 6 : 14;
+    }
     else if (pState === "shield") stanceOffset = 8;
     px += stanceOffset;
 
@@ -537,6 +588,7 @@ class CanvasRenderer {
       styleColor,
       reaction: playerReaction,
       progress: actionTiming.progress,
+      pose,
       t
     });
     this.drawActorReactionOverlay(px, py, 35, playerReaction);
@@ -611,14 +663,20 @@ class CanvasRenderer {
       styleColor,
       reaction,
       progress,
+      pose,
       t
     } = options;
     const scale = reaction.scale || 1;
+    const motion = pose ? pose.motion : state;
     const isAttack = state === "swordAttack";
     const isShield = state === "shield";
     const isCast = state === "casting" || state === "charge";
     const attackEase = this.easeOutCubic(progress || 0);
-    const lean = isAttack ? -0.14 + attackEase * 0.22 : (isShield ? -0.10 : (isCast ? -0.06 : 0));
+    let lean = isAttack ? -0.14 + attackEase * 0.22 : (isShield ? -0.10 : (isCast ? -0.06 : 0));
+    if (motion === "dualDash") lean = -0.24 + attackEase * 0.15;
+    if (motion === "dualRetreat") lean = 0.08 - attackEase * 0.18;
+    if (motion === "greatswordEarthsplit" || motion === "flameBladeBurst") lean = -0.24 + attackEase * 0.34;
+    if (motion === "greatswordCharge" || motion === "overflowCompress") lean = -0.14;
     const bodyColor = "#2f6fa3";
     const trimColor = styleColor || (weapon ? weapon.color : "#3498db");
 
@@ -657,20 +715,57 @@ class CanvasRenderer {
     ctx.fillText(weapon ? (weapon.icon || weapon.name[0]) : "?", 0, 1);
 
     if (isShield) {
-      this.drawLimb(ctx, 18, -10, 42, -4, "#d7e7ff", 7);
-      this.drawShieldSilhouette(ctx, 50, -4, trimColor, t);
+      const shieldX = motion === "mirrorGuard" ? 58 : 50;
+      this.drawLimb(ctx, 18, -10, shieldX - 8, -6, "#d7e7ff", 7);
+      this.drawShieldSilhouette(ctx, shieldX, -4, trimColor, t);
+      if (motion === "mirrorGuard") this.drawCastFocus(ctx, shieldX + 6, -4, trimColor, t);
       this.drawLimb(ctx, -16, -8, -34, 10, "#d7e7ff", 7);
     } else if (isCast) {
-      this.drawLimb(ctx, 16, -10, 43, -30, "#d7e7ff", 7);
-      this.drawCastFocus(ctx, 52, -35, trimColor, t);
-      this.drawLimb(ctx, -16, -8, -38, -22, "#d7e7ff", 7);
+      if (motion === "overflowCompress") {
+        this.drawLimb(ctx, 16, -10, 34, -5, "#d7e7ff", 7);
+        this.drawLimb(ctx, -16, -8, -34, -5, "#d7e7ff", 7);
+        this.drawCastFocus(ctx, 0, -18, trimColor, t);
+      } else if (motion === "absorbSiphon" || motion === "absorbRelease" || motion === "overflowBurst") {
+        this.drawLimb(ctx, 16, -10, 52 + attackEase * 10, -18, "#d7e7ff", 7);
+        this.drawCastFocus(ctx, 62 + attackEase * 10, -20, trimColor, t);
+        this.drawLimb(ctx, -16, -8, -46, -18, "#d7e7ff", 7);
+        this.drawCastFocus(ctx, -54, -20, trimColor, t);
+      } else {
+        this.drawLimb(ctx, 16, -10, 43, -30, "#d7e7ff", 7);
+        this.drawCastFocus(ctx, 52, -35, trimColor, t);
+        this.drawLimb(ctx, -16, -8, -38, -22, "#d7e7ff", 7);
+      }
       if (weaponId === "staff") {
-        this.drawWeaponSilhouette(ctx, weaponId, -30, 7, trimColor, -0.22, 0.9);
+        const staffAngle = motion === "fireRelease" ? -0.48 : -0.22;
+        this.drawWeaponSilhouette(ctx, weaponId, -30, 7, trimColor, staffAngle, 0.9);
       }
     } else if (isAttack) {
-      this.drawLimb(ctx, 16, -10, 42 + attackEase * 18, -18 + attackEase * 12, "#d7e7ff", 7);
-      this.drawLimb(ctx, -16, -8, -32 + attackEase * 10, 2, "#d7e7ff", 7);
-      this.drawWeaponSilhouette(ctx, weaponId, 48 + attackEase * 18, -18 + attackEase * 12, trimColor, -0.22 + attackEase * 0.55, 1);
+      if (weaponId === "dualBlades") {
+        const retreat = motion === "dualRetreat";
+        const finisher = motion === "dualFinisher";
+        this.drawLimb(ctx, 16, -10, 42 + attackEase * (retreat ? -16 : 28), -18 + attackEase * (finisher ? -8 : 12), "#d7e7ff", 7);
+        this.drawLimb(ctx, -16, -8, -38 + attackEase * (retreat ? -18 : 16), -4 + attackEase * 8, "#d7e7ff", 7);
+        this.drawWeaponSilhouette(ctx, weaponId, 48 + attackEase * (retreat ? -16 : 28), -18 + attackEase * (finisher ? -8 : 12), trimColor, -0.55 + attackEase * 0.9, finisher ? 1.1 : 0.95);
+        this.drawWeaponSilhouette(ctx, weaponId, -44 + attackEase * (retreat ? -18 : 16), -4 + attackEase * 8, trimColor, Math.PI - 0.35 - attackEase * 0.65, finisher ? 1.0 : 0.85);
+      } else {
+        let weaponX = 48 + attackEase * 18;
+        let weaponY = -18 + attackEase * 12;
+        let angle = -0.22 + attackEase * 0.55;
+        let weaponScale = 1;
+        if (motion === "greatswordDraw") {
+          weaponX = 16 + attackEase * 34;
+          weaponY = 22 - attackEase * 34;
+          angle = -1.15 + attackEase * 0.72;
+        } else if (motion === "greatswordEarthsplit" || motion === "flameBladeBurst" || motion === "greatswordOvercharge") {
+          weaponX = 34 + attackEase * 28;
+          weaponY = -36 + attackEase * 42;
+          angle = -1.05 + attackEase * 1.2;
+          weaponScale = 1.15;
+        }
+        this.drawLimb(ctx, 16, -10, weaponX - 6, weaponY + 4, "#d7e7ff", 7);
+        this.drawLimb(ctx, -16, -8, -32 + attackEase * 10, 2, "#d7e7ff", 7);
+        this.drawWeaponSilhouette(ctx, weaponId, weaponX, weaponY, trimColor, angle, weaponScale);
+      }
     } else {
       this.drawLimb(ctx, 16, -8, 36, 7, "#d7e7ff", 7);
       this.drawLimb(ctx, -16, -8, -36, 10, "#d7e7ff", 7);

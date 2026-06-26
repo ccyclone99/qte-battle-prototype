@@ -20,6 +20,8 @@ const battleJs = fs.readFileSync(path.join(root, "js/battle.js"), "utf8");
 const inputJs = fs.readFileSync(path.join(root, "js/input.js"), "utf8");
 const rendererJs = fs.readFileSync(path.join(root, "js/renderer.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
+const chainsJs = fs.readFileSync(path.join(root, "js/data/chains.js"), "utf8");
+const qteDebugJs = fs.readFileSync(path.join(root, "js/systems/qte-debug.js"), "utf8");
 const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
 const specMd = fs.readFileSync(path.join(root, "SPEC.md"), "utf8");
 const visualSmokePath = path.join(root, "scripts/visual-smoke.js");
@@ -75,6 +77,9 @@ check("greatswordCleavePerfect has burst renderer data", !!(EffectEventDefinitio
 check("renderer has player silhouette helper", rendererJs.includes("drawPlayerSilhouette"));
 check("renderer has enemy silhouette helper", rendererJs.includes("drawEnemySilhouette"));
 check("renderer has node-timed action helper", rendererJs.includes("getActionTiming"));
+check("renderer supports node pose tags", rendererJs.includes("getCurrentPose") && rendererJs.includes("node.pose"));
+check("chains include R10 pose tags", chainsJs.includes('motion: "flameBladeCut"') && chainsJs.includes('motion: "overflowBurst"') && chainsJs.includes('motion: "greatswordEarthsplit"'));
+check("qte debug shows active pose", qteDebugJs.includes("姿态："));
 
 for (const key of ["1", "2", "3", "4", "5", "6", "7"]) {
   check(`touch controls include numeric key ${key}`, indexHtml.includes(`data-key="${key}"`));

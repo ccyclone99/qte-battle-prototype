@@ -1092,7 +1092,6 @@ Remaining cleanup after R6-B:
 
 Remaining cleanup after R8:
 
-- Add per-node pose tags only where generic node-timed motion is not enough.
 - Add CI integration for screenshot smoke if this project starts using hosted checks.
 
 ### R9 - Targeted Playtest Polish, Completed
@@ -1112,9 +1111,31 @@ Remaining cleanup after R8:
 
 Remaining cleanup after R9:
 
-- Add per-node pose tags only where generic node-timed motion is not enough.
 - Add CI integration for screenshot smoke if this project starts using hosted checks.
 - Add stronger audio tooling only if synthesized placeholders remain too limited after more playtests.
+
+### R10 - Node Pose Specificity, Completed
+
+- Added optional per-node `pose` data with `state` and `motion` fields.
+- Added pose tags to the chains that were visually too generic:
+  - `greatsword_s_v2`: draw, charge, cleave, earthsplit, overcharge.
+  - `dualblades_a_v2`: dash, flurry, finisher, retreat.
+  - `fireball_evolution_v2`: kindle, charge, release, spark, overheat.
+  - `absorb_siphon`: sigil, siphon, release, leak.
+  - `flame_blade`: ignite, cut, burst, ember.
+  - `mirror_guard`: mirror shield.
+  - `overflow_burst`: compress, burst, vent.
+- Renderer now uses `getCurrentPose()` to prefer node pose tags while keeping old current-state inference as a fallback.
+- Player silhouette now varies arm placement, weapon angle, stance offset, and trail shape by motion tag.
+- QTE debug drawer now shows the active node pose as `state / motion`.
+- Data validation now checks pose state and registered motion names.
+- Static smoke coverage now verifies pose data, renderer support, and QTE debug pose output.
+
+Remaining cleanup after R10:
+
+- Add CI integration for screenshot smoke if this project starts using hosted checks.
+- Add pose tags to lower-priority legacy chains only if playtesting shows they still read too generically.
+- Consider a stronger animation layer only if Canvas 2D pose tags stop being enough.
 
 ## 21. Acceptance Criteria
 
@@ -1142,6 +1163,7 @@ Remaining cleanup after R9:
 - Major visual events use reusable burst primitives instead of one-off canvas code.
 - Player and enemy react visibly to hit, crit, guard, dodge, stagger, and cast events.
 - Player/enemy stage silhouettes communicate weapon, guard, cast, and enemy archetype without relying only on text.
+- Key QTE nodes can specify pose tags so weapon and spell chains do not all share the same generic silhouette motion.
 
 ### Combat
 
@@ -1201,6 +1223,7 @@ Manual browser smoke test:
 - Cycle demo style to Dual Blades and run a V2 weapon chain.
 - Cycle demo style to Greatsword and run a V2 weapon chain.
 - In battle, select a Greatsword style and confirm the QTE debug drawer shows V2 chain data.
+- Open QTE debug during a tagged chain and confirm `姿态：state / motion` is visible.
 - In battle, select `6` Fire Greatsword and run `flame_blade`.
 - In battle, select `7` Mirror Blades, gain energy with `S`, then run `overflow_burst`.
 - Confirm no console errors.
@@ -1212,16 +1235,16 @@ Manual browser smoke test:
 - Should Absorb overflow cost scale with stored energy or remain fixed per chain?
 - Should armor break later become both a status multiplier and an enemy armor-stat reducer?
 - Should Dual Blades Perfect streak be global combo-based or chain-local?
-- Should enemy archetype selection become a manual battle setup option?
+- Should manual enemy selection expand into named encounters with terrain or phase rules?
 - Should future visuals remain Canvas 2D or introduce a stronger animation layer first?
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R10 animation specificity and delivery hardening next:
+Move to R11 delivery hardening next:
 
-1. Add per-node pose tags for only the chains that still read too generically in motion.
+1. Add CI integration for `validate-data`, timing, balance, flow smoke, syntax check, and screenshot smoke if hosted checks become useful.
 2. Consider a compact manual visual checklist beside screenshot smoke for poses and audio impressions that automation cannot judge.
-3. Add CI integration for `validate-data`, timing, balance, flow smoke, syntax check, and screenshot smoke if hosted checks become useful.
+3. Add pose tags to lower-priority legacy chains only after seeing which ones still read too generically.
 4. Re-run balance checks after any pose, timing, audio, or enemy-readability changes.
 
-R1-R9 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, and replay regression coverage. The next bottleneck is motion specificity rather than missing test infrastructure.
+R1-R10 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, and data-driven pose specificity. The next bottleneck is delivery hardening and deeper playtest judgment rather than missing core infrastructure.

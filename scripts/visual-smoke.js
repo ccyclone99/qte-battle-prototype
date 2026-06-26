@@ -464,7 +464,7 @@ async function runVisualSmoke() {
     await pressKey(cdp, "6");
     await wait(240);
     await pressKey(cdp, "A");
-    await wait(700);
+    await wait(320);
     await captureScenario(cdp, "battle-style6-qte", [
       { label: "battle entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
       { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) }
