@@ -441,7 +441,14 @@ async function runVisualSmoke() {
         if (!btn) return false;
         const rect = btn.getBoundingClientRect();
         const style = getComputedStyle(btn);
-        return btn.textContent.includes("[8]") && btn.textContent.includes("逆势双刃") && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+        return btn.textContent.includes("023") && btn.textContent.includes("逆势双刃") && btn.textContent.includes("8") && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+      })()`) },
+      { label: "style 008 visible in menu grid", ok: await evaluate(cdp, `(() => {
+        const btn = document.querySelector('#style-choice-grid button[data-style-id="eastern"]');
+        if (!btn) return false;
+        const rect = btn.getBoundingClientRect();
+        const style = getComputedStyle(btn);
+        return btn.textContent.includes("008") && btn.textContent.includes("东方诸国剑术") && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
       })()`) },
       { label: "encounter select visible", ok: await evaluate(cdp, `document.body.textContent.includes("自动推荐") && document.body.textContent.includes("熔炉守门人")`) }
     ]);
@@ -582,6 +589,11 @@ async function runVisualSmoke() {
     await captureScenario(cdp, "battle-player-active-attack", [
       { label: "active attack turn label visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("攻击演出")`) },
       { label: "player active attack exists", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.activeAttackSystem.active.some(a => a.source === "player")`) },
+      { label: "player attack cinematic focus", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const f = r && typeof battle !== "undefined" ? r.getCinematicFocus(battle) : null;
+        return !!(f && f.kind === "activeAttack" && f.source === "player" && f.intensity > 0.4);
+      })()`) },
       { label: "player fire attack descriptor", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
@@ -674,6 +686,11 @@ async function runVisualSmoke() {
       { label: "style 8 dojo stage theme", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "dojo");
+      })()`) },
+      { label: "enemy response cinematic focus", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const f = r && typeof battle !== "undefined" ? r.getCinematicFocus(battle) : null;
+        return !!(f && f.kind === "enemyResponse" && f.phase === "response" && f.intensity > 0.5);
       })()`) },
       { label: "renderer telegraph reads curse burst", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

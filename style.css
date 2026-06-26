@@ -397,10 +397,10 @@ body {
   box-shadow: 0 0 16px color-mix(in srgb, var(--style-color, #f1c40f) 25%, transparent);
 }
 
-.style-choice-key {
+.style-choice-number {
   flex: 0 0 auto;
-  min-width: 32px;
-  font-size: 14px;
+  min-width: 34px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--style-color, #f1c40f);
 }
@@ -412,6 +412,15 @@ body {
   text-overflow: ellipsis;
   font-size: 14px;
   font-weight: 700;
+}
+
+.style-choice-shortcut {
+  flex: 0 0 auto;
+  min-width: 34px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(232, 232, 240, 0.72);
 }
 
 .style-choice.manual {
@@ -737,13 +746,18 @@ body {
     border-radius: 5px;
   }
 
-  .style-choice-key {
-    min-width: 24px;
-    font-size: 11px;
+  .style-choice-number {
+    min-width: 28px;
+    font-size: 10px;
   }
 
   .style-choice-name {
     font-size: 11px;
+  }
+
+  .style-choice-shortcut {
+    min-width: 24px;
+    font-size: 9px;
   }
 
   .menu-hint {

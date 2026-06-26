@@ -1880,6 +1880,26 @@ Acceptance criteria:
 - Visual smoke verifies style `6` resolves to forge theme, style `7` to arcane theme, and style `8` to dojo theme.
 - Static smoke protects the helper surface and visual-smoke coverage.
 
+### R26 Cinematic Combat Focus, Completed
+
+Goal: active attacks and enemy response windows should visually guide the player's eye without changing combat timing or QTE rules.
+
+Implemented direction:
+
+- Main-menu style cards show the style number, style name, and shortcut separately, so `008 · 东方诸国剑术` is visible in the same control the player actually clicks.
+- `CanvasRenderer.getCinematicFocus()` derives a render-only focus target from active attacks, enemy response windows, or QTE state.
+- `drawCinematicFocus()` adds subtle letterbox bars, attack-lane light, speed streaks, and focus reticles during key combat moments.
+- Player active attacks focus along the player-to-enemy path and track the moving active attack position.
+- Enemy response windows focus from enemy to player so defensive timing reads as incoming pressure.
+- QTE running state gets a lower-intensity timing focus that does not compete with the QTE bar.
+
+Acceptance criteria:
+
+- Visual smoke verifies `008` and key-8 style entries are both visible in the main-menu style grid.
+- Renderer exposes cinematic focus helper methods.
+- Visual smoke verifies player active attacks produce `activeAttack` focus and enemy response windows produce `enemyResponse` focus.
+- Static smoke protects helper coverage and visual-smoke assertions.
+
 ## 22. Verification Commands
 
 ```powershell

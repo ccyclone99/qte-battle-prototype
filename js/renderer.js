@@ -83,6 +83,7 @@ class CanvasRenderer {
     this.drawAttackEffects(scene, t);
     this.drawHitConfirmOverlays(scene);
     if (scene.effectBursts) scene.effectBursts.render(ctx);
+    this.drawCinematicFocus(scene, t);
 
     if (scene.turnState.startsWith("demo_")) {
       this.drawDemo(scene, t);
@@ -177,6 +178,204 @@ class CanvasRenderer {
   shouldDrawScreenFlash(scene) {
     if (!scene || !scene.turnState) return false;
     return scene.turnState !== "demo_preview";
+  }
+
+  getCinematicFocus(scene) {
+    if (!scene || !scene.turnState || scene.turnState.startsWith("select_") || scene.turnState.startsWith("demo_") || scene.turnState === "game_over") {
+      return null;
+    }
+
+    const active = this.getCinematicActiveAttack(scene);
+    if (active) {
+      const profile = active.profile || {};
+      const from = this.resolveCinematicAnchor(active.intent && (active.intent.fromAnchor || active.intent.anchor) || (active.source === "enemy" ? "enemyCore" : "playerHand"));
+      const to = this.resolveCinematicAnchor(active.intent && active.intent.toAnchor || (active.target === "player" ? "playerCore" : "enemyCore"));
+      const point = active.position || {
+        x: from.x + (to.x - from.x) * (active.progress || 0.5),
+        y: from.y + (to.y - from.y) * (active.progress || 0.5)
+      };
+      const phaseBoost = active.phase === "impact" ? 0.92 : (active.phase === "reaction" ? 0.66 : 0.46);
+      return {
+        kind: "activeAttack",
+        source: active.source,
+        phase: active.phase,
+        color: profile.color || (active.source === "enemy" ? "#e74c3c" : "#f1c40f"),
+        from,
+        to,
+        point,
+        progress: active.progress || 0,
+        intensity: phaseBoost,
+        label: active.intent && (active.intent.visualEvent || active.intent.chainId || active.intent.kind)
+      };
+    }
+
+    if (scene.turnState === "enemy_turn" && scene.enemyAttack && scene.enemyAttackPhase && scene.enemyAttackPhase !== "none") {
+      const response = scene.enemyAttackPhase === "response";
+      const hit = scene.enemyAttackPhase === "hit";
+      return {
+        kind: "enemyResponse",
+        phase: scene.enemyAttackPhase,
+        color: scene.enemyAttack.color || "#e74c3c",
+        from: this.resolveCinematicAnchor("enemyCore"),
+        to: this.resolveCinematicAnchor("playerCore"),
+        point: response || hit ? this.resolveCinematicAnchor("playerCore") : this.resolveCinematicAnchor("enemyCore"),
+        progress: hit ? 1 : (response ? 0.72 : 0.34),
+        intensity: hit ? 0.82 : (response ? 0.62 : 0.34),
+        label: scene.enemyAttack.name || "enemy"
+      };
+    }
+
+    if (scene.turnState === "qte_running" && scene.qteRunner) {
+      const style = scene.playerConfig && scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
+      return {
+        kind: "qteFocus",
+        phase: "input",
+        color: style ? style.color : "#f1c40f",
+        from: this.resolveCinematicAnchor("playerCore"),
+        to: this.resolveCinematicAnchor("enemyCore"),
+        point: { x: this.width / 2, y: 336 },
+        progress: scene.qteRunner.currentNodeProgress ? scene.qteRunner.currentNodeProgress() : 0.5,
+        intensity: 0.26,
+        label: "qte"
+      };
+    }
+
+    return null;
+  }
+
+  getCinematicActiveAttack(scene) {
+    const system = scene && scene.activeAttackSystem;
+    if (!system || !Array.isArray(system.active) || system.active.length === 0) return null;
+    const candidates = system.active.filter(attack => !attack.completed && !attack.canceled);
+    if (candidates.length === 0) return null;
+    const priority = { impact: 0, reaction: 1, startup: 2, recovery: 3 };
+    return candidates.slice().sort((a, b) => {
+      const ap = priority[a.phase] ?? 4;
+      const bp = priority[b.phase] ?? 4;
+      if (ap !== bp) return ap - bp;
+      const ai = a.profile && Number.isFinite(a.profile.impactTime) ? Math.abs(a.profile.impactTime - a.elapsed) : Infinity;
+      const bi = b.profile && Number.isFinite(b.profile.impactTime) ? Math.abs(b.profile.impactTime - b.elapsed) : Infinity;
+      return ai - bi;
+    })[0];
+  }
+
+  resolveCinematicAnchor(anchor) {
+    const anchors = {
+      playerCore: { x: 220, y: 360 },
+      playerHand: { x: 270, y: 320 },
+      playerShield: { x: 220, y: 380 },
+      enemyCore: { x: 740, y: 380 },
+      enemyChest: { x: 740, y: 350 },
+      midpoint: { x: 480, y: 370 }
+    };
+    return anchors[anchor] || anchors.midpoint;
+  }
+
+  drawCinematicFocus(scene, t) {
+    const focus = this.getCinematicFocus(scene);
+    if (!focus) return;
+    const ctx = this.ctx;
+    const intensity = Utils.clamp(focus.intensity || 0, 0, 1);
+    if (intensity <= 0.02) return;
+
+    this.drawCinematicLetterbox(ctx, intensity, focus.color);
+    this.drawCinematicLane(ctx, focus, t);
+    this.drawCinematicReticle(ctx, focus, t);
+  }
+
+  drawCinematicLetterbox(ctx, intensity, color) {
+    ctx.save();
+    const bar = 18 + intensity * 24;
+    const alpha = 0.10 + intensity * 0.12;
+    ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+    ctx.fillRect(0, 0, this.width, bar);
+    ctx.fillRect(0, this.height - bar, this.width, bar);
+
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = this.hexToRgba(color || "#ffffff", 0.05 + intensity * 0.08);
+    ctx.fillRect(0, bar - 2, this.width, 2);
+    ctx.fillRect(0, this.height - bar, this.width, 2);
+    ctx.restore();
+  }
+
+  drawCinematicLane(ctx, focus, t) {
+    const from = focus.from || this.resolveCinematicAnchor("playerCore");
+    const to = focus.to || this.resolveCinematicAnchor("enemyCore");
+    const color = focus.color || "#f1c40f";
+    const intensity = Utils.clamp(focus.intensity || 0, 0, 1);
+    const isEnemy = focus.kind === "enemyResponse" || focus.source === "enemy";
+    const laneAlpha = focus.kind === "qteFocus" ? 0.10 : 0.18 + intensity * 0.18;
+    const shimmer = 0.5 + Math.sin(t * 8) * 0.08;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const grad = ctx.createLinearGradient(from.x, from.y, to.x, to.y);
+    grad.addColorStop(0, this.hexToRgba(color, laneAlpha * 0.40));
+    grad.addColorStop(0.5, this.hexToRgba(color, laneAlpha * shimmer));
+    grad.addColorStop(1, this.hexToRgba(color, laneAlpha * 0.50));
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = focus.kind === "qteFocus" ? 18 : 24 + intensity * 24;
+    ctx.lineCap = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12 + intensity * 18;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y - 16);
+    ctx.quadraticCurveTo(this.width / 2, 308 - intensity * 16, to.x, to.y - 18);
+    ctx.stroke();
+
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.10 + intensity * 0.10);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      const offset = ((t * 110 + i * 90) % 520) / 520;
+      const x = from.x + (to.x - from.x) * offset;
+      const y = from.y + (to.y - from.y) * offset - 24 + Math.sin(offset * Math.PI) * -36;
+      ctx.beginPath();
+      ctx.moveTo(x - (isEnemy ? -18 : 18), y);
+      ctx.lineTo(x + (isEnemy ? -30 : 30), y - 8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawCinematicReticle(ctx, focus, t) {
+    const point = focus.point || this.resolveCinematicAnchor("midpoint");
+    const color = focus.color || "#f1c40f";
+    const intensity = Utils.clamp(focus.intensity || 0, 0, 1);
+    const radius = focus.kind === "qteFocus" ? 34 : 42 + intensity * 20;
+    const alpha = focus.kind === "qteFocus" ? 0.18 : 0.24 + intensity * 0.28;
+    const spin = t * (focus.source === "enemy" ? -1.2 : 1.2);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.translate(point.x, point.y);
+    ctx.rotate(spin);
+    ctx.strokeStyle = this.hexToRgba(color, alpha);
+    ctx.lineWidth = 2 + intensity * 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14 + intensity * 18;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2;
+      const x1 = Math.cos(a) * (radius + 8);
+      const y1 = Math.sin(a) * (radius + 8);
+      const x2 = Math.cos(a) * (radius + 24);
+      const y2 = Math.sin(a) * (radius + 24);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+    }
+    ctx.stroke();
+
+    if (focus.phase === "impact") {
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.26 + intensity * 0.24);
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * (0.45 + Math.sin(t * 14) * 0.06), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   drawVignette() {
