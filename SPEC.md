@@ -1967,11 +1967,13 @@ Implemented direction:
 - `023 · 逆势双刃` is explicitly marked as `风格 8` and gets a stronger card outline.
 - `008 · 东方诸国剑术` keeps its lore number and is explicitly marked as `风格 4`, so `008` is no longer confused with the eighth selectable style.
 - The hidden native select still remains the state source, so battle/practice startup behavior is unchanged.
+- Native select labels also use `风格 N · 编号 · 名称`, so fallback/dropdown views expose the same style-key wording as the visible cards.
 
 Acceptance criteria:
 
 - Static smoke protects the split between style numbers and style keys.
 - Visual smoke verifies `023 · 逆势双刃 / 风格 8` and `008 · 东方诸国剑术 / 风格 4` are both visible in the main-menu grid.
+- Visual smoke also verifies the native style select labels include `风格 8 · 023 · 逆势双刃` and `风格 4 · 008 · 东方诸国剑术`.
 
 ### R31 Combat Contact Performance Layer, Completed
 
@@ -1990,6 +1992,29 @@ Acceptance criteria:
 - Renderer exposes combat contact event and drawing helpers.
 - Visual smoke injects a confirmed hit record and verifies a combat contact event is active during the player active-attack screenshot.
 - Static smoke protects helper coverage, the debug-gated hitbox overlay, and the visual-smoke assertion.
+
+### R32 Enemy Rig Silhouette Pass, Completed
+
+Goal: enemy archetypes should be readable from body shape and stance before the player looks at text labels.
+
+Implemented direction:
+
+- `CanvasRenderer.getEnemyRigProfile()` maps enemy model/build data into render rig values: silhouette family, scale, torso size, head radius, limb width, stance, and shadow scale.
+- Enemy rendering now uses the rig profile for body proportions instead of relying only on inline type checks.
+- `drawEnemyRigBackDetails()` adds silhouette-specific back layers:
+  - caster: long ritual robe and arcane halo rings
+  - armored: heavy shoulder plates and plate skirt
+  - swift: low cloak tail and fast scarf sweep
+  - shielded: broad ward silhouette behind the body
+  - golem: offset stone shoulder and hip blocks
+- Enemy shadows now scale with the rig profile so heavy and light archetypes read differently on the floor.
+- This pass is render-only and does not change enemy stats, timing, hit confirm, QTE windows, or encounter logic.
+
+Acceptance criteria:
+
+- Renderer exposes enemy rig profile and back-detail helpers.
+- Static smoke protects all five rig silhouette families.
+- Visual smoke verifies armored and caster enemy rig profiles during existing battle screenshots.
 
 ## 22. Verification Commands
 

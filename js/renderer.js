@@ -455,6 +455,118 @@ class CanvasRenderer {
     };
   }
 
+  getEnemyRigProfile(modelProfile = {}) {
+    const profile = typeof modelProfile === "string"
+      ? { modelType: modelProfile, build: "" }
+      : (modelProfile || {});
+    const modelType = profile.modelType || profile.type || "golem";
+    const build = profile.build || "medium";
+    const base = {
+      modelType,
+      build,
+      silhouette: modelType,
+      scaleX: 1,
+      scaleY: 1,
+      torsoW: 60,
+      torsoH: 66,
+      headRadius: 16,
+      legWidth: 9,
+      armWidth: 8,
+      shoulderW: 64,
+      shoulderY: -26,
+      shadowScale: 1,
+      stance: 1
+    };
+
+    if (modelType === "caster") {
+      return {
+        ...base,
+        silhouette: "ritual-caster",
+        scaleX: 0.92,
+        scaleY: 1.08,
+        torsoW: 52,
+        torsoH: 78,
+        headRadius: 15,
+        legWidth: 7,
+        armWidth: 7,
+        shoulderW: 58,
+        shoulderY: -30,
+        shadowScale: 0.86,
+        stance: 0.82
+      };
+    }
+    if (modelType === "armored" || build === "heavy") {
+      return {
+        ...base,
+        silhouette: "heavy-plate",
+        scaleX: 1.14,
+        scaleY: 1.04,
+        torsoW: 76,
+        torsoH: 74,
+        headRadius: 19,
+        legWidth: 12,
+        armWidth: 10,
+        shoulderW: 88,
+        shoulderY: -30,
+        shadowScale: 1.20,
+        stance: 1.12
+      };
+    }
+    if (modelType === "swift" || build === "lean") {
+      return {
+        ...base,
+        silhouette: "low-cloak",
+        scaleX: 0.84,
+        scaleY: 0.98,
+        torsoW: 48,
+        torsoH: 62,
+        headRadius: 14,
+        legWidth: 7,
+        armWidth: 6,
+        shoulderW: 50,
+        shoulderY: -24,
+        shadowScale: 0.82,
+        stance: 1.24
+      };
+    }
+    if (modelType === "shielded" || build === "guard") {
+      return {
+        ...base,
+        silhouette: "ward-guard",
+        scaleX: 1.05,
+        scaleY: 1.02,
+        torsoW: 64,
+        torsoH: 68,
+        headRadius: 17,
+        legWidth: 10,
+        armWidth: 9,
+        shoulderW: 74,
+        shoulderY: -28,
+        shadowScale: 1.08,
+        stance: 0.96
+      };
+    }
+    if (modelType === "golem") {
+      return {
+        ...base,
+        silhouette: "stone-golem",
+        scaleX: 1.08,
+        scaleY: 1.04,
+        torsoW: 66,
+        torsoH: 70,
+        headRadius: 18,
+        legWidth: 11,
+        armWidth: 10,
+        shoulderW: 78,
+        shoulderY: -28,
+        shadowScale: 1.14,
+        stance: 1.04
+      };
+    }
+
+    return base;
+  }
+
   resolveCinematicAnchor(anchor) {
     const anchors = {
       playerCore: { x: 220, y: 360 },
@@ -2249,8 +2361,9 @@ class CanvasRenderer {
     ex += enemyForward;
 
     const enemyConfig = scene.enemyConfig || EnemyDatabase.base;
+    const enemyRig = this.getEnemyRigProfile(this.getEnemyModelProfile(enemyConfig));
     const enemyStatusVisuals = this.getActorStatusVisuals(scene, "enemy");
-    this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58 * enemyPerformance.shadowScale, "rgba(192, 57, 43, 0.3)");
+    this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58 * enemyPerformance.shadowScale * enemyRig.shadowScale, "rgba(192, 57, 43, 0.3)");
     this.drawActorGroundSigil(ctx, baseEx + enemyForward, baseEy + 55, 62, enemyConfig.color || "#e74c3c", "enemy", t);
     this.drawEnemyStatusAuras(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
     this.drawActorPerformanceAfterimage(ctx, "enemy", ex, ey, enemyConfig.color || "#e74c3c", enemyPerformance, t);
@@ -3438,6 +3551,7 @@ class CanvasRenderer {
     const isSwift = modelType === "swift";
     const isShielded = modelType === "shielded";
     const isGolem = modelType === "golem";
+    const rig = this.getEnemyRigProfile(modelProfile);
     const reactionType = reaction.type || "";
     const reactionPulse = Math.sin((reaction.progress || 0) * Math.PI);
     const enemyPose = perf.enemyPose || (scene.enemyAttack ? this.getEnemyTelegraph(scene.enemyAttack).pose : "idle");
@@ -3448,19 +3562,23 @@ class CanvasRenderer {
     const stride = perf.stride || 0;
     const castPower = perf.cast || 0;
     const brace = perf.brace || 0;
-    const torsoW = isArmored ? 72 : (isSwift ? 48 : (isCaster ? 54 : 60));
-    const torsoH = isArmored ? 72 : (isSwift ? 64 : 66);
+    const torsoW = rig.torsoW;
+    const torsoH = rig.torsoH;
     const limbColor = isGolem ? "#8b4a3c" : (isCaster ? "#dec7ff" : "#f3d4d4");
+    const legWidth = rig.legWidth;
+    const armWidth = rig.armWidth;
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(scale * (isArmored ? 1.08 : 1), scale * (isSwift ? 0.96 : 1));
+    ctx.scale(scale * rig.scaleX, scale * rig.scaleY);
     ctx.scale(perf.scaleX || 1, perf.scaleY || 1);
     ctx.rotate(lean);
 
+    this.drawEnemyRigBackDetails(ctx, rig, color, t, poseIntensity, enemyPose);
+
     // legs
-    this.drawLimb(ctx, -14, 28, -28 - (isSwift ? 7 : 0) - stride * 0.25, 58, "#3a2028", isArmored ? 12 : (isSwift ? 7 : 9));
-    this.drawLimb(ctx, 12, 28, 22 + (isSwift ? 10 : 0) + stride * 0.38, 58 - Math.min(9, stride * 0.12), "#3a2028", isArmored ? 12 : (isSwift ? 7 : 9));
+    this.drawLimb(ctx, -14 * rig.stance, 28, -28 * rig.stance - (isSwift ? 7 : 0) - stride * 0.25, 58, "#3a2028", legWidth);
+    this.drawLimb(ctx, 12 * rig.stance, 28, 22 * rig.stance + (isSwift ? 10 : 0) + stride * 0.38, 58 - Math.min(9, stride * 0.12), "#3a2028", legWidth);
 
     if (isCaster || isSwift) {
       ctx.fillStyle = this.hexToRgba(color, isCaster ? 0.22 : 0.18);
@@ -3505,49 +3623,150 @@ class CanvasRenderer {
     ctx.fillStyle = isCaster ? "#dec7ff" : (isGolem ? "#b86b57" : "#f3d4d4");
     ctx.beginPath();
     if (isGolem) {
-      ctx.roundRect(-18, -72, 36, 30, 7);
+      ctx.roundRect(-rig.headRadius, -72, rig.headRadius * 2, 30, 7);
     } else {
-      ctx.arc(0, -58, isArmored ? 19 : (isSwift ? 14 : 16), 0, Math.PI * 2);
+      ctx.arc(0, -58, rig.headRadius, 0, Math.PI * 2);
     }
     ctx.fill();
     this.drawEnemyHeadgear(ctx, modelProfile, color, t);
 
     // arms and archetype gear
     if (isCaster) {
-      this.drawLimb(ctx, -24, -10, -54 - attackReach + windupPull, -24 - castPower * 8, limbColor, 7);
+      this.drawLimb(ctx, -24, -10, -54 - attackReach + windupPull, -24 - castPower * 8, limbColor, armWidth);
       this.drawCastFocus(ctx, -66 - attackReach + windupPull, -28 - castPower * 8, color, t);
-      this.drawLimb(ctx, 24, -8, 45 + castPower * 8, 2 - castPower * 5, limbColor, 7);
+      this.drawLimb(ctx, 24, -8, 45 + castPower * 8, 2 - castPower * 5, limbColor, armWidth);
     } else if (isShielded) {
       const bashPush = enemyPose === "bash" ? 22 * poseIntensity : 0;
-      this.drawLimb(ctx, -26, -6, -52 - attackReach - bashPush + windupPull, -2 - brace * 4, limbColor, 8);
+      this.drawLimb(ctx, -26, -6, -52 - attackReach - bashPush + windupPull, -2 - brace * 4, limbColor, armWidth);
       this.drawShieldSilhouette(ctx, -62 - attackReach - bashPush + windupPull, -2 - brace * 4, color, t);
-      this.drawLimb(ctx, 24, -8, 48 - attackReach * 0.35, 10 + brace * 3, limbColor, 8);
+      this.drawLimb(ctx, 24, -8, 48 - attackReach * 0.35, 10 + brace * 3, limbColor, armWidth);
       this.drawWeaponSilhouette(ctx, "greatsword", 48 - attackReach * 0.35, 10 + brace * 3, color, -0.15, 0.46);
     } else if (isSwift) {
       const sweep = enemyPose === "sweep" ? poseIntensity : 0;
       const lunge = enemyPose === "lunge" ? poseIntensity : 0;
-      this.drawLimb(ctx, -22, -10, -54 - attackReach - lunge * 12, 0 + sweep * 12, limbColor, 6);
-      this.drawLimb(ctx, 22, -8, 54 - attackReach * 0.4 - sweep * 18, -12 - sweep * 9, limbColor, 6);
+      this.drawLimb(ctx, -22, -10, -54 - attackReach - lunge * 12, 0 + sweep * 12, limbColor, armWidth);
+      this.drawLimb(ctx, 22, -8, 54 - attackReach * 0.4 - sweep * 18, -12 - sweep * 9, limbColor, armWidth);
       this.drawWeaponSilhouette(ctx, "dualBlades", -56 - attackReach - lunge * 12, 0 + sweep * 12, color, Math.PI * (0.9 - sweep * 0.18), 0.55);
       this.drawWeaponSilhouette(ctx, "dualBlades", 54 - sweep * 18, -12 - sweep * 9, color, -Math.PI * (0.25 + sweep * 0.20), 0.55);
     } else {
       if (enemyPose === "overhead" && poseIntensity > 0.12) {
         const lift = 58 * poseIntensity;
-        this.drawLimb(ctx, -26, -8, -32 - windupPull, -26 - lift, limbColor, isGolem ? 10 : 8);
-        this.drawLimb(ctx, 26, -8, 34 - attackReach * 0.2, -4, limbColor, isGolem ? 10 : 8);
+        this.drawLimb(ctx, -26, -8, -32 - windupPull, -26 - lift, limbColor, armWidth);
+        this.drawLimb(ctx, 26, -8, 34 - attackReach * 0.2, -4, limbColor, armWidth);
         if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -34 - windupPull, -34 - lift, color, -Math.PI * 0.45 + poseIntensity * 0.35, isArmored ? 0.78 : 0.62);
       } else if (enemyPose === "sweep" && poseIntensity > 0.12) {
-        this.drawLimb(ctx, -26, -8, -52 - attackReach + windupPull, 0 + poseIntensity * 12, limbColor, isGolem ? 10 : 8);
-        this.drawLimb(ctx, 26, -8, 50 - attackReach * 0.3, 4 - poseIntensity * 8, limbColor, isGolem ? 10 : 8);
+        this.drawLimb(ctx, -26, -8, -52 - attackReach + windupPull, 0 + poseIntensity * 12, limbColor, armWidth);
+        this.drawLimb(ctx, 26, -8, 50 - attackReach * 0.3, 4 - poseIntensity * 8, limbColor, armWidth);
         if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -56 - attackReach + windupPull, 2 + poseIntensity * 10, color, Math.PI * (0.85 - poseIntensity * 0.16), isArmored ? 0.72 : 0.58);
       } else {
-        this.drawLimb(ctx, -26, -8, -50 - attackReach + windupPull, 8, limbColor, isGolem ? 10 : 8);
-        this.drawLimb(ctx, 26, -8, 54 - attackReach * 0.3, 0, limbColor, isGolem ? 10 : 8);
+        this.drawLimb(ctx, -26, -8, -50 - attackReach + windupPull, 8, limbColor, armWidth);
+        this.drawLimb(ctx, 26, -8, 54 - attackReach * 0.3, 0, limbColor, armWidth);
         if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -54 - attackReach + windupPull, 8, color, Math.PI * 0.95, isArmored ? 0.7 : 0.55);
       }
     }
 
     this.drawEnemyAttackPoseOverlay(ctx, modelType, scene.enemyAttack, scene.enemyAttackPhase, color, t, reactionPulse);
+
+    ctx.restore();
+  }
+
+  drawEnemyRigBackDetails(ctx, rig, color, t, poseIntensity = 0, enemyPose = "idle") {
+    const silhouette = rig.silhouette || rig.modelType || "golem";
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (silhouette === "ritual-caster") {
+      const sway = Math.sin(t * 2.2) * 4;
+      ctx.fillStyle = this.hexToRgba(color || "#9b59b6", 0.16);
+      ctx.strokeStyle = this.hexToRgba(color || "#9b59b6", 0.48);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-rig.shoulderW * 0.42, -28);
+      ctx.quadraticCurveTo(-rig.shoulderW * 0.62 + sway, 22, -28, 58);
+      ctx.lineTo(0, 45);
+      ctx.lineTo(28, 58);
+      ctx.quadraticCurveTo(rig.shoulderW * 0.62 + sway, 22, rig.shoulderW * 0.42, -28);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = this.hexToRgba(color || "#9b59b6", 0.34);
+      for (let i = 0; i < 2; i++) {
+        const r = 28 + i * 10 + Math.sin(t * 3 + i) * 2;
+        ctx.beginPath();
+        ctx.arc(0, -56, r, -0.25 + i * 0.2, Math.PI * 1.18 + i * 0.1);
+        ctx.stroke();
+      }
+    } else if (silhouette === "heavy-plate") {
+      ctx.fillStyle = this.hexToRgba("#ffffff", 0.13);
+      ctx.strokeStyle = this.hexToRgba(color || "#e74c3c", 0.58);
+      ctx.lineWidth = 3;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.roundRect(side * 24 - (side < 0 ? 34 : 0), -42, 34, 23, 6);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = this.hexToRgba("#000000", 0.22);
+      ctx.beginPath();
+      ctx.roundRect(-36, 30, 72, 22, 5);
+      ctx.fill();
+    } else if (silhouette === "low-cloak") {
+      const sweep = enemyPose === "sweep" ? poseIntensity * 18 : 0;
+      ctx.fillStyle = this.hexToRgba("#000000", 0.28);
+      ctx.strokeStyle = this.hexToRgba(color || "#2ecc71", 0.42);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-26, -24);
+      ctx.quadraticCurveTo(-64 - sweep, 8, -34 - sweep * 0.3, 48);
+      ctx.lineTo(-3, 34);
+      ctx.lineTo(24, 48);
+      ctx.quadraticCurveTo(52 - sweep * 0.4, 12, 24, -20);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = this.hexToRgba(color || "#2ecc71", 0.38);
+      ctx.beginPath();
+      ctx.moveTo(-40 - sweep, -6);
+      ctx.quadraticCurveTo(-10, 8, 24, -8);
+      ctx.stroke();
+    } else if (silhouette === "ward-guard") {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = this.hexToRgba(color || "#d4ac0d", 0.46 + poseIntensity * 0.18);
+      ctx.fillStyle = this.hexToRgba(color || "#d4ac0d", 0.07);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-42, -44, 84, 106, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.20);
+      ctx.beginPath();
+      ctx.moveTo(-30, -16);
+      ctx.lineTo(30, -16);
+      ctx.moveTo(0, -34);
+      ctx.lineTo(0, 48);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = this.hexToRgba("#000000", 0.22);
+      ctx.strokeStyle = this.hexToRgba(color || "#c0392b", 0.48);
+      ctx.lineWidth = 2;
+      const blocks = [
+        [-41, -40, 28, 22],
+        [15, -43, 32, 24],
+        [-36, 32, 24, 18],
+        [14, 34, 27, 17]
+      ];
+      for (const [x, y, w, h] of blocks) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 5);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
 
     ctx.restore();
   }

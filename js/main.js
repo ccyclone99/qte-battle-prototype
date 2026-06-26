@@ -106,7 +106,7 @@ function selectedEnemyId() {
 }
 
 function styleOptionLabel(style) {
-  return `${style.number} · ${style.name} [${style.key}]`;
+  return `风格 ${style.key} · ${style.number} · ${style.name}`;
 }
 
 function createStyleChoiceButton(value, style) {

@@ -88,11 +88,12 @@ check("style mirrorblade exists on key 7", StyleDatabase.mirrorblade && StyleDat
 check("style counterflow exists on key 8", StyleDatabase.counterflow && StyleDatabase.counterflow.key === "8");
 check("counterflow uses counter dojo", StyleDatabase.counterflow.preferredEncounter === "counter_dojo");
 check("main menu exposes style select", indexHtml.includes('id="style-select"') && indexHtml.includes('value="manual"'));
-check("main menu exposes counterflow option", indexHtml.includes('value="counterflow"') && indexHtml.includes("逆势双刃 [8]"));
+check("main menu exposes counterflow option", indexHtml.includes('value="counterflow"') && indexHtml.includes("风格 8 · 023 · 逆势双刃"));
 check("main menu style select starts chosen style", mainJs.includes("selectedStyleId") && mainJs.includes("applyMenuStyleSelection") && mainJs.includes("battle.startPlayerTurn()"));
 check("main menu syncs style select from data", mainJs.includes("syncStyleSelectOptions") && mainJs.includes("Object.entries(StyleDatabase)") && mainJs.includes("styleOptionLabel"));
 check("main menu shows visible style choices", indexHtml.includes('id="style-choice-grid"') && mainJs.includes("createStyleChoiceButton") && styleCss.includes(".style-choice-grid"));
 check("main menu visible choices separate style numbers from style keys", mainJs.includes("style-choice-number") && mainJs.includes("style-choice-shortcut") && mainJs.includes("button.dataset.styleId") && mainJs.includes("button.dataset.styleKey") && mainJs.includes("风格 ${style.key}") && styleCss.includes(".style-choice.key-eight"));
+check("native style select separates style numbers from keys", mainJs.includes("风格 ${style.key} · ${style.number} · ${style.name}") && indexHtml.includes("风格 4 · 008 · 东方诸国剑术") && indexHtml.includes("风格 8 · 023 · 逆势双刃"));
 check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.knifeFlurry);
 check("enemy attacks declare telegraphs", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.telegraph && attack.telegraph.type && attack.telegraph.shape && attack.telegraph.pose && attack.telegraph.width));
 
@@ -120,6 +121,7 @@ check("renderer has timing readability helpers", rendererJs.includes("getQTERead
 check("renderer has combat contact performance helpers", rendererJs.includes("getCombatContactEvents") && rendererJs.includes("drawCombatContactLayer") && rendererJs.includes("drawContactBodyImpact") && rendererJs.includes("drawContactGroundImpulse"));
 check("renderer has player equipment model helpers", rendererJs.includes("getPlayerModelProfile") && rendererJs.includes("drawPlayerBackGear") && rendererJs.includes("drawPlayerArmorAccents") && rendererJs.includes("drawPlayerLoadoutDetails") && rendererJs.includes("drawPlayerHeadgear"));
 check("renderer has enemy model accent helpers", rendererJs.includes("getEnemyModelProfile") && rendererJs.includes("drawEnemyModelAccents") && rendererJs.includes("drawEnemyMaterialDetails") && rendererJs.includes("drawEnemyGearDetails") && rendererJs.includes("drawEnemyHeadgear") && rendererJs.includes("model.type"));
+check("renderer has enemy rig silhouette helpers", rendererJs.includes("getEnemyRigProfile") && rendererJs.includes("drawEnemyRigBackDetails") && rendererJs.includes("ritual-caster") && rendererJs.includes("heavy-plate") && rendererJs.includes("low-cloak") && rendererJs.includes("ward-guard") && rendererJs.includes("stone-golem"));
 check("renderer has enemy telegraph helpers", rendererJs.includes("getEnemyTelegraph") && rendererJs.includes("drawEnemyTelegraphLane") && rendererJs.includes("drawEnemyTelegraphHit") && rendererJs.includes("drawEnemyAttackPoseOverlay"));
 check("renderer suppresses enemy attack floating message", rendererJs.includes('scene.turnState === "enemy_turn"') && rendererJs.includes("scene.enemyAttackPhase !== \"none\""));
 check("renderer has player active attack helpers", rendererJs.includes("getPlayerActiveAttackDescriptor") && rendererJs.includes("drawPlayerMeleeActiveAttack") && rendererJs.includes("drawPlayerProjectileActiveAttack") && rendererJs.includes("drawPlayerSpellActiveAttack") && rendererJs.includes("drawPlayerPulseActiveAttack"));
@@ -156,6 +158,7 @@ check("visual smoke covers cinematic focus", visualSmokeJs.includes("player atta
 check("visual smoke covers battle result summary", visualSmokeJs.includes("battle-result-summary") && visualSmokeJs.includes("getBattleResultLines"));
 check("visual smoke covers enemy telegraph", visualSmokeJs.includes("battle-enemy-telegraph") && visualSmokeJs.includes("getEnemyTelegraph"));
 check("visual smoke covers player active attacks", visualSmokeJs.includes("battle-player-active-attack") && visualSmokeJs.includes("battle-player-spell-active") && visualSmokeJs.includes("getPlayerActiveAttackDescriptor"));
+check("visual smoke covers enemy rig silhouettes", visualSmokeJs.includes("armored enemy rig silhouette") && visualSmokeJs.includes("caster enemy rig silhouette") && visualSmokeJs.includes("getEnemyRigProfile"));
 check("visual smoke covers actor status visuals", visualSmokeJs.includes("actor status visuals active") && visualSmokeJs.includes("player status visuals active"));
 check("visual smoke covers virtual controls", visualSmokeJs.includes("battle-virtual-controls-qte") && visualSmokeJs.includes("clickVirtualKey"));
 check("visual smoke guards demo stage drawer overlap", visualSmokeJs.includes("demo stage avoids detail drawer") && visualSmokeJs.includes("demo qte bar avoids detail drawer"));

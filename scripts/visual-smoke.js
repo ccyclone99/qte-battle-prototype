@@ -450,6 +450,12 @@ async function runVisualSmoke() {
         const style = getComputedStyle(btn);
         return btn.textContent.includes("008") && btn.textContent.includes("东方诸国剑术") && btn.textContent.includes("风格 4") && btn.dataset.styleKey === "4" && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
       })()`) },
+      { label: "native style select labels style 8", ok: await evaluate(cdp, `(() => {
+        const select = document.getElementById("style-select");
+        if (!select) return false;
+        const text = Array.from(select.options).map(option => option.textContent).join("\\n");
+        return text.includes("风格 8 · 023 · 逆势双刃") && text.includes("风格 4 · 008 · 东方诸国剑术");
+      })()`) },
       { label: "encounter select visible", ok: await evaluate(cdp, `document.body.textContent.includes("自动推荐") && document.body.textContent.includes("熔炉守门人")`) }
     ]);
 
@@ -641,6 +647,12 @@ async function runVisualSmoke() {
         const p = r.getEnemyModelProfile(battle.enemyConfig);
         return !!(p && p.modelType === "armored" && p.gear === "greatsword" && p.armor === "plate");
       })()`) },
+      { label: "armored enemy rig silhouette", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyRigProfile) return false;
+        const rig = r.getEnemyRigProfile(r.getEnemyModelProfile(battle.enemyConfig));
+        return !!(rig && rig.silhouette === "heavy-plate" && rig.torsoW >= 72 && rig.shadowScale > 1.1 && rig.armWidth >= 10);
+      })()`) },
       { label: "actor status visuals active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || !r.getActorStatusVisuals) return false;
@@ -750,6 +762,12 @@ async function runVisualSmoke() {
         if (!r || typeof battle === "undefined" || !r.getEnemyModelProfile) return false;
         const p = r.getEnemyModelProfile(battle.enemyConfig);
         return !!(p && p.modelType === "caster" && p.gear === "focus" && p.armor === "robe");
+      })()`) },
+      { label: "caster enemy rig silhouette", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyRigProfile) return false;
+        const rig = r.getEnemyRigProfile(r.getEnemyModelProfile(battle.enemyConfig));
+        return !!(rig && rig.silhouette === "ritual-caster" && rig.scaleY > 1 && rig.shadowScale < 1 && rig.torsoH >= 74);
       })()`) },
       { label: "renderer telegraph reads curse burst", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
