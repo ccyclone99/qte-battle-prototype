@@ -17,6 +17,22 @@ node server.js
 # 然后访问 http://localhost:8765
 ```
 
+## 本地验证
+
+```powershell
+node scripts/validate-data.js
+node scripts/check-timing.js
+node scripts/check-balance.js
+node scripts/smoke-checklist.js
+node scripts/flow-smoke.js
+node scripts/visual-smoke.js
+Get-ChildItem -Path .\js,.\scripts -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
+node --check .\server.js
+node --check .\save_screenshot.js
+```
+
+`visual-smoke.js` 会自动启动本地服务和 Chrome/Edge，截图产物写入 `tmp/visual-smoke/`。
+
 ## 开局配置
 
 进入战斗前需要选择：

@@ -1075,11 +1075,27 @@ Remaining cleanup after R6-B:
 - Upgraded enemy attack bars with attack type, danger level, recommended keys, response-window countdown, and green-window pulse.
 - Updated static and flow smoke coverage for Showcase, enemy readouts, and R7 audio methods.
 
-Remaining cleanup after R7:
+### R8 - Visual Regression And Layout Polish, Completed
 
-- Add browser screenshot smoke automation for main menu, Showcase, spell QTE, enemy windup, and battle style 6/7.
+- Added `scripts/visual-smoke.js`, a dependency-free Chrome/Edge CDP screenshot smoke runner.
+- Screenshot smoke now covers:
+  - Main menu desktop.
+  - Demo menu with Showcase visible.
+  - Showcase Fire branch playback.
+  - Showcase enemy readout playback.
+  - Battle style `6` QTE entry.
+  - Demo menu mobile landscape layout.
+- The screenshot runner starts its own local server on a free port, captures PNG artifacts under `tmp/visual-smoke/<timestamp>/`, writes a manifest, checks canvas non-blankness, asserts key DOM readouts, and fails on browser errors.
+- Added responsive game-container scaling so the 16:9 stage fits both desktop and mobile landscape viewports without clipping.
+- Tightened small-screen demo and touch-control layout: compact top bar, drawers, overlay typography, tutorial card, numeric/action button rows, and demo detail drawer sizing.
+- Updated static smoke coverage for screenshot automation, responsive scaling, mobile compact rules, and visual-smoke documentation.
+
+Remaining cleanup after R8:
+
 - Tune audio mix after repeated playtesting; current sounds are synthesized placeholders.
-- Add mobile/touch layout polish for the new 5-category demo menu.
+- Add manual enemy matchup selection if balance testing against archetypes becomes slow.
+- Add per-node pose tags only where generic node-timed motion is not enough.
+- Add CI integration for screenshot smoke if this project starts using hosted checks.
 
 ## 21. Acceptance Criteria
 
@@ -1124,6 +1140,8 @@ Remaining cleanup after R7:
 - Demo includes Showcase entries that play staged Fire, Absorb, Flame Blade, and enemy-turn examples without needing list paging.
 - Enemy-turn demos show attack type, danger level, recommended key, and window countdown in the detail panel and attack bar.
 - Key combat events have distinct audio feedback.
+- Screenshot smoke covers main menu, Showcase, enemy readouts, battle style `6`, and mobile landscape demo layout.
+- Mobile landscape keeps the 16:9 game container inside the viewport without clipping the demo category controls.
 
 ## 22. Verification Commands
 
@@ -1135,10 +1153,19 @@ node scripts\check-timing.js
 node scripts\check-balance.js
 node scripts\smoke-checklist.js
 node scripts\flow-smoke.js
-Get-ChildItem -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
+node scripts\visual-smoke.js
+Get-ChildItem -Path .\js,.\scripts -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
+node --check .\server.js
+node --check .\save_screenshot.js
 ```
 
-Browser smoke test:
+Automated browser screenshot smoke:
+
+- Run `node scripts\visual-smoke.js`.
+- Confirm it reports `Visual smoke passed`.
+- Inspect generated PNGs under `tmp/visual-smoke/<timestamp>/` if a visual change needs manual review.
+
+Manual browser smoke test:
 
 - Open `http://localhost:8765/`.
 - Confirm main menu HUD is hidden.
@@ -1150,6 +1177,7 @@ Browser smoke test:
 - Press `R` on the result preview and confirm the same Fire v2 entry replays.
 - Run Absorb active-chain entry.
 - Run `flow-smoke.js` to cover battle style `6`, battle style `7`, Fire v2 demo playback, spell-list paging, and `overflow_burst` end to end.
+- Run `visual-smoke.js` to cover main menu, Showcase, enemy readout, battle style `6`, and mobile landscape screenshots.
 - Cycle demo style to Dual Blades and run a V2 weapon chain.
 - Cycle demo style to Greatsword and run a V2 weapon chain.
 - In battle, select a Greatsword style and confirm the QTE debug drawer shows V2 chain data.
@@ -1169,12 +1197,12 @@ Browser smoke test:
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R8 regression and layout polish next:
+Move to R9 targeted playtest polish next:
 
-1. Add screenshot smoke automation for main menu, Showcase, Fire demo, enemy windup, and battle style 6/7.
-2. Revisit mobile/touch layout now that demo has five categories.
-3. Add manual enemy matchup selection if balance testing against archetypes becomes slow.
-4. Add per-node pose tags only where generic node-timed motion is not enough.
-5. Tune synthesized audio levels after a longer playtest pass.
+1. Tune synthesized audio levels after a longer playtest pass, especially charge peaks, enemy warnings, overload, and branch failures.
+2. Add manual enemy matchup selection so specific archetypes can be tested without relying on style defaults.
+3. Add per-node pose tags for only the chains that still read too generically in motion.
+4. Extend screenshot smoke to battle style `7` and at least one result-preview replay frame if future regressions appear there.
+5. Re-run balance checks after any timing, audio, or enemy-readability changes.
 
-R1-R7 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, and clearer enemy intent. The next bottleneck is regression-proof visual testing and responsive layout polish.
+R1-R8 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, and mobile landscape layout protection. The next bottleneck is repeated playtest tuning rather than missing infrastructure.

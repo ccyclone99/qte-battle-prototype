@@ -19,6 +19,10 @@ const demoModeJs = fs.readFileSync(path.join(root, "js/demo-mode.js"), "utf8");
 const inputJs = fs.readFileSync(path.join(root, "js/input.js"), "utf8");
 const rendererJs = fs.readFileSync(path.join(root, "js/renderer.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
+const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
+const specMd = fs.readFileSync(path.join(root, "SPEC.md"), "utf8");
+const visualSmokePath = path.join(root, "scripts/visual-smoke.js");
+const visualSmokeJs = fs.existsSync(visualSmokePath) ? fs.readFileSync(visualSmokePath, "utf8") : "";
 const results = [];
 
 function check(label, condition) {
@@ -87,6 +91,13 @@ check("enemy readout renderer exists", rendererJs.includes("drawEnemyAttackReado
 check("audio has R7 feedback cues", audioJs.includes("sfxWindowOpen") && audioJs.includes("sfxResourceGain") && audioJs.includes("sfxTransition"));
 check("keyboard input includes style key 7", inputJs.includes('"7"'));
 check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check-timing.js")));
+check("visual smoke script exists", !!visualSmokeJs);
+check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captureScreenshot"));
+check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
+check("small viewport compact rules exist", styleCss.includes("@media (max-width: 900px), (max-height: 520px)") && styleCss.includes("#demo-detail-drawer"));
+check("mobile demo detail uses bottom sheet layout", styleCss.includes("#demo-detail-drawer .drawer-content") && styleCss.includes("bottom: 8px"));
+check("SPEC includes visual smoke command", specMd.includes("node scripts\\visual-smoke.js"));
+check("SPEC syntax check targets source directories", specMd.includes("Get-ChildItem -Path .\\js,.\\scripts"));
 
 let failures = 0;
 console.log("Smoke checklist:");
@@ -102,6 +113,7 @@ console.log("  2. Demo preview -> press R and confirm the same item replays with
 console.log("  3. Demo mode -> spell chains -> overflow_burst shows spellEnergy cost, overload burst, and no console errors.");
 console.log("  4. Battle style 6 and 7 load their preferred enemy archetypes and keep HUD/resources visible.");
 console.log("  5. Demo mode -> showcase category -> fire/absorb/defense entries show staged captions and no console errors.");
+console.log("  6. Visual smoke -> node scripts\\visual-smoke.js captures desktop and mobile screenshots without browser errors.");
 
 if (failures > 0) {
   console.error(`Smoke checklist failed: ${failures}`);

@@ -17,8 +17,8 @@ body {
 
 #game-container {
   position: relative;
-  width: 1280px;
-  height: 720px;
+  width: min(1280px, 100vw, calc(100vh * 16 / 9));
+  height: min(720px, 100vh, calc(100vw * 9 / 16));
   border: 2px solid #3a3a4a;
   border-radius: 8px;
   overflow: hidden;
@@ -495,4 +495,166 @@ body {
 .tutorial-card button:hover {
   transform: translateY(-2px);
   box-shadow: 0 0 16px rgba(241, 196, 15, 0.5);
+}
+
+@media (max-width: 900px), (max-height: 520px) {
+  body {
+    align-items: center;
+  }
+
+  #game-container {
+    border-radius: 0;
+  }
+
+  #top-bar {
+    height: 42px;
+    padding: 0 8px;
+  }
+
+  .hp-group {
+    gap: 4px;
+    font-size: 10px;
+  }
+
+  .hp-label {
+    min-width: 24px;
+  }
+
+  .hp-bar {
+    width: 72px;
+    height: 10px;
+  }
+
+  .top-right-group {
+    gap: 6px;
+  }
+
+  .turn-pill {
+    min-width: 78px;
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .difficulty-badge,
+  .top-menu-btn {
+    font-size: 10px;
+    padding: 3px 7px;
+  }
+
+  .drawer {
+    top: 48px;
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+
+  .left-drawer {
+    left: 8px;
+    width: 190px;
+    max-height: 180px;
+  }
+
+  .right-drawer {
+    right: 8px;
+    width: 210px;
+    max-height: 180px;
+  }
+
+  #demo-detail-drawer {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 8px;
+    width: auto;
+    max-height: 104px;
+  }
+
+  #demo-detail-drawer .drawer-header {
+    margin-bottom: 5px;
+    padding-bottom: 4px;
+  }
+
+  #demo-detail-drawer .drawer-content {
+    max-height: 64px;
+  }
+
+  .qte-debug-drawer {
+    left: 8px;
+    top: 210px;
+    width: min(280px, calc(100vw - 16px));
+    max-height: 220px;
+  }
+
+  .drawer-content {
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .overlay {
+    gap: 10px;
+  }
+
+  .overlay h1 {
+    font-size: 32px;
+    margin-bottom: 4px;
+  }
+
+  .menu-buttons {
+    gap: 10px;
+  }
+
+  .menu-buttons button {
+    padding: 8px 20px;
+    font-size: 15px;
+  }
+
+  .difficulty-row {
+    font-size: 13px;
+  }
+
+  .menu-hint {
+    font-size: 11px;
+    margin-top: 0;
+  }
+
+  .tutorial-card {
+    max-width: calc(100% - 20px);
+    max-height: calc(100% - 20px);
+    padding: 14px 18px;
+    overflow-y: auto;
+  }
+
+  .tutorial-card h2 {
+    font-size: 22px;
+    margin-bottom: 10px;
+  }
+
+  .tutorial-card li {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .tutorial-card button {
+    padding: 8px 24px;
+    font-size: 14px;
+  }
+
+  .touch-controls {
+    left: 8px;
+    right: 8px;
+    bottom: 46px;
+  }
+
+  .touch-row-numeric {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .touch-row-action {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  .touch-controls button {
+    min-width: 0;
+    height: 34px;
+    font-size: 11px;
+  }
 }
