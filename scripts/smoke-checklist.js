@@ -23,9 +23,16 @@ const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
 const chainsJs = fs.readFileSync(path.join(root, "js/data/chains.js"), "utf8");
 const qteDebugJs = fs.readFileSync(path.join(root, "js/systems/qte-debug.js"), "utf8");
 const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
+const readmeMd = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const specMd = fs.readFileSync(path.join(root, "SPEC.md"), "utf8");
 const visualSmokePath = path.join(root, "scripts/visual-smoke.js");
 const visualSmokeJs = fs.existsSync(visualSmokePath) ? fs.readFileSync(visualSmokePath, "utf8") : "";
+const verifyPath = path.join(root, "scripts/verify.js");
+const verifyJs = fs.existsSync(verifyPath) ? fs.readFileSync(verifyPath, "utf8") : "";
+const ciPath = path.join(root, ".github/workflows/ci.yml");
+const ciYml = fs.existsSync(ciPath) ? fs.readFileSync(ciPath, "utf8") : "";
+const manualChecklistPath = path.join(root, "docs/manual-playtest-checklist.md");
+const manualChecklistMd = fs.existsSync(manualChecklistPath) ? fs.readFileSync(manualChecklistPath, "utf8") : "";
 const results = [];
 
 function check(label, condition) {
@@ -108,6 +115,12 @@ check("main menu includes manual enemy select", indexHtml.includes('id="enemy-se
 check("battle supports manual enemy override", battleJs.includes("enemyOverrideId") && battleJs.includes("getEnemySelectionLabel") && mainJs.includes("selectedEnemyId"));
 check("SPEC includes visual smoke command", specMd.includes("node scripts\\visual-smoke.js"));
 check("SPEC syntax check targets source directories", specMd.includes("Get-ChildItem -Path .\\js,.\\scripts"));
+check("verify script exists", !!verifyJs);
+check("verify script runs core gates", verifyJs.includes("scripts/validate-data.js") && verifyJs.includes("scripts/check-timing.js") && verifyJs.includes("scripts/check-balance.js") && verifyJs.includes("scripts/flow-smoke.js"));
+check("verify script supports visual toggle", verifyJs.includes("--skip-visual") && verifyJs.includes("--visual") && verifyJs.includes("scripts/visual-smoke.js"));
+check("CI workflow runs verify", ciYml.includes("node scripts/verify.js --ci --skip-visual"));
+check("manual playtest checklist exists", manualChecklistMd.includes("Battle Feel") && manualChecklistMd.includes("Demo Direction") && manualChecklistMd.includes("Audio"));
+check("README documents verify command", readmeMd.includes("node scripts/verify.js") && readmeMd.includes("--skip-visual"));
 
 let failures = 0;
 console.log("Smoke checklist:");

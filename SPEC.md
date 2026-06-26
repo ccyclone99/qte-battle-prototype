@@ -1137,6 +1137,21 @@ Remaining cleanup after R10:
 - Add pose tags to lower-priority legacy chains only if playtesting shows they still read too generically.
 - Consider a stronger animation layer only if Canvas 2D pose tags stop being enough.
 
+### R11 - Delivery Hardening, Completed
+
+- Added `scripts/verify.js` as the single local verification entry point.
+- Local `verify` runs data validation, timing audit, strict balance audit, static smoke, flow smoke, JS syntax checks, and visual screenshot smoke by default.
+- CI mode runs deterministic checks with `node scripts/verify.js --ci --skip-visual`.
+- Added GitHub Actions workflow `.github/workflows/ci.yml` for `main` pushes, pull requests, and manual dispatch.
+- Added `docs/manual-playtest-checklist.md` for handfeel, visual readability, demo direction, audio, and debug checks that automation cannot judge.
+- Updated README verification instructions to prefer the one-command path.
+
+Remaining cleanup after R11:
+
+- Add hosted screenshot smoke only if CI browser availability is worth the runtime cost.
+- Expand CI to artifact upload if screenshot smoke starts running on hosted checks.
+- Add release/deploy protection only if main-branch pushes start needing manual gates.
+
 ## 21. Acceptance Criteria
 
 ### General
@@ -1146,6 +1161,8 @@ Remaining cleanup after R10:
 - No console errors during normal smoke path.
 - All JS files pass syntax check.
 - Data validator passes.
+- `node scripts/verify.js` provides a single local pre-push verification command.
+- GitHub Actions runs the deterministic verification set on main pushes and pull requests.
 
 ### Handfeel
 
@@ -1188,6 +1205,18 @@ Remaining cleanup after R10:
 ## 22. Verification Commands
 
 ```powershell
+node scripts\verify.js
+```
+
+CI / quick deterministic verification:
+
+```powershell
+node scripts\verify.js --skip-visual
+```
+
+Individual commands:
+
+```powershell
 node scripts\validate-data.js
 node scripts\sim-chain.js flame_blade perfect
 node scripts\sim-chain.js overflow_burst perfect
@@ -1203,9 +1232,14 @@ node --check .\save_screenshot.js
 
 Automated browser screenshot smoke:
 
+- Run `node scripts\verify.js` for the full local gate, or:
 - Run `node scripts\visual-smoke.js`.
 - Confirm it reports `Visual smoke passed`.
 - Inspect generated PNGs under `tmp/visual-smoke/<timestamp>/` if a visual change needs manual review.
+
+Manual playtest checklist:
+
+- Use `docs/manual-playtest-checklist.md` after timing, visual, audio, or demo changes.
 
 Manual browser smoke test:
 
@@ -1240,11 +1274,11 @@ Manual browser smoke test:
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R11 delivery hardening next:
+Move to R12 handfeel and demo direction next:
 
-1. Add CI integration for `validate-data`, timing, balance, flow smoke, syntax check, and screenshot smoke if hosted checks become useful.
-2. Consider a compact manual visual checklist beside screenshot smoke for poses and audio impressions that automation cannot judge.
-3. Add pose tags to lower-priority legacy chains only after seeing which ones still read too generically.
-4. Re-run balance checks after any pose, timing, audio, or enemy-readability changes.
+1. Run the manual playtest checklist and record per-chain issues.
+2. Tune QTE windows, hold-release pacing, rhythm tolerances, hit stop, and failure recovery by chain family.
+3. Strengthen demo direction with clearer slowdowns, state-change focus, and before/after result framing.
+4. Deepen weapon-chain plus spell-chain synergy only after timing and readability settle.
 
-R1-R10 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, and data-driven pose specificity. The next bottleneck is delivery hardening and deeper playtest judgment rather than missing core infrastructure.
+R1-R11 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, data-driven pose specificity, one-command local verification, and core CI. The next bottleneck is handfeel and demo direction rather than delivery infrastructure.

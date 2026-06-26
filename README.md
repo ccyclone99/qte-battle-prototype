@@ -20,18 +20,19 @@ node server.js
 ## 本地验证
 
 ```powershell
-node scripts/validate-data.js
-node scripts/check-timing.js
-node scripts/check-balance.js
-node scripts/smoke-checklist.js
-node scripts/flow-smoke.js
-node scripts/visual-smoke.js
-Get-ChildItem -Path .\js,.\scripts -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
-node --check .\server.js
-node --check .\save_screenshot.js
+node scripts/verify.js
 ```
 
-`visual-smoke.js` 会自动启动本地服务和 Chrome/Edge，截图产物写入 `tmp/visual-smoke/`。
+`verify.js` 本地默认会运行数据、时机、平衡、静态 smoke、流程 smoke、JS 语法检查和视觉截图 smoke。
+
+常用变体：
+
+```powershell
+node scripts/verify.js --skip-visual
+node scripts/verify.js --visual
+```
+
+`visual-smoke.js` 会自动启动本地服务和 Chrome/Edge，截图产物写入 `tmp/visual-smoke/`。人工体验检查见 `docs/manual-playtest-checklist.md`。
 
 ## 开局配置
 
@@ -66,6 +67,7 @@ node --check .\save_screenshot.js
 - [x] 法术能量、破甲、连续闪避等状态显示
 - [x] 伤害数字、屏幕震动、命中停顿
 - [x] 关键 QTE 节点数据化姿态标签（武器链 / 咒术链动作差异）
+- [x] 一键本地验收和 GitHub Actions 基础 CI
 
 ## 文件结构
 
