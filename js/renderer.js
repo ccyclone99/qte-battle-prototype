@@ -1124,7 +1124,14 @@ class CanvasRenderer {
     const enemyLabel = battle.getEnemySelectionLabel ? battle.getEnemySelectionLabel() : "自动匹配";
     ctx.fillStyle = "#cfd0df";
     ctx.font = "bold 14px sans-serif";
-    ctx.fillText(`敌人匹配：${enemyLabel}`, this.width / 2, this.layout.selectionTitleY + 42);
+    ctx.fillText(`遭遇匹配：${enemyLabel}`, this.width / 2, this.layout.selectionTitleY + 42);
+
+    const encounterLines = battle.getEncounterSummaryLines ? battle.getEncounterSummaryLines(2) : [];
+    ctx.fillStyle = "#aeb7c4";
+    ctx.font = "12px sans-serif";
+    encounterLines.forEach((line, idx) => {
+      ctx.fillText(this.truncateText(ctx, line, 720), this.width / 2, this.layout.selectionTitleY + 62 + idx * 16);
+    });
 
     const styles = Object.entries(StyleDatabase);
     const compact = styles.length > 5;
@@ -1138,7 +1145,7 @@ class CanvasRenderer {
     const row2W = row2Count > 0 ? cardW * row2Count + gap * (row2Count - 1) : 0;
     const row1X = (this.width - row1W) / 2;
     const row2X = (this.width - row2W) / 2;
-    const row1Y = compact ? 106 : 112;
+    const row1Y = compact ? 128 : 134;
     const row2Y = row1Y + cardH + gap;
 
     styles.forEach(([id, style], idx) => {

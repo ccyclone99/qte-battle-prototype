@@ -656,7 +656,7 @@ Enemy design should force the player to value different chains.
 
 ### Current State
 
-The battle setup now picks a preferred enemy archetype from the selected style. This is an initial pressure model, not a final encounter system.
+The battle setup now picks a named encounter from the selected style unless the player explicitly chooses a specific encounter or legacy enemy archetype test from the main menu. Encounters wrap an enemy archetype with terrain text, a fixed or curated attack pattern, opening resource modifiers, and rule modifiers that make weapon/spell decisions matter inside the matchup.
 
 ### Enemy Archetypes
 
@@ -679,6 +679,35 @@ The battle setup now picks a preferred enemy archetype from the selected style. 
   - not implemented yet
   - predictable but high damage
   - rewards stun, guard, and interrupt timing
+
+### Named Encounters
+
+Implemented encounter data lives in `EncounterDatabase.encounters`.
+
+- `ember_bulwark`
+  - armored enemy with higher HP and a shield/heavy-smash pattern
+  - starts Fire builds with heat
+  - rewards Fire, armor break, and Greatsword pressure
+- `arcane_conduit`
+  - caster enemy with repeated spell pressure
+  - starts Absorb builds with spell energy
+  - rewards Absorb, reflection, and overflow routing
+- `knife_rain`
+  - swift enemy with short windups and repeated quick stabs
+  - rewards weapon-chain tempo, dodge, parry, and fast openers
+- `shield_rite`
+  - shielded enemy that mixes shield bash and arcane attacks
+  - rewards hybrid Fire/Absorb defensive decisions
+
+Encounter modifiers may adjust:
+
+- enemy max HP
+- enemy attack pattern
+- enemy damage and windup
+- enemy response-window duration
+- opening heat or spell energy
+- Fire, Absorb, sword-chain, normal-attack, and armor-break damage multipliers
+- Absorb energy and reflection multipliers
 
 ### Enemy Attack Data
 
@@ -1181,7 +1210,36 @@ Remaining cleanup after R11:
 Remaining cleanup after R12:
 
 - Run a longer manual playtest pass on hard/extreme to decide whether tight Dual Blades windows need difficulty-specific relief.
-- Add named encounter rules if manual enemy archetypes are no longer enough.
+- Decide whether the next animation step should remain pose-tag Canvas 2D or move toward a stronger animation layer.
+
+### R13 - Encounter Depth, First Pass Completed
+
+- Added `EncounterDatabase` with four named encounters:
+  - `ember_bulwark` for armored Fire/Greatsword pressure.
+  - `arcane_conduit` for Absorb, reflection, and overflow routing.
+  - `knife_rain` for fast Dual Blades, dodge, and parry pressure.
+  - `shield_rite` for mixed shield and spell defense pressure.
+- Main menu encounter selection now supports:
+  - automatic style-recommended encounters
+  - explicit named encounter selection
+  - legacy enemy archetype testing
+- Each style now declares a `preferredEncounter`, so selecting a style gives a more authored matchup than a raw enemy archetype.
+- Battle setup applies encounter max HP, opening heat/spell energy, terrain/rule logs, and QTE debug encounter lines.
+- Enemy turns use encounter attack patterns before falling back to random archetype attacks.
+- Encounter modifiers can tune enemy damage, windup, response window, Fire damage, Absorb damage, sword-chain damage, normal attack damage, armor-break damage, Absorb energy, and reflection damage.
+- Absorb now treats interruptible arcane/curse attacks as spell attacks, not only the legacy `spellCast` id.
+- Flow smoke now proves:
+  - style `6` enters `ember_bulwark`
+  - style `7` enters `arcane_conduit`
+  - manual enemy testing still bypasses named encounters
+  - explicit encounter override applies HP, starting resources, and attack pattern order
+- Static smoke and data validation now protect encounter loading, references, style preferences, and debug surfacing.
+
+Remaining cleanup after R13 first pass:
+
+- Run hard/extreme manual playtests against all four encounters and tune outlier response windows.
+- Add second-phase or threshold rules once HP-only victory starts feeling too flat.
+- Decide whether armor/shield should gain explicit armor stats instead of only status and encounter multipliers.
 - Decide whether the next animation step should remain pose-tag Canvas 2D or move toward a stronger animation layer.
 
 ## 21. Acceptance Criteria
@@ -1222,6 +1280,9 @@ Remaining cleanup after R12:
 - Fire v2 applies damage, branch feedback, and burn/status presentation.
 - Absorb active chain grants spell energy and absorb-ready state.
 - Defense QTEs still resolve dodge, parry, and guard.
+- Style selection applies a preferred named encounter unless an explicit menu selection overrides it.
+- Named encounters can alter enemy HP, attack order, response windows, opening resources, and matchup-specific weapon/spell rewards.
+- Manual enemy archetype testing remains available and does not silently apply named encounter rules.
 
 ### Demo
 
@@ -1234,7 +1295,7 @@ Remaining cleanup after R12:
 - Demo result preview shows focus, result summary, and actual timeline without requiring the detail drawer.
 - Enemy-turn demos show attack type, danger level, recommended key, and window countdown in the detail panel and attack bar.
 - Key combat events have distinct audio feedback.
-- Main menu can force enemy archetypes for matchup testing without changing style loadouts.
+- Main menu can force named encounters or raw enemy archetypes for matchup testing without changing style loadouts.
 - Screenshot smoke covers main menu, Showcase, enemy readouts, battle style `6`, battle style `7`, result preview replay, and mobile landscape demo layout.
 - Mobile landscape keeps the 16:9 game container inside the viewport without clipping the demo category controls.
 
@@ -1281,6 +1342,7 @@ Manual browser smoke test:
 
 - Open `http://localhost:8765/`.
 - Confirm main menu HUD is hidden.
+- In the main menu, leave `遭遇` on auto for one run, then repeat once with a named encounter override.
 - Enter demo mode.
 - Open Showcase and run Fire branch comparison.
 - Run enemy-turn Showcase and confirm type/danger/recommended key/countdown are visible.
@@ -1293,6 +1355,8 @@ Manual browser smoke test:
 - Cycle demo style to Dual Blades and run a V2 weapon chain.
 - Cycle demo style to Greatsword and run a V2 weapon chain.
 - In battle, select a Greatsword style and confirm the QTE debug drawer shows V2 chain data.
+- In battle, select style `6` on auto encounter and confirm the selection screen/log shows `熔炉守门人`.
+- In battle, select style `7` on auto encounter and confirm the QTE debug drawer shows `秘术回廊`.
 - Open QTE debug during a tagged chain and confirm `姿态：state / motion` is visible.
 - In battle, select `6` Fire Greatsword and run `flame_blade`.
 - In battle, select `7` Mirror Blades, gain energy with `S`, then run `overflow_burst`.
@@ -1305,16 +1369,16 @@ Manual browser smoke test:
 - Should Absorb overflow cost scale with stored energy or remain fixed per chain?
 - Should armor break later become both a status multiplier and an enemy armor-stat reducer?
 - Should Dual Blades Perfect streak be global combo-based or chain-local?
-- Should manual enemy selection expand into named encounters with terrain or phase rules?
+- Should named encounters get explicit phase changes at HP thresholds or stay as modifier-driven matchups?
 - Should future visuals remain Canvas 2D or introduce a stronger animation layer first?
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R13 encounter depth and content integration next:
+Move to R14 encounter phases and armor depth next:
 
-1. Convert manual enemy archetype selection into named encounters with terrain, phases, or rule modifiers.
-2. Add deeper armor/shield mechanics beyond HP and attack-pool pressure.
-3. Expand weapon-plus-spell synergy into encounter-facing decisions instead of only chain-local bonuses.
-4. Run the manual playtest checklist on normal/hard/extreme and tune any R12 outliers.
+1. Add HP-threshold or rule-triggered second phases to at least two named encounters.
+2. Add deeper armor/shield mechanics beyond HP, status, and encounter damage multipliers.
+3. Run the manual playtest checklist on normal/hard/extreme across all four R13 encounters.
+4. Decide whether the next animation step should remain pose-tag Canvas 2D or move toward a stronger animation layer.
 
-R1-R12 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, data-driven pose specificity, one-command local verification, core CI, chain-specific handfeel, demo director focus, and clearer weapon/spell synergy feedback. The next bottleneck is encounter depth and content integration rather than core QTE feel.
+R1-R13 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, data-driven pose specificity, one-command local verification, core CI, chain-specific handfeel, demo director focus, clearer weapon/spell synergy feedback, and named encounter rules. The next bottleneck is encounter phase depth and armor/shield systems.

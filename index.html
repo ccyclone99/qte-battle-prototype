@@ -28,14 +28,22 @@
           </select>
         </div>
         <div class="menu-field">
-          <label for="enemy-select">敌人：</label>
+          <label for="enemy-select">遭遇：</label>
           <select id="enemy-select">
-            <option value="auto" selected>自动匹配</option>
-            <option value="base">魔像士兵</option>
-            <option value="caster">秘术咏唱者</option>
-            <option value="armored">重甲守卫</option>
-            <option value="swift">迅捷刺客</option>
-            <option value="shielded">持盾术卫</option>
+            <option value="auto" selected>自动推荐</option>
+            <optgroup label="命名遭遇">
+              <option value="encounter:ember_bulwark">熔炉守门人</option>
+              <option value="encounter:arcane_conduit">秘术回廊</option>
+              <option value="encounter:knife_rain">雨巷迅刺</option>
+              <option value="encounter:shield_rite">折盾仪式</option>
+            </optgroup>
+            <optgroup label="敌人测试">
+              <option value="base">魔像士兵</option>
+              <option value="caster">秘术咏唱者</option>
+              <option value="armored">重甲守卫</option>
+              <option value="swift">迅捷刺客</option>
+              <option value="shielded">持盾术卫</option>
+            </optgroup>
           </select>
         </div>
       </div>
@@ -161,6 +169,7 @@
   <script src="js/data/styles.js"></script>
   <script src="js/data/defenses.js"></script>
   <script src="js/data/enemies.js"></script>
+  <script src="js/data/encounters.js"></script>
   <script src="js/data/effects.js"></script>
   <script src="js/systems/effects.js"></script>
   <script src="js/systems/statuses.js"></script>

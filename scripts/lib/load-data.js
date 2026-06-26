@@ -12,6 +12,7 @@ const defaultDataFiles = [
   ["js/data/combatArts.js", "CombatArtDatabase"],
   ["js/data/defenses.js", "DefenseDatabase"],
   ["js/data/enemies.js", "EnemyDatabase"],
+  ["js/data/encounters.js", "EncounterDatabase"],
   ["js/data/styles.js", "StyleDatabase"],
   ["js/data/effects.js", "EffectEventDefinitions"],
   ["js/systems/statuses.js", "StatusDefinitions"],

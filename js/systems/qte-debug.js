@@ -27,6 +27,9 @@ const QTEDebugFormatter = {
     const title = options.title || "QTE 调试";
     lines.push(title);
     lines.push(`阶段：${scene ? scene.turnState : "none"}`);
+    if (scene && scene.getEncounterDebugLines) {
+      lines.push(...scene.getEncounterDebugLines(4));
+    }
 
     if (!runner) {
       lines.push("Runner：无");

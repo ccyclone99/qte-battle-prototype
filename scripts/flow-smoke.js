@@ -34,6 +34,7 @@ function load(relPath, exportNames = []) {
   ["js/data/combatArts.js", ["CombatArtDatabase"]],
   ["js/data/defenses.js", ["DefenseDatabase"]],
   ["js/data/enemies.js", ["EnemyDatabase"]],
+  ["js/data/encounters.js", ["EncounterDatabase"]],
   ["js/data/styles.js", ["StyleDatabase"]],
   ["js/data/effects.js", ["EffectEventDefinitions"]],
   ["js/systems/statuses.js", ["StatusDefinitions", "StatusSystem"]],
@@ -100,12 +101,15 @@ function createBattle(options = {}) {
   return { input, battle, logs };
 }
 
-function verifyBattleStyle(key, expectedStyle, expectedEnemyHp, actionKey, expectedChainId) {
+function verifyBattleStyle(key, expectedStyle, expectedEnemyHp, actionKey, expectedChainId, expectedEncounterId) {
   const { input, battle, logs } = createBattle();
   tap(input, battle, key);
   assert(`style ${key} enters player turn`, battle.turnState === "player_turn", battle.turnState);
   assert(`style ${key} id`, battle.playerConfig.style === expectedStyle, battle.playerConfig.style);
   assert(`style ${key} enemy hp`, battle.enemyMaxHp === expectedEnemyHp, String(battle.enemyMaxHp));
+  if (expectedEncounterId) {
+    assert(`style ${key} encounter`, battle.activeEncounterId === expectedEncounterId, battle.activeEncounterId || "none");
+  }
 
   tap(input, battle, actionKey);
   assert(`style ${key} starts QTE`, battle.turnState === "qte_running", battle.turnState);
@@ -120,7 +124,24 @@ function verifyManualEnemyOverride() {
   assert("manual enemy keeps selected style", battle.playerConfig.style === "flameforge", battle.playerConfig.style);
   assert("manual enemy overrides style default", battle.enemyId === "swift", battle.enemyId);
   assert("manual enemy hp applied", battle.enemyMaxHp === 160, String(battle.enemyMaxHp));
+  assert("manual enemy does not apply encounter", battle.activeEncounterId === null, battle.activeEncounterId || "none");
   assert("manual enemy log mentions manual mode", logs.some(line => line.includes("手动敌人") && line.includes("迅捷刺客")), logs.join(" | "));
+}
+
+function verifyEncounterOverride() {
+  const { input, battle, logs } = createBattle({ enemyId: "encounter:arcane_conduit" });
+  assert("encounter label visible", battle.getEnemySelectionLabel().includes("秘术回廊"), battle.getEnemySelectionLabel());
+  tap(input, battle, "7");
+  assert("encounter override active", battle.activeEncounterId === "arcane_conduit", battle.activeEncounterId || "none");
+  assert("encounter override enemy applied", battle.enemyId === "caster", battle.enemyId);
+  assert("encounter override hp applied", battle.enemyMaxHp === 190, String(battle.enemyMaxHp));
+  assert("encounter start spell energy", battle.playerState.spellEnergy >= 36, String(battle.playerState.spellEnergy));
+  battle.startEnemyTurn();
+  assert("encounter attack pattern first", battle.enemyAttack && battle.enemyAttack.id === "spellCast", battle.enemyAttack?.id || "none");
+  battle.startPlayerTurn();
+  battle.startEnemyTurn();
+  assert("encounter attack pattern second", battle.enemyAttack && battle.enemyAttack.id === "arcaneBolt", battle.enemyAttack?.id || "none");
+  assert("encounter log mentions named encounter", logs.some(line => line.includes("指定遭遇") && line.includes("秘术回廊")), logs.join(" | "));
 }
 
 function createDemo() {
@@ -177,9 +198,10 @@ function verifyDemoSpellFlows() {
 }
 
 try {
-  verifyBattleStyle("6", "flameforge", 260, "A", "flame_blade");
-  verifyBattleStyle("7", "mirrorblade", 170, "S", "absorb_siphon");
+  verifyBattleStyle("6", "flameforge", 280, "A", "flame_blade", "ember_bulwark");
+  verifyBattleStyle("7", "mirrorblade", 190, "S", "absorb_siphon", "arcane_conduit");
   verifyManualEnemyOverride();
+  verifyEncounterOverride();
   verifyDemoSpellFlows();
 } catch (err) {
   console.error(err.message);

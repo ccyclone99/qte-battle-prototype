@@ -10,7 +10,12 @@ class BattleSystem {
     this.enemyConfig = EnemyDatabase.base;
     this.enemyMaxHp = this.enemyConfig.maxHp;
     this.enemyHp = this.enemyMaxHp;
-    this.enemyOverrideId = this.resolveEnemyOverride(options.enemyId);
+    this.encounterSelection = this.resolveEncounterSelection(options.encounterId || options.enemyId);
+    this.enemyOverrideId = this.encounterSelection.enemyId;
+    this.encounterOverrideId = this.encounterSelection.encounterId;
+    this.activeEncounterId = null;
+    this.encounterConfig = null;
+    this.enemyAttackCursor = 0;
 
     // 回合/阶段状态
     this._turnState = "select_weapon"; // select_weapon | player_turn | enemy_turn | qte_running | resolving | game_over
@@ -55,7 +60,7 @@ class BattleSystem {
     this.resolveDuration = 0.4;
 
     // 消息
-    this.message = `按 1-7 选择战斗风格｜敌人：${this.getEnemySelectionLabel()}`;
+    this.message = `按 1-7 选择战斗风格｜遭遇：${this.getEnemySelectionLabel()}`;
     this.messageTimer = 0;
     this.flashMessage = null;
 
@@ -210,11 +215,36 @@ class BattleSystem {
     this.consumeStyleSelectionInputs();
   }
 
+  resolveEncounterSelection(selectionId) {
+    const selection = String(selectionId || "auto");
+    if (!selection || selection === "auto") {
+      return { encounterId: null, enemyId: null };
+    }
+
+    const encounterDb = (typeof EncounterDatabase !== "undefined" && EncounterDatabase.encounters)
+      ? EncounterDatabase.encounters
+      : {};
+    if (selection.startsWith("encounter:")) {
+      const encounterId = selection.slice("encounter:".length);
+      return encounterDb[encounterId]
+        ? { encounterId, enemyId: null }
+        : { encounterId: null, enemyId: null };
+    }
+    if (encounterDb[selection]) {
+      return { encounterId: selection, enemyId: null };
+    }
+
+    const enemyId = selection.startsWith("enemy:")
+      ? selection.slice("enemy:".length)
+      : selection;
+    if (enemyId === "base" || (EnemyDatabase.archetypes && EnemyDatabase.archetypes[enemyId])) {
+      return { encounterId: null, enemyId };
+    }
+    return { encounterId: null, enemyId: null };
+  }
+
   resolveEnemyOverride(enemyId) {
-    if (!enemyId || enemyId === "auto") return null;
-    if (enemyId === "base") return "base";
-    if (EnemyDatabase.archetypes && EnemyDatabase.archetypes[enemyId]) return enemyId;
-    return null;
+    return this.resolveEncounterSelection(enemyId).enemyId;
   }
 
   getEnemyArchetype(enemyId) {
@@ -224,10 +254,19 @@ class BattleSystem {
     return (EnemyDatabase.archetypes && EnemyDatabase.archetypes[enemyId]) || EnemyDatabase.base;
   }
 
+  getEncounter(encounterId) {
+    if (typeof EncounterDatabase === "undefined" || !EncounterDatabase.encounters) return null;
+    return EncounterDatabase.encounters[encounterId] || null;
+  }
+
   getEnemySelectionLabel() {
-    if (!this.enemyOverrideId) return "自动匹配";
+    if (this.encounterOverrideId) {
+      const encounter = this.getEncounter(this.encounterOverrideId);
+      return `遭遇：${encounter ? encounter.name : this.encounterOverrideId}`;
+    }
+    if (!this.enemyOverrideId) return "自动推荐";
     const enemy = this.getEnemyArchetype(this.enemyOverrideId);
-    return `手动：${enemy.name}`;
+    return `敌人测试：${enemy.name}`;
   }
 
   consumeStyleSelectionInputs() {
@@ -263,13 +302,21 @@ class BattleSystem {
     this.playerConfig.weapon = style.weapon || null;
     this.playerConfig.spells = style.spells ? [...style.spells] : [];
     this.playerConfig.combatArts = style.combatArts ? [...style.combatArts] : [];
+    const encounterId = this.encounterOverrideId || (!this.enemyOverrideId ? style.preferredEncounter : null);
+    if (encounterId && this.applyEncounter(encounterId)) {
+      const encounterMode = this.encounterOverrideId ? "指定遭遇" : "推荐遭遇";
+      this.log(`战斗风格：${style.name}；${encounterMode}：${this.encounterConfig.name}`);
+      this.log(`地形：${this.encounterConfig.terrain}；规则：${(this.encounterConfig.ruleLines || [this.encounterConfig.intent])[0]}`);
+      return;
+    }
+
     const enemyId = this.enemyOverrideId || style.preferredEnemy || "base";
     this.applyEnemyArchetype(enemyId);
-    const enemyMode = this.enemyOverrideId ? "手动敌人" : "推荐敌人";
+    const enemyMode = this.enemyOverrideId ? "手动敌人测试" : "推荐敌人";
     this.log(`战斗风格：${style.name}；${enemyMode}：${this.enemyConfig.name}`);
   }
 
-  applyEnemyArchetype(enemyId) {
+  applyEnemyArchetype(enemyId, options = {}) {
     const enemy = this.getEnemyArchetype(enemyId);
     this.enemyId = enemy === EnemyDatabase.base && enemyId !== "base" ? "base" : enemyId;
     this.enemyConfig = enemy;
@@ -278,6 +325,102 @@ class BattleSystem {
     this.enemyAttack = null;
     this.enemyAttackPhase = "none";
     this.enemyStunTimer = 0;
+    this.enemyAttackCursor = 0;
+    if (!options.fromEncounter) {
+      this.activeEncounterId = null;
+      this.encounterConfig = null;
+    }
+  }
+
+  applyEncounter(encounterId) {
+    const encounter = this.getEncounter(encounterId);
+    if (!encounter) return false;
+
+    this.activeEncounterId = encounterId;
+    this.encounterConfig = encounter;
+    this.applyEnemyArchetype(encounter.enemyId || "base", { fromEncounter: true });
+
+    if (encounter.maxHp) {
+      this.enemyMaxHp = encounter.maxHp;
+      this.enemyHp = this.enemyMaxHp;
+    }
+
+    this.applyEncounterOpeningRules();
+    return true;
+  }
+
+  getEncounterModifiers() {
+    return (this.encounterConfig && this.encounterConfig.modifiers) || {};
+  }
+
+  applyEncounterOpeningRules() {
+    const mods = this.getEncounterModifiers();
+    const results = [];
+    if (mods.startSpellEnergy) {
+      results.push(this.resourceSystem.add("spellEnergy", mods.startSpellEnergy));
+    }
+    if (mods.startHeat) {
+      results.push(this.resourceSystem.add("heat", mods.startHeat));
+    }
+    if (results.length > 0) {
+      this.applyResourceResults(results);
+    }
+  }
+
+  getEncounterSummaryLines(limit = 3) {
+    const encounter = this.encounterConfig || this.getEncounter(this.encounterOverrideId);
+    if (!encounter) {
+      return ["自动推荐会按风格匹配命名遭遇。"];
+    }
+    const lines = [
+      `${encounter.name} / ${encounter.terrain}`,
+      encounter.intent
+    ];
+    return lines.concat(encounter.ruleLines || []).slice(0, limit);
+  }
+
+  getEncounterDebugLines(limit = 5) {
+    if (!this.encounterConfig) return [];
+    return [
+      `遭遇：${this.encounterConfig.name}`,
+      `地形：${this.encounterConfig.terrain}`,
+      ...((this.encounterConfig.ruleLines || []).slice(0, Math.max(0, limit - 2)))
+    ];
+  }
+
+  applyEncounterDamageModifiers(damage, context = {}) {
+    if (damage <= 0 || !this.encounterConfig) return damage;
+    const mods = this.getEncounterModifiers();
+    let nextDamage = damage;
+    const labels = [];
+
+    const applyMul = (mul, label) => {
+      if (!mul || mul === 1) return;
+      nextDamage = Math.floor(nextDamage * mul);
+      labels.push(label);
+    };
+
+    if (context.chainFamily === "fire") applyMul(mods.fireDamageMul, "遭遇·火焰");
+    if (context.chainFamily === "absorb") applyMul(mods.absorbDamageMul, "遭遇·咒还");
+    if (context.isSwordChain) applyMul(mods.swordDamageMul, "遭遇·武器链");
+    if (context.normalAttack) applyMul(mods.normalDamageMul, "遭遇·普攻");
+
+    const armorBreakStatus = this.statusSystem && this.statusSystem.has("armorBreak", "enemy");
+    if (this.armorBreakActive || armorBreakStatus) {
+      applyMul(mods.armorBreakDamageMul, "遭遇·破甲");
+    }
+
+    if (labels.length > 0 && nextDamage > damage) {
+      this.spawnFloatingText(`+${Math.round((nextDamage / damage - 1) * 100)}% ${labels[labels.length - 1]}`, 740, 180, "status");
+      this.log(`${this.encounterConfig.name}规则触发：${labels.join(" / ")}`);
+    }
+    return nextDamage;
+  }
+
+  isIncomingSpellAttack(attack) {
+    if (!attack) return false;
+    const id = attack.id || "";
+    return !!attack.interruptible || id.includes("spell") || id.includes("arcane") || id.includes("curse");
   }
 
   // ========== 玩家回合 ==========
@@ -321,7 +464,7 @@ class BattleSystem {
     const attack = this.enemyAttack;
     this.enemyAttackTimer += dt;
 
-    const responseDuration = Difficulty.responseDuration();
+    const responseDuration = attack.responseDuration || Difficulty.responseDuration();
     const responseStart = Math.max(0, attack.windup - responseDuration);
 
     if (this.enemyAttackPhase === "windup" && this.enemyAttackTimer >= responseStart) {
@@ -776,6 +919,8 @@ class BattleSystem {
       }
     }
 
+    damage = this.applyEncounterDamageModifiers(damage, context || {});
+
     // 是否暴击
     const isCrit = (this.hasCombatArt("desslo") && effects.perfectHit) || easternCrit;
 
@@ -888,14 +1033,15 @@ class BattleSystem {
 
     // 咒还：吸收法术攻击
     const defenseProvidedEnergy = effects.resources && effects.resources.spellEnergy;
-    if (this.hasSpell("absorb") && attack.id === "spellCast" && !defenseProvidedEnergy) {
-      const absorbAmount = attack.damage * 2;
+    if (this.hasSpell("absorb") && this.isIncomingSpellAttack(attack) && !defenseProvidedEnergy) {
+      const mods = this.getEncounterModifiers();
+      const absorbAmount = Math.floor(attack.damage * 2 * (mods.absorbEnergyMul || 1));
       this.addSpellEnergy(absorbAmount);
       this.setMessage("咒还吸收");
 
       // 盾：完美格挡/弹反反射魔法
       if (effects.damageMul === 0) {
-        const reflect = Math.floor(attack.damage * SpellDatabase.absorb.shieldReflectMul);
+        const reflect = Math.floor(attack.damage * SpellDatabase.absorb.shieldReflectMul * (mods.absorbReflectMul || 1));
         if (reflect > 0) {
           this.applyDamage("enemy", reflect);
           this.setMessage("咒还反射");
@@ -945,6 +1091,8 @@ class BattleSystem {
       this.playerState.consecutiveDodges = 0;
     }
 
+    damage = this.applyEncounterDamageModifiers(damage, { normalAttack: true, isSwordChain: true });
+
     this.applyDamage("enemy", damage);
     this.setMessage("普通攻击");
 
@@ -984,9 +1132,8 @@ class BattleSystem {
       }
     }
 
-    const attackIds = (this.enemyConfig && this.enemyConfig.attacks) || EnemyDatabase.base.attacks;
-    const attackId = attackIds[Math.floor(Math.random() * attackIds.length)];
-    this.enemyAttack = Difficulty.scaleAttack({ id: attackId, ...EnemyDatabase.attacks[attackId] });
+    const attackId = this.pickEnemyAttackId();
+    this.enemyAttack = this.buildEnemyAttack(attackId);
     const allowed = this.enemyAttack.allowedResponses || [];
     const keys = [];
     if (allowed.includes("dodge") || allowed.includes("parry")) keys.push("SPACE");
@@ -996,6 +1143,33 @@ class BattleSystem {
     this.enemyAttackPhase = "windup";
 
     this.setMessage(`敌方回合：绿色窗口出现按 SPACE/F 防御`);
+  }
+
+  pickEnemyAttackId() {
+    const encounterPattern = this.encounterConfig && this.encounterConfig.attackPattern;
+    if (Array.isArray(encounterPattern) && encounterPattern.length > 0) {
+      const attackId = encounterPattern[this.enemyAttackCursor % encounterPattern.length];
+      this.enemyAttackCursor++;
+      if (EnemyDatabase.attacks[attackId]) return attackId;
+    }
+
+    const attackIds = (this.enemyConfig && this.enemyConfig.attacks) || EnemyDatabase.base.attacks;
+    return attackIds[Math.floor(Math.random() * attackIds.length)];
+  }
+
+  buildEnemyAttack(attackId) {
+    const source = EnemyDatabase.attacks[attackId] || EnemyDatabase.attacks.thrust;
+    const attack = Difficulty.scaleAttack({ id: attackId, ...source });
+    const mods = this.getEncounterModifiers();
+    if (mods.enemyDamageMul && attack.damage !== undefined) {
+      attack.damage = Math.max(1, Math.floor(attack.damage * mods.enemyDamageMul));
+    }
+    if (mods.enemyWindupMul) {
+      attack.windup *= mods.enemyWindupMul;
+      attack.hitTime *= mods.enemyWindupMul;
+    }
+    attack.responseDuration = Difficulty.responseDuration() * (mods.responseWindowMul || 1);
+    return attack;
   }
 
   startPlayerTurn() {
@@ -1052,7 +1226,7 @@ class BattleSystem {
   }
 
   tryAbsorbIncomingSpell(attack) {
-    if (!attack || attack.id !== "spellCast") return false;
+    if (!this.isIncomingSpellAttack(attack)) return false;
     if (!this.hasSpell("absorb")) return false;
 
     const absorb = SpellDatabase.absorb;
@@ -1063,8 +1237,9 @@ class BattleSystem {
 
     if (!stateCanAbsorb && !preparedAbsorb && !staffReflect) return false;
 
-    const absorbAmount = attack.damage * 2;
-    const reflect = Math.floor(attack.damage * absorb.shieldReflectMul);
+    const mods = this.getEncounterModifiers();
+    const absorbAmount = Math.floor(attack.damage * 2 * (mods.absorbEnergyMul || 1));
+    const reflect = Math.floor(attack.damage * absorb.shieldReflectMul * (mods.absorbReflectMul || 1));
 
     const resourceResult = this.addSpellEnergy(absorbAmount);
     if (reflect > 0) {

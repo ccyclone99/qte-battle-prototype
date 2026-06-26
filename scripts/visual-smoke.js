@@ -424,7 +424,8 @@ async function runVisualSmoke() {
 
     await navigate(cdp, appUrl, desktop);
     await captureScenario(cdp, "main-menu-desktop", [
-      { label: "main menu visible", ok: await evaluate(cdp, `document.getElementById("main-menu").style.display !== "none"`) }
+      { label: "main menu visible", ok: await evaluate(cdp, `document.getElementById("main-menu").style.display !== "none"`) },
+      { label: "encounter select visible", ok: await evaluate(cdp, `document.body.textContent.includes("自动推荐") && document.body.textContent.includes("熔炉守门人")`) }
     ]);
 
     await navigate(cdp, appUrl, desktop);
@@ -467,6 +468,7 @@ async function runVisualSmoke() {
     await wait(320);
     await captureScenario(cdp, "battle-style6-qte", [
       { label: "battle entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
+      { label: "style 6 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("熔炉守门人")`) },
       { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) }
     ]);
 
@@ -479,6 +481,7 @@ async function runVisualSmoke() {
     await wait(320);
     await captureScenario(cdp, "battle-style7-qte", [
       { label: "battle style 7 entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
+      { label: "style 7 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("秘术回廊")`) },
       { label: "style 7 mirror text visible", ok: await evaluate(cdp, `document.body.textContent.includes("镜") || document.body.textContent.includes("咒还")`) }
     ]);
 

@@ -10,6 +10,7 @@ const {
   SpellDatabase,
   StyleDatabase,
   EnemyDatabase,
+  EncounterDatabase,
   EffectEventDefinitions
 } = context;
 
@@ -49,11 +50,16 @@ function hasChain(id) {
 }
 
 check("index loads js/data/effects.js", scriptIndex("js/data/effects.js") >= 0);
+check("index loads js/data/encounters.js", scriptIndex("js/data/encounters.js") >= 0);
 check("index loads js/fx.js before effect queue", scriptIndex("js/fx.js") >= 0 && scriptIndex("js/fx.js") < scriptIndex("js/systems/effects.js"));
 check("index loads js/systems/chain-effects.js", scriptIndex("js/systems/chain-effects.js") >= 0);
 check(
   "effect registry loads before effect system",
   scriptIndex("js/data/effects.js") >= 0 && scriptIndex("js/data/effects.js") < scriptIndex("js/systems/effects.js")
+);
+check(
+  "encounter data loads before battle",
+  scriptIndex("js/data/encounters.js") >= 0 && scriptIndex("js/data/encounters.js") < scriptIndex("js/battle.js")
 );
 check(
   "chain helpers load before demo and qte runner",
@@ -77,6 +83,10 @@ check("style mirrorblade exists on key 7", StyleDatabase.mirrorblade && StyleDat
 
 for (const id of ["caster", "armored", "swift", "shielded"]) {
   check(`enemy archetype exists: ${id}`, !!(EnemyDatabase.archetypes && EnemyDatabase.archetypes[id]));
+}
+
+for (const id of ["ember_bulwark", "arcane_conduit", "knife_rain", "shield_rite"]) {
+  check(`encounter exists: ${id}`, !!(EncounterDatabase.encounters && EncounterDatabase.encounters[id]));
 }
 
 check("fireBladeBurst has burst renderer data", !!(EffectEventDefinitions.fireBladeBurst && EffectEventDefinitions.fireBladeBurst.bursts));
@@ -112,8 +122,9 @@ check("visual smoke covers style 7 and replay", visualSmokeJs.includes("battle-s
 check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
 check("small viewport compact rules exist", styleCss.includes("@media (max-width: 900px), (max-height: 520px)") && styleCss.includes("#demo-detail-drawer"));
 check("mobile demo detail uses bottom sheet layout", styleCss.includes("#demo-detail-drawer .drawer-content") && styleCss.includes("bottom: 8px"));
-check("main menu includes manual enemy select", indexHtml.includes('id="enemy-select"') && indexHtml.includes('value="swift"'));
-check("battle supports manual enemy override", battleJs.includes("enemyOverrideId") && battleJs.includes("getEnemySelectionLabel") && mainJs.includes("selectedEnemyId"));
+check("main menu includes encounter select", indexHtml.includes('id="enemy-select"') && indexHtml.includes('value="encounter:arcane_conduit"') && indexHtml.includes('value="swift"'));
+check("battle supports encounter selection", battleJs.includes("encounterOverrideId") && battleJs.includes("applyEncounter") && battleJs.includes("pickEnemyAttackId"));
+check("qte debug shows encounter rules", qteDebugJs.includes("getEncounterDebugLines"));
 check("SPEC includes visual smoke command", specMd.includes("node scripts\\visual-smoke.js"));
 check("SPEC syntax check targets source directories", specMd.includes("Get-ChildItem -Path .\\js,.\\scripts"));
 check("verify script exists", !!verifyJs);
@@ -127,6 +138,7 @@ check("battle applies chain handfeel", battleJs.includes("Utils.getChainHandfeel
 check("demo applies chain pacing", demoModeJs.includes("Utils.getDemoPacing") && demoModeJs.includes("getActiveDirectorLines") && demoModeJs.includes("getPreviewSummaryLines"));
 check("renderer shows demo focus panel", rendererJs.includes("drawDemoFocusPanel") && rendererJs.includes("演示摘要"));
 check("R12 tuned core timings", chainsJs.includes("beats: [0.34, 0.72, 1.08, 1.42]") && chainsJs.includes("duration: 1.35") && chainsJs.includes("chargeMul: 1.08"));
+check("R13 style preferred encounters exist", StyleDatabase.flameforge.preferredEncounter === "ember_bulwark" && StyleDatabase.mirrorblade.preferredEncounter === "arcane_conduit");
 
 let failures = 0;
 console.log("Smoke checklist:");
@@ -140,7 +152,7 @@ console.log("Manual browser smoke targets:");
 console.log("  1. Demo mode -> spell chains -> flame_blade shows timeline, heat gain, burn FX, and no console errors.");
 console.log("  2. Demo preview -> press R and confirm the same item replays without stale result rows.");
 console.log("  3. Demo mode -> spell chains -> overflow_burst shows spellEnergy cost, overload burst, and no console errors.");
-console.log("  4. Battle style 6 and 7 load their preferred enemy archetypes and keep HUD/resources visible.");
+console.log("  4. Battle style 6 and 7 load their preferred named encounters and keep HUD/resources visible.");
 console.log("  5. Demo mode -> showcase category -> fire/absorb/defense entries show staged captions and no console errors.");
 console.log("  6. Visual smoke -> node scripts\\visual-smoke.js captures desktop and mobile screenshots without browser errors.");
 

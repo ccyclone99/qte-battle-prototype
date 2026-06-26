@@ -11,6 +11,7 @@ const dataFiles = [
   ["js/data/combatArts.js", "CombatArtDatabase"],
   ["js/data/defenses.js", "DefenseDatabase"],
   ["js/data/enemies.js", "EnemyDatabase"],
+  ["js/data/encounters.js", "EncounterDatabase"],
   ["js/data/styles.js", "StyleDatabase"],
   ["js/data/effects.js", "EffectEventDefinitions"],
   ["js/systems/statuses.js", "StatusDefinitions"],
@@ -41,6 +42,7 @@ const {
   CombatArtDatabase,
   DefenseDatabase,
   EnemyDatabase,
+  EncounterDatabase,
   StyleDatabase
 } = context;
 const { EffectEventDefinitions, ResourceDefinitions, StatusDefinitions } = context;
@@ -285,6 +287,22 @@ function validateReferences() {
     validateEnemyAttackList(`EnemyDatabase.archetypes.${enemyId}`, enemy);
   }
 
+  for (const [encounterId, encounter] of Object.entries((EncounterDatabase && EncounterDatabase.encounters) || {})) {
+    if (!encounter.enemyId || !EnemyDatabase.archetypes[encounter.enemyId]) {
+      fail(`EncounterDatabase.${encounterId}: unknown enemyId "${encounter.enemyId}"`);
+    }
+    if (!Array.isArray(encounter.attackPattern) || encounter.attackPattern.length === 0) {
+      fail(`EncounterDatabase.${encounterId}: attackPattern must be non-empty`);
+    } else {
+      for (const attackId of encounter.attackPattern) {
+        if (!EnemyDatabase.attacks[attackId]) fail(`EncounterDatabase.${encounterId}: unknown attack "${attackId}"`);
+      }
+    }
+    for (const styleId of encounter.recommendedStyles || []) {
+      if (!StyleDatabase[styleId]) fail(`EncounterDatabase.${encounterId}: unknown recommended style "${styleId}"`);
+    }
+  }
+
   for (const [styleId, style] of Object.entries(StyleDatabase)) {
     if (!WeaponDatabase[style.weapon]) fail(`StyleDatabase.${styleId}: unknown weapon "${style.weapon}"`);
     for (const spellId of style.spells || []) {
@@ -295,6 +313,9 @@ function validateReferences() {
     }
     if (style.preferredEnemy && (!EnemyDatabase.archetypes || !EnemyDatabase.archetypes[style.preferredEnemy])) {
       fail(`StyleDatabase.${styleId}: unknown preferredEnemy "${style.preferredEnemy}"`);
+    }
+    if (style.preferredEncounter && (!(EncounterDatabase && EncounterDatabase.encounters) || !EncounterDatabase.encounters[style.preferredEncounter])) {
+      fail(`StyleDatabase.${styleId}: unknown preferredEncounter "${style.preferredEncounter}"`);
     }
   }
 }

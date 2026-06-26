@@ -10,7 +10,8 @@ const StyleDatabase = {
     weapon: "staff",
     spells: ["fire"],
     combatArts: [],
-    preferredEnemy: "shielded"
+    preferredEnemy: "shielded",
+    preferredEncounter: "shield_rite"
   },
 
   absorb: {
@@ -23,7 +24,8 @@ const StyleDatabase = {
     weapon: "staff",
     spells: ["absorb"],
     combatArts: [],
-    preferredEnemy: "caster"
+    preferredEnemy: "caster",
+    preferredEncounter: "arcane_conduit"
   },
 
   desslo: {
@@ -36,7 +38,8 @@ const StyleDatabase = {
     weapon: "dualBlades",
     spells: [],
     combatArts: ["desslo"],
-    preferredEnemy: "swift"
+    preferredEnemy: "swift",
+    preferredEncounter: "knife_rain"
   },
 
   eastern: {
@@ -49,7 +52,8 @@ const StyleDatabase = {
     weapon: "greatsword",
     spells: [],
     combatArts: ["eastern"],
-    preferredEnemy: "armored"
+    preferredEnemy: "armored",
+    preferredEncounter: "ember_bulwark"
   },
 
   desolo: {
@@ -62,7 +66,8 @@ const StyleDatabase = {
     weapon: "greatsword",
     spells: [],
     combatArts: ["desolo"],
-    preferredEnemy: "armored"
+    preferredEnemy: "armored",
+    preferredEncounter: "ember_bulwark"
   },
 
   flameforge: {
@@ -75,7 +80,8 @@ const StyleDatabase = {
     weapon: "greatsword",
     spells: ["fire"],
     combatArts: [],
-    preferredEnemy: "armored"
+    preferredEnemy: "armored",
+    preferredEncounter: "ember_bulwark"
   },
 
   mirrorblade: {
@@ -88,6 +94,7 @@ const StyleDatabase = {
     weapon: "dualBlades",
     spells: ["absorb"],
     combatArts: [],
-    preferredEnemy: "caster"
+    preferredEnemy: "caster",
+    preferredEncounter: "arcane_conduit"
   }
 };
