@@ -58,33 +58,15 @@ class CanvasRenderer {
     const ctx = this.ctx;
     const now = performance.now();
     const t = now / 1000;
+    const camera = this.getRenderCamera(scene, t);
 
     ctx.save();
-
-    // 屏幕震动
-    if (scene.screenShake > 0) {
-      const shake = scene.screenShake * 20;
-      const dx = (Math.random() - 0.5) * shake;
-      const dy = (Math.random() - 0.5) * shake;
-      ctx.translate(dx, dy);
-    }
-
-    // 镜头缩放（特写）
-    if (scene.cameraZoom && scene.cameraZoom !== 1) {
-      const cx = this.width / 2;
-      const cy = this.height / 2;
-      ctx.translate(cx, cy);
-      ctx.scale(scene.cameraZoom, scene.cameraZoom);
-      ctx.translate(-cx, -cy);
-    }
-
     this.drawBackground(ctx);
-    this.drawCharacters(scene, t);
-    this.drawAttackEffects(scene, t);
-    this.drawHitConfirmOverlays(scene);
-    this.drawCombatContactLayer(scene, t);
-    if (scene.effectBursts) scene.effectBursts.render(ctx);
-    this.drawCinematicFocus(scene, t);
+
+    ctx.save();
+    this.applyWorldCamera(ctx, camera);
+    this.drawWorldScene(scene, t);
+    ctx.restore();
 
     if (scene.turnState.startsWith("demo_")) {
       this.drawDemo(scene, t);
@@ -160,6 +142,49 @@ class CanvasRenderer {
     }
 
     ctx.restore();
+  }
+
+  getRenderCamera(scene, t = 0) {
+    const shake = Utils.clamp(scene && scene.screenShake ? scene.screenShake : 0, 0, 0.45);
+    const zoom = scene && scene.cameraZoom ? scene.cameraZoom : 1;
+    const zoomDelta = Math.abs(zoom - 1);
+    const active = shake > 0.001 || zoomDelta > 0.001;
+    const amp = shake * 18;
+    const dx = active ? (Math.sin(t * 58.7) * 0.72 + Math.sin(t * 91.3) * 0.28) * amp : 0;
+    const dy = active ? (Math.cos(t * 47.9) * 0.66 + Math.sin(t * 77.1) * 0.22) * amp * 0.58 : 0;
+
+    return {
+      active,
+      shake,
+      zoom,
+      dx,
+      dy,
+      uiStable: true
+    };
+  }
+
+  applyWorldCamera(ctx, camera) {
+    if (!camera || !camera.active) return;
+    const zoom = camera.zoom || 1;
+    if (Math.abs(zoom - 1) > 0.001) {
+      const cx = this.width / 2;
+      const cy = this.height / 2;
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-cx, -cy);
+    }
+    if (camera.dx || camera.dy) {
+      ctx.translate(camera.dx || 0, camera.dy || 0);
+    }
+  }
+
+  drawWorldScene(scene, t) {
+    this.drawCharacters(scene, t);
+    this.drawAttackEffects(scene, t);
+    this.drawHitConfirmOverlays(scene);
+    this.drawCombatContactLayer(scene, t);
+    if (scene.effectBursts) scene.effectBursts.render(this.ctx);
+    this.drawCinematicFocus(scene, t);
   }
 
   shouldDrawFloatingMessage(scene) {

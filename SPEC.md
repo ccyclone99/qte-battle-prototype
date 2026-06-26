@@ -2037,6 +2037,24 @@ Acceptance criteria:
 - Static smoke protects player rig silhouette families.
 - Visual smoke verifies greatsword, dual-blade, and style 8 counter player rig profiles during existing battle screenshots.
 
+### R34 Stage Camera Comfort Pass, Completed
+
+Goal: hit impact should still have camera force, but HUD, QTE timing bars, and input prompts must remain readable during screen shake or camera zoom.
+
+Implemented direction:
+
+- `CanvasRenderer.getRenderCamera()` converts existing `screenShake` and `cameraZoom` state into a smooth render-only camera impulse with deterministic offsets.
+- `applyWorldCamera()` now affects only the world scene: stage, actors, active attacks, hit-confirm overlays, contact impacts, burst effects, and cinematic focus.
+- `drawWorldScene()` keeps the combat world as a single camera-controlled layer.
+- HUD, QTE bars, enemy timing bars, big key prompts, floating messages, turn banners, combo UI, and demo overlays draw after the world camera is restored, so readability no longer degrades during impact.
+- This pass does not change hit-stop, screen-shake timers, camera zoom timers, QTE windows, damage, collision, or input handling.
+
+Acceptance criteria:
+
+- Renderer exposes stage-only camera helpers.
+- Static smoke protects the stable-UI camera helper surface.
+- Visual smoke forces an impact camera impulse during a player active-attack screenshot and verifies the camera reports `uiStable`.
+
 ## 22. Verification Commands
 
 ```powershell

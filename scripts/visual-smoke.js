@@ -604,6 +604,9 @@ async function runVisualSmoke() {
         color: "#f1c40f",
         debugLife: 1.4
       });
+      battle.screenShake = 0.8;
+      battle.cameraZoom = 1.06;
+      battle.cameraZoomTimer = 1.2;
       battle.turnBanner = null;
       battle.flashMessage = null;
       battle.messageTimer = 0;
@@ -616,6 +619,12 @@ async function runVisualSmoke() {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const f = r && typeof battle !== "undefined" ? r.getCinematicFocus(battle) : null;
         return !!(f && f.kind === "activeAttack" && f.source === "player" && f.intensity > 0.4);
+      })()`) },
+      { label: "stage-only camera impulse active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getRenderCamera) return false;
+        const camera = r.getRenderCamera(battle, 1.37);
+        return !!(camera && camera.uiStable && camera.active && camera.shake > 0.1 && camera.zoom > 1.01 && Math.abs(camera.dx) + Math.abs(camera.dy) > 0.1);
       })()`) },
       { label: "player actor performance pose", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
