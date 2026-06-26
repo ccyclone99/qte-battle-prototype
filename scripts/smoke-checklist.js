@@ -91,6 +91,8 @@ check("main menu exposes style select", indexHtml.includes('id="style-select"') 
 check("main menu exposes counterflow option", indexHtml.includes('value="counterflow"') && indexHtml.includes("逆势双刃 [8]"));
 check("main menu style select starts chosen style", mainJs.includes("selectedStyleId") && mainJs.includes("applyMenuStyleSelection") && mainJs.includes("battle.startPlayerTurn()"));
 check("main menu syncs style select from data", mainJs.includes("syncStyleSelectOptions") && mainJs.includes("Object.entries(StyleDatabase)") && mainJs.includes("styleOptionLabel"));
+check("main menu shows visible style choices", indexHtml.includes('id="style-choice-grid"') && mainJs.includes("createStyleChoiceButton") && styleCss.includes(".style-choice-grid"));
+check("main menu visible choices include key 8", mainJs.includes("styleChoiceGrid") && mainJs.includes("button.dataset.styleId") && mainJs.includes("styleSelect.value = button.dataset.styleId"));
 check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.knifeFlurry);
 check("enemy attacks declare telegraphs", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.telegraph && attack.telegraph.type && attack.telegraph.shape && attack.telegraph.pose && attack.telegraph.width));
 
@@ -115,6 +117,7 @@ check("renderer has player equipment model helpers", rendererJs.includes("drawPl
 check("renderer has enemy model accent helpers", rendererJs.includes("drawEnemyModelAccents") && rendererJs.includes("drawEnemyHeadgear") && rendererJs.includes("model.type"));
 check("renderer has enemy telegraph helpers", rendererJs.includes("getEnemyTelegraph") && rendererJs.includes("drawEnemyTelegraphLane") && rendererJs.includes("drawEnemyTelegraphHit") && rendererJs.includes("drawEnemyAttackPoseOverlay"));
 check("renderer suppresses enemy attack floating message", rendererJs.includes('scene.turnState === "enemy_turn"') && rendererJs.includes("scene.enemyAttackPhase !== \"none\""));
+check("renderer has player active attack helpers", rendererJs.includes("getPlayerActiveAttackDescriptor") && rendererJs.includes("drawPlayerMeleeActiveAttack") && rendererJs.includes("drawPlayerProjectileActiveAttack") && rendererJs.includes("drawPlayerSpellActiveAttack") && rendererJs.includes("drawPlayerPulseActiveAttack"));
 check("renderer has node-timed action helper", rendererJs.includes("getActionTiming"));
 check("renderer supports node pose tags", rendererJs.includes("getCurrentPose") && rendererJs.includes("node.pose"));
 check("chains include R10 pose tags", chainsJs.includes('motion: "flameBladeCut"') && chainsJs.includes('motion: "overflowBurst"') && chainsJs.includes('motion: "greatswordEarthsplit"'));
@@ -143,6 +146,7 @@ check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captu
 check("visual smoke covers style 7 and replay", visualSmokeJs.includes("battle-style7-qte") && visualSmokeJs.includes("demo-result-replay-qte"));
 check("visual smoke covers battle result summary", visualSmokeJs.includes("battle-result-summary") && visualSmokeJs.includes("getBattleResultLines"));
 check("visual smoke covers enemy telegraph", visualSmokeJs.includes("battle-enemy-telegraph") && visualSmokeJs.includes("getEnemyTelegraph"));
+check("visual smoke covers player active attacks", visualSmokeJs.includes("battle-player-active-attack") && visualSmokeJs.includes("battle-player-spell-active") && visualSmokeJs.includes("getPlayerActiveAttackDescriptor"));
 check("visual smoke covers virtual controls", visualSmokeJs.includes("battle-virtual-controls-qte") && visualSmokeJs.includes("clickVirtualKey"));
 check("visual smoke guards demo stage drawer overlap", visualSmokeJs.includes("demo stage avoids detail drawer") && visualSmokeJs.includes("demo qte bar avoids detail drawer"));
 check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
@@ -176,6 +180,7 @@ check("renderer draws target-anchored melee active attacks", rendererJs.includes
 check("battle splits melee qte hits", battleJs.includes("buildQTEHitSegments") && battleJs.includes("commitSegmentedQTEActiveAttacks") && battleJs.includes("suppressFlowComplete") && battleJs.includes("suppressImpactSideEffects"));
 check("battle trims qte floating text noise", battleJs.includes('if (outcome !== "success")') && !battleJs.includes("% 连击`, 740, 300"));
 check("renderer suppresses qte stale overlays", rendererJs.includes("shouldDrawFloatingMessage") && rendererJs.includes("shouldDrawTurnBanner") && rendererJs.includes('scene.turnState !== "qte_running"') && visualSmokeJs.includes("battle qte suppresses stale overlays"));
+check("main ui labels active attacks", mainJs.includes('battle.turnState === "attack_active"') && mainJs.includes("攻击演出"));
 check("qte debug shows active attacks", qteDebugJs.includes("activeAttackSystem.getDebugLines"));
 check("battle applies chain handfeel", battleJs.includes("Utils.getChainHandfeel(chainConfig") && battleJs.includes("Utils.getChainHandfeel(chain, { chainId, source: \"enemy\" })"));
 check("battle applies qte pacing", battleJs.includes("Utils.getBattleQTEPacing") && battleJs.includes("qteRunner.timeScale") && battleJs.includes("qteRunner.postNodePause"));

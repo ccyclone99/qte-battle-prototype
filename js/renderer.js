@@ -498,51 +498,23 @@ class CanvasRenderer {
       const progress = Utils.clamp(attack.progress || 0, 0, 1);
       const pulse = 1 + Math.sin(t * 10) * 0.08;
 
-      if (profile.type === "projectile") {
-        const r = (profile.radius || 32) * (0.78 + progress * 0.22) * pulse;
-        const grad = ctx.createRadialGradient(pos.x, pos.y, 2, pos.x, pos.y, r);
-        grad.addColorStop(0, "#ffffff");
-        grad.addColorStop(0.28, color);
-        grad.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.fillStyle = grad;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 24;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.globalAlpha = 0.35;
-        ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+      if (attack.source === "player") {
+        const descriptor = this.getPlayerActiveAttackDescriptor(attack);
+        if (profile.type === "projectile") {
+          this.drawPlayerProjectileActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t);
+        } else if (profile.type === "beam") {
+          this.drawPlayerSpellActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t);
+        } else if (profile.type === "pulse") {
+          this.drawPlayerPulseActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t);
+        } else {
+          this.drawPlayerMeleeActiveAttack(ctx, attack, descriptor, from, to, color, progress, t);
+        }
+      } else if (profile.type === "projectile") {
+        this.drawGenericProjectileActiveAttack(ctx, attack, from, pos, color, progress, pulse);
       } else if (profile.type === "beam") {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 10 + Math.sin(t * 18) * 2;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 20;
-        ctx.globalAlpha = attack.phase === "reaction" ? 0.55 : 0.85;
-        ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
+        this.drawGenericBeamActiveAttack(ctx, attack, from, pos, color, t);
       } else if (profile.type === "pulse") {
-        const r = (profile.radius || 72) * Math.max(0.15, progress) * pulse;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 5;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 22;
-        ctx.globalAlpha = 0.25 + progress * 0.55;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
+        this.drawGenericPulseActiveAttack(ctx, attack, pos, color, progress, pulse);
       } else {
         this.drawMeleeActiveAttack(ctx, attack, from, to, color, progress, t);
       }
@@ -557,6 +529,410 @@ class CanvasRenderer {
         ctx.setLineDash([]);
       }
     }
+    ctx.restore();
+  }
+
+  drawGenericProjectileActiveAttack(ctx, attack, from, pos, color, progress, pulse) {
+    const profile = attack.profile || {};
+    const r = (profile.radius || 32) * (0.78 + progress * 0.22) * pulse;
+    const grad = ctx.createRadialGradient(pos.x, pos.y, 2, pos.x, pos.y, r);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.28, color);
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  drawGenericBeamActiveAttack(ctx, attack, from, pos, color, t) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 10 + Math.sin(t * 18) * 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 20;
+    ctx.globalAlpha = attack.phase === "reaction" ? 0.55 : 0.85;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
+  drawGenericPulseActiveAttack(ctx, attack, pos, color, progress, pulse) {
+    const profile = attack.profile || {};
+    const r = (profile.radius || 72) * Math.max(0.15, progress) * pulse;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 5;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 22;
+    ctx.globalAlpha = 0.25 + progress * 0.55;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
+  getPlayerActiveAttackDescriptor(attack) {
+    const intent = attack.intent || {};
+    const context = intent.context || {};
+    const profile = attack.profile || {};
+    const text = [
+      context.chainId,
+      context.chainFamily,
+      intent.chainId,
+      intent.chainFamily,
+      intent.visualEvent,
+      intent.motion,
+      intent.label,
+      intent.weapon,
+      profile.element,
+      ...(intent.visualEvents || []),
+      ...(intent.outcomes || [])
+    ].filter(Boolean).join(" ").toLowerCase();
+    const includes = needles => needles.some(needle => text.includes(needle));
+    const family = intent.chainFamily || context.chainFamily || profile.element || "";
+    const weapon = intent.weapon || context.weapon || "";
+    const hitIndex = Math.max(1, intent.hitIndex || 1);
+    const hitCount = Math.max(1, intent.hitCount || 1);
+
+    return {
+      family,
+      weapon,
+      hitIndex,
+      hitCount,
+      isDual: family === "dualBlades" || weapon === "dualBlades" || includes(["dual", "shadow", "flurry", "dash"]),
+      isGreatsword: family === "greatsword" || weapon === "greatsword" || includes(["greatsword", "cleave", "earthsplit", "armorbreak"]),
+      isFire: family === "fire" || profile.element === "fire" || includes(["fire", "flame", "ember", "burn"]),
+      isAbsorb: family === "absorb" || profile.element === "absorb" || includes(["absorb", "siphon", "overflow", "mirror", "counterspell"]),
+      isCounter: intent.kind === "defenseCounter" || includes(["counter", "clash", "reflect"]),
+      isBurst: profile.type === "pulse" || includes(["burst", "peak", "overload", "overflow"]),
+      isFinisher: includes(["finisher", "shadow", "perfect"]),
+      text
+    };
+  }
+
+  drawPlayerProjectileActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t) {
+    const profile = attack.profile || {};
+    const fire = descriptor.isFire;
+    const absorb = descriptor.isAbsorb;
+    const radius = (profile.radius || 32) * (fire ? 1.08 : 0.92) * (0.76 + progress * 0.30) * pulse;
+    const trailAlpha = fire ? 0.44 : 0.32;
+    const core = fire ? "#fff2b0" : (absorb ? "#f1dcff" : "#ffffff");
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = fire ? 30 : 22;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = fire ? 5 : 3;
+    ctx.globalAlpha = trailAlpha;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo((from.x + to.x) / 2, from.y - (fire ? 72 : 38), pos.x, pos.y);
+    ctx.stroke();
+
+    if (fire) {
+      for (let i = 0; i < 5; i++) {
+        const p = Math.max(0, progress - i * 0.045);
+        const x = from.x + (pos.x - from.x) * p;
+        const y = from.y + (pos.y - from.y) * p - Math.sin(p * Math.PI) * 46;
+        ctx.globalAlpha = Math.max(0.06, 0.24 - i * 0.035);
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(3, radius * (0.42 - i * 0.045)), 0, Math.PI * 2);
+        ctx.fillStyle = i % 2 === 0 ? "#f39c12" : "#e74c3c";
+        ctx.fill();
+      }
+    } else if (absorb) {
+      ctx.globalAlpha = 0.38;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const grad = ctx.createRadialGradient(pos.x, pos.y, 2, pos.x, pos.y, radius);
+    grad.addColorStop(0, core);
+    grad.addColorStop(0.30, color);
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (fire) {
+      ctx.strokeStyle = "#fff7d6";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius * 0.72, -t * 3, Math.PI * 1.4 - t * 3);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawPlayerSpellActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t) {
+    const profile = attack.profile || {};
+    const absorb = descriptor.isAbsorb;
+    const width = descriptor.isCounter ? 11 : (absorb ? 9 : 8);
+    const wave = Math.sin(t * 20) * 1.8;
+    const alpha = attack.phase === "reaction" ? 0.58 : (attack.phase === "recovery" ? 0.42 : 0.86);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = absorb ? 28 : 20;
+    ctx.lineCap = "round";
+
+    if (absorb) {
+      const sigilR = 20 + Math.sin(t * 7) * 3;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 3;
+      this.drawPlayerCastSigil(ctx, from.x, from.y, sigilR, color, t);
+      ctx.globalAlpha = 0.22 + progress * 0.34;
+      for (let i = 0; i < 3; i++) {
+        const offset = (i - 1) * 9;
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y + offset);
+        ctx.quadraticCurveTo((from.x + to.x) / 2, from.y - 38 + offset * 0.35, pos.x, pos.y + offset * 0.45);
+        ctx.stroke();
+      }
+    }
+
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = width + wave;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo((from.x + to.x) / 2, from.y - (absorb ? 30 : 10), pos.x, pos.y);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.globalAlpha = alpha * 0.45;
+    ctx.lineWidth = Math.max(2, width * 0.24);
+    ctx.stroke();
+
+    if (descriptor.isCounter || absorb) {
+      ctx.globalAlpha = 0.62;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (profile.radius || 36) * (0.34 + progress * 0.18) * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawPlayerPulseActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t) {
+    const profile = attack.profile || {};
+    const radius = (profile.radius || 72) * Math.max(0.16, progress) * pulse;
+    const center = descriptor.isAbsorb ? to : pos;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = descriptor.isFire ? 30 : 28;
+    ctx.lineCap = "round";
+
+    ctx.globalAlpha = descriptor.isFire ? 0.20 : 0.16;
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.42 + progress * 0.30;
+    ctx.lineWidth = descriptor.isFire ? 7 : 5;
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const a = t * (descriptor.isFire ? 1.6 : -1.2) + i * Math.PI / 2;
+      const inner = radius * 0.38;
+      const outer = radius * 0.82;
+      ctx.beginPath();
+      ctx.moveTo(center.x + Math.cos(a) * inner, center.y + Math.sin(a) * inner);
+      ctx.lineTo(center.x + Math.cos(a) * outer, center.y + Math.sin(a) * outer);
+      ctx.stroke();
+    }
+
+    if (descriptor.isFire) {
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = "#fff2a6";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius * 0.58, Math.PI * 0.15, Math.PI * 1.1);
+      ctx.stroke();
+    } else if (descriptor.isAbsorb) {
+      this.drawPlayerCastSigil(ctx, center.x, center.y, Math.max(18, radius * 0.28), color, -t);
+    }
+
+    ctx.restore();
+  }
+
+  drawPlayerMeleeActiveAttack(ctx, attack, descriptor, from, to, color, progress, t) {
+    if (descriptor.isDual) {
+      this.drawDualBladeActiveAttack(ctx, attack, descriptor, from, to, color, progress, t);
+      return;
+    }
+    if (descriptor.isGreatsword || descriptor.isFire) {
+      this.drawHeavyBladeActiveAttack(ctx, attack, descriptor, from, to, color, progress, t);
+      return;
+    }
+    this.drawMeleeActiveAttack(ctx, attack, from, to, color, progress, t);
+  }
+
+  drawDualBladeActiveAttack(ctx, attack, descriptor, from, to, color, progress, t) {
+    const approach = Math.sign(to.x - from.x) || 1;
+    const hitIndex = descriptor.hitIndex;
+    const hitCount = descriptor.hitCount;
+    const swing = Math.sin(progress * Math.PI);
+    const dash = 28 * Utils.clamp(progress, 0, 1);
+    const afterAlpha = 0.20 + Math.min(0.22, hitCount * 0.035);
+    const center = {
+      x: to.x - approach * (30 - dash * 0.25),
+      y: to.y - 18 + (hitIndex % 2 === 0 ? 11 : -9)
+    };
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = descriptor.isFinisher ? 28 : 18;
+
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? 1 : -1;
+      const phase = (hitIndex + i) % 2 === 0 ? -1 : 1;
+      ctx.globalAlpha = attack.phase === "recovery" ? 0.30 : 0.76;
+      ctx.strokeStyle = i === 0 ? color : "#ffffff";
+      ctx.lineWidth = descriptor.isFinisher ? (i === 0 ? 7 : 3) : (i === 0 ? 5 : 2);
+      ctx.beginPath();
+      ctx.moveTo(center.x - approach * 54, center.y + side * 34);
+      ctx.quadraticCurveTo(
+        center.x + approach * (8 + swing * 12),
+        center.y + side * phase * 3,
+        center.x + approach * 62,
+        center.y - side * 34
+      );
+      ctx.stroke();
+    }
+
+    if (hitCount > 1 || descriptor.isFinisher) {
+      ctx.globalAlpha = afterAlpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      for (let ghost = 1; ghost <= Math.min(3, hitCount); ghost++) {
+        const offset = ghost * 12;
+        ctx.beginPath();
+        ctx.moveTo(center.x - approach * (58 + offset), center.y - 28 + ghost * 6);
+        ctx.quadraticCurveTo(center.x - approach * offset, center.y, center.x + approach * (54 - offset), center.y + 26 - ghost * 5);
+        ctx.stroke();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  drawHeavyBladeActiveAttack(ctx, attack, descriptor, from, to, color, progress, t) {
+    const approach = Math.sign(to.x - from.x) || 1;
+    const profile = attack.profile || {};
+    const swing = Math.sin(progress * Math.PI);
+    const fire = descriptor.isFire;
+    const radiusBoost = descriptor.isFinisher || descriptor.isBurst ? 26 : 0;
+    const span = (profile.radius || 42) * 2.6 + radiusBoost;
+    const center = {
+      x: to.x - approach * 40 + approach * swing * 12,
+      y: to.y - 16
+    };
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = fire ? 30 : 22;
+    ctx.globalAlpha = attack.phase === "recovery" ? 0.42 : 0.88;
+    ctx.lineWidth = fire ? 12 : 10;
+
+    ctx.beginPath();
+    ctx.moveTo(center.x - approach * span * 0.40, center.y - 58);
+    ctx.quadraticCurveTo(center.x + approach * 10, center.y - 12 - swing * 22, center.x + approach * span * 0.52, center.y + 48);
+    ctx.stroke();
+
+    if (fire) {
+      ctx.strokeStyle = "#fff1a8";
+      ctx.globalAlpha = 0.50;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(center.x - approach * span * 0.34, center.y - 50);
+      ctx.quadraticCurveTo(center.x + approach * 18, center.y - 6 - swing * 16, center.x + approach * span * 0.45, center.y + 38);
+      ctx.stroke();
+      ctx.fillStyle = "#e74c3c";
+      ctx.globalAlpha = 0.24;
+      for (let i = 0; i < 4; i++) {
+        const p = i / 3;
+        const x = center.x - approach * span * 0.30 + approach * span * 0.72 * p;
+        const y = center.y - 44 + 88 * p + Math.sin(t * 8 + i) * 6;
+        ctx.beginPath();
+        ctx.arc(x, y, 7 - i, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (descriptor.isGreatsword && (descriptor.isFinisher || descriptor.text.includes("earthsplit"))) {
+      ctx.strokeStyle = "#f1c40f";
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(to.x - 64, to.y + 26);
+      ctx.lineTo(to.x + 64, to.y + 18);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawPlayerCastSigil(ctx, x, y, radius, color, t) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(t);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -radius * 0.72);
+    ctx.lineTo(radius * 0.62, radius * 0.36);
+    ctx.lineTo(-radius * 0.62, radius * 0.36);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(2, radius * 0.12), 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 

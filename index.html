@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QTE Battle Prototype</title>
-  <link rel="stylesheet" href="style.css?v=r22a">
+  <link rel="stylesheet" href="style.css?v=r23b">
 </head>
 <body>
   <div id="game-container">
@@ -29,7 +29,7 @@
         </div>
         <div class="menu-field style-menu-field">
           <label for="style-select">风格：</label>
-          <select id="style-select">
+          <select id="style-select" class="native-style-select" aria-describedby="style-choice-grid">
             <option value="manual" selected>进战斗后手动选择</option>
             <option value="fire">001 · 烈火重重 [1]</option>
             <option value="absorb">002 · 咒还 [2]</option>
@@ -62,6 +62,7 @@
           </select>
         </div>
       </div>
+      <div id="style-choice-grid" class="style-choice-grid" role="radiogroup" aria-label="战斗风格"></div>
       <div class="menu-hint">战斗中按 ESC 可返回此菜单</div>
     </div>
 
@@ -173,31 +174,31 @@
     <button id="touch-toggle" class="touch-toggle" title="虚拟按键 V">⌨</button>
   </div>
 
-  <script src="js/utils.js?v=r22a"></script>
-  <script src="js/difficulty.js?v=r22a"></script>
-  <script src="js/audio.js?v=r22a"></script>
-  <script src="js/fx.js?v=r22a"></script>
-  <script src="js/input.js?v=r22a"></script>
-  <script src="js/data/chains.js?v=r22a"></script>
-  <script src="js/data/weapons.js?v=r22a"></script>
-  <script src="js/data/spells.js?v=r22a"></script>
-  <script src="js/data/combatArts.js?v=r22a"></script>
-  <script src="js/data/styles.js?v=r22a"></script>
-  <script src="js/data/defenses.js?v=r22a"></script>
-  <script src="js/data/enemies.js?v=r22a"></script>
-  <script src="js/data/encounters.js?v=r22a"></script>
-  <script src="js/data/effects.js?v=r22a"></script>
-  <script src="js/systems/effects.js?v=r22a"></script>
-  <script src="js/systems/statuses.js?v=r22a"></script>
-  <script src="js/systems/resources.js?v=r22a"></script>
-  <script src="js/systems/hit-confirm.js?v=r22a"></script>
-  <script src="js/systems/active-attacks.js?v=r22a"></script>
-  <script src="js/systems/qte-debug.js?v=r22a"></script>
-  <script src="js/systems/chain-effects.js?v=r22a"></script>
-  <script src="js/demo-mode.js?v=r22a"></script>
-  <script src="js/qte-runner.js?v=r22a"></script>
-  <script src="js/battle.js?v=r22a"></script>
-  <script src="js/renderer.js?v=r22a"></script>
-  <script src="js/main.js?v=r22a"></script>
+  <script src="js/utils.js?v=r23b"></script>
+  <script src="js/difficulty.js?v=r23b"></script>
+  <script src="js/audio.js?v=r23b"></script>
+  <script src="js/fx.js?v=r23b"></script>
+  <script src="js/input.js?v=r23b"></script>
+  <script src="js/data/chains.js?v=r23b"></script>
+  <script src="js/data/weapons.js?v=r23b"></script>
+  <script src="js/data/spells.js?v=r23b"></script>
+  <script src="js/data/combatArts.js?v=r23b"></script>
+  <script src="js/data/styles.js?v=r23b"></script>
+  <script src="js/data/defenses.js?v=r23b"></script>
+  <script src="js/data/enemies.js?v=r23b"></script>
+  <script src="js/data/encounters.js?v=r23b"></script>
+  <script src="js/data/effects.js?v=r23b"></script>
+  <script src="js/systems/effects.js?v=r23b"></script>
+  <script src="js/systems/statuses.js?v=r23b"></script>
+  <script src="js/systems/resources.js?v=r23b"></script>
+  <script src="js/systems/hit-confirm.js?v=r23b"></script>
+  <script src="js/systems/active-attacks.js?v=r23b"></script>
+  <script src="js/systems/qte-debug.js?v=r23b"></script>
+  <script src="js/systems/chain-effects.js?v=r23b"></script>
+  <script src="js/demo-mode.js?v=r23b"></script>
+  <script src="js/qte-runner.js?v=r23b"></script>
+  <script src="js/battle.js?v=r23b"></script>
+  <script src="js/renderer.js?v=r23b"></script>
+  <script src="js/main.js?v=r23b"></script>
 </body>
 </html>

@@ -17,6 +17,7 @@ const btnDemo = document.getElementById("btn-demo");
 const btnMenu = document.getElementById("btn-menu");
 const difficultySelect = document.getElementById("difficulty-select");
 const styleSelect = document.getElementById("style-select");
+const styleChoiceGrid = document.getElementById("style-choice-grid");
 const enemySelect = document.getElementById("enemy-select");
 
 const gameOverOverlay = document.getElementById("game-over");
@@ -108,6 +109,37 @@ function styleOptionLabel(style) {
   return `${style.number} · ${style.name} [${style.key}]`;
 }
 
+function createStyleChoiceButton(value, style) {
+  const button = document.createElement("button");
+  const selected = styleSelect && styleSelect.value === value;
+  button.type = "button";
+  button.className = `style-choice${value === "manual" ? " manual" : ""}${selected ? " selected" : ""}`;
+  button.dataset.styleId = value;
+  button.setAttribute("role", "radio");
+  button.setAttribute("aria-checked", selected ? "true" : "false");
+  if (style && style.color) button.style.setProperty("--style-color", style.color);
+
+  const key = document.createElement("span");
+  key.className = "style-choice-key";
+  key.textContent = style ? `[${style.key}]` : "手动";
+
+  const name = document.createElement("span");
+  name.className = "style-choice-name";
+  name.textContent = style ? style.name : "进战斗后选择";
+
+  button.append(key, name);
+  return button;
+}
+
+function syncStyleChoiceGrid() {
+  if (!styleChoiceGrid || !styleSelect || typeof StyleDatabase === "undefined") return;
+  styleChoiceGrid.replaceChildren(createStyleChoiceButton("manual", null));
+
+  for (const [id, style] of Object.entries(StyleDatabase)) {
+    styleChoiceGrid.appendChild(createStyleChoiceButton(id, style));
+  }
+}
+
 function syncStyleSelectOptions() {
   if (!styleSelect || typeof StyleDatabase === "undefined") return;
   const selected = styleSelect.value || "manual";
@@ -128,6 +160,8 @@ function syncStyleSelectOptions() {
   if (selected !== "manual" && !StyleDatabase[selected]) {
     styleSelect.value = "manual";
   }
+
+  syncStyleChoiceGrid();
 }
 
 function selectedStyleId() {
@@ -424,6 +458,10 @@ function updateBattleUI() {
     turnText = "QTE";
     turnClass = "qte";
     helpHtml = `<div>在判定窗口内按下对应按键</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
+  } else if (battle.turnState === "attack_active") {
+    turnText = "攻击演出";
+    turnClass = "qte";
+    helpHtml = `<div>攻击已出手，等待命中结算</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "resolving") {
     turnText = "结算中";
     turnClass = "prep";
@@ -629,6 +667,13 @@ tutorialOverlay.addEventListener("click", (e) => {
 });
 difficultySelect.addEventListener("change", () => {
   Difficulty.set(difficultySelect.value);
+});
+styleSelect.addEventListener("change", syncStyleChoiceGrid);
+styleChoiceGrid.addEventListener("click", (e) => {
+  const button = e.target && e.target.closest ? e.target.closest("button[data-style-id]") : null;
+  if (!button || !styleChoiceGrid.contains(button)) return;
+  styleSelect.value = button.dataset.styleId;
+  syncStyleChoiceGrid();
 });
 
 function setTouchControlsVisible(visible) {

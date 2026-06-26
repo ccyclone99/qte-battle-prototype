@@ -1802,6 +1802,44 @@ Acceptance criteria:
 - Static smoke protects suppression of duplicate enemy-attack floating messages.
 - Visual smoke captures a dedicated `battle-enemy-telegraph` scenario and still passes on desktop and mobile screenshots.
 
+### R23 - Player Active Attack Cinematics, Completed
+
+Goal: player attacks should read differently after QTE completion, during the authored active-attack travel/impact window. Weapon chains and spell chains should not share one generic arc or beam.
+
+Implemented direction:
+
+- `CanvasRenderer.getPlayerActiveAttackDescriptor()` classifies active player attacks by chain family, weapon, visual event, motion, hit index, and element.
+- Player active attack rendering now has specialized helpers for:
+  - melee chains: `drawPlayerMeleeActiveAttack`
+  - projectiles: `drawPlayerProjectileActiveAttack`
+  - beam/spell chains: `drawPlayerSpellActiveAttack`
+  - pulse/burst chains: `drawPlayerPulseActiveAttack`
+- Dual blades now render paired crossing trails, afterimages, and hit-index variation for segmented hits.
+- Greatsword and fire blade attacks now render heavier sweeping arcs, larger span, and flame tongues on fire chains.
+- Absorb/counterspell style attacks now render caster sigils and braided beam lines instead of a flat generic beam.
+- Generic enemy projectile/beam/pulse rendering remains available through `drawGeneric*ActiveAttack` helpers.
+- Top HUD now labels `attack_active` as `攻击演出` instead of leaving the turn pill blank during authored hit travel.
+
+Acceptance criteria:
+
+- Renderer exposes player active attack descriptor and specialized player active attack helpers.
+- Visual smoke captures `battle-player-active-attack` for fire/greatsword active attacks.
+- Visual smoke captures `battle-player-spell-active` for absorb beam active attacks.
+- Static smoke protects the helper surface and visual smoke coverage.
+- Static smoke protects the `attack_active` top HUD label.
+
+### R23b Main Menu Style Visibility, Completed
+
+Problem found after online review: style `8` existed in data and the native dropdown, but the collapsed main-menu select only showed `进战斗后手动选择`, making the live entry look absent.
+
+Changes:
+
+- Main menu now renders visible style choice buttons from `StyleDatabase`.
+- `[8] 逆势双刃` is visible on the first screen instead of hidden inside the native select.
+- The existing `style-select` remains the state source, so start battle/practice still uses the same style application path.
+- Static smoke protects `style-choice-grid`, the button sync logic, and the counterflow option.
+- Visual smoke now asserts the `counterflow` style button is visible in the rendered desktop main menu.
+
 ## 22. Verification Commands
 
 ```powershell

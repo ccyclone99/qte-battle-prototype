@@ -341,10 +341,6 @@ body {
   gap: 8px;
 }
 
-.style-menu-field select {
-  min-width: 260px;
-}
-
 .difficulty-row select {
   padding: 6px 12px;
   font-family: inherit;
@@ -353,6 +349,73 @@ body {
   color: #fff;
   border: 1px solid #5a5a6a;
   border-radius: 4px;
+}
+
+.native-style-select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.style-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: min(760px, calc(100% - 48px));
+}
+
+.style-choice {
+  min-width: 0;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 0 12px;
+  font-family: inherit;
+  color: #e8e8f0;
+  background: rgba(26, 26, 37, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-left: 3px solid var(--style-color, #f1c40f);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.style-choice:hover {
+  background: rgba(38, 38, 52, 0.96);
+  border-color: var(--style-color, #f1c40f);
+  transform: translateY(-1px);
+}
+
+.style-choice.selected {
+  color: #fff;
+  background: color-mix(in srgb, var(--style-color, #f1c40f) 24%, rgba(26, 26, 37, 0.92));
+  border-color: var(--style-color, #f1c40f);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--style-color, #f1c40f) 25%, transparent);
+}
+
+.style-choice-key {
+  flex: 0 0 auto;
+  min-width: 32px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--style-color, #f1c40f);
+}
+
+.style-choice-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.style-choice.manual {
+  --style-color: #8a8fa3;
 }
 
 .menu-hint {
@@ -655,15 +718,32 @@ body {
     gap: 5px;
   }
 
-  .difficulty-row .style-menu-field select {
-    min-width: 0;
-    max-width: 230px;
-  }
-
   .difficulty-row select {
     max-width: 120px;
     padding: 4px 7px;
     font-size: 12px;
+  }
+
+  .style-choice-grid {
+    width: calc(100% - 20px);
+    gap: 5px;
+  }
+
+  .style-choice {
+    height: 34px;
+    gap: 5px;
+    padding: 0 7px;
+    border-left-width: 2px;
+    border-radius: 5px;
+  }
+
+  .style-choice-key {
+    min-width: 24px;
+    font-size: 11px;
+  }
+
+  .style-choice-name {
+    font-size: 11px;
   }
 
   .menu-hint {

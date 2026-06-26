@@ -436,6 +436,13 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await captureScenario(cdp, "main-menu-desktop", [
       { label: "main menu visible", ok: await evaluate(cdp, `document.getElementById("main-menu").style.display !== "none"`) },
+      { label: "style 8 visible in menu grid", ok: await evaluate(cdp, `(() => {
+        const btn = document.querySelector('#style-choice-grid button[data-style-id="counterflow"]');
+        if (!btn) return false;
+        const rect = btn.getBoundingClientRect();
+        const style = getComputedStyle(btn);
+        return btn.textContent.includes("[8]") && btn.textContent.includes("逆势双刃") && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+      })()`) },
       { label: "encounter select visible", ok: await evaluate(cdp, `document.body.textContent.includes("自动推荐") && document.body.textContent.includes("熔炉守门人")`) }
     ]);
 
@@ -526,6 +533,88 @@ async function runVisualSmoke() {
       { label: "battle style 7 entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
       { label: "style 7 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("秘术回廊")`) },
       { label: "style 7 mirror text visible", ok: await evaluate(cdp, `document.body.textContent.includes("镜") || document.body.textContent.includes("咒还")`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-start");
+    await closeTutorial(cdp);
+    await pressKey(cdp, "6");
+    await wait(240);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.activeAttackSystem.clear();
+      const attack = battle.commitActiveAttack({
+        kind: "playerQTE",
+        source: "player",
+        target: "enemy",
+        attackType: "melee",
+        chainFamily: "fire",
+        weapon: "greatsword",
+        visualEvent: "flameBladeBurst",
+        motion: "flameBladeBurst",
+        color: "#e67e22",
+        damage: 1,
+        timeline: { startup: 0.10, travel: 1.10, impactTime: 1.20, reactionStart: 0.70, reactionDuration: 0.28, recovery: 1.20 },
+        damageIntent: { source: "player", target: "enemy", damage: 1, token: "visual-fire", label: "visual-fire", shape: "arc" }
+      });
+      attack.elapsed = 0.86;
+      battle.activeAttackSystem.updateAttackState(attack);
+      attack.paused = true;
+      battle.turnBanner = null;
+      battle.flashMessage = null;
+      battle.messageTimer = 0;
+    })()`);
+    await wait(220);
+    await captureScenario(cdp, "battle-player-active-attack", [
+      { label: "active attack turn label visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("攻击演出")`) },
+      { label: "player active attack exists", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.activeAttackSystem.active.some(a => a.source === "player")`) },
+      { label: "player fire attack descriptor", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const a = battle.activeAttackSystem.active.find(item => item.source === "player");
+        const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
+        return !!(d && d.isFire && d.isGreatsword);
+      })()`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-start");
+    await closeTutorial(cdp);
+    await pressKey(cdp, "7");
+    await wait(240);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.activeAttackSystem.clear();
+      const attack = battle.commitActiveAttack({
+        kind: "playerQTE",
+        source: "player",
+        target: "enemy",
+        attackType: "beam",
+        chainFamily: "absorb",
+        weapon: "dualBlades",
+        visualEvent: "absorbSiphon",
+        motion: "absorbRelease",
+        color: "#9b59b6",
+        damage: 1,
+        timeline: { startup: 0.10, travel: 0.95, impactTime: 1.05, reactionStart: 0.70, reactionDuration: 0.24, recovery: 1.10 },
+        damageIntent: { source: "player", target: "enemy", damage: 1, token: "visual-absorb", label: "visual-absorb", shape: "beam" }
+      });
+      attack.elapsed = 0.74;
+      battle.activeAttackSystem.updateAttackState(attack);
+      attack.paused = true;
+      battle.turnBanner = null;
+      battle.flashMessage = null;
+      battle.messageTimer = 0;
+    })()`);
+    await wait(220);
+    await captureScenario(cdp, "battle-player-spell-active", [
+      { label: "spell active attack turn label visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("攻击演出")`) },
+      { label: "player spell active attack exists", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.activeAttackSystem.active.some(a => a.source === "player" && a.profile.type === "beam")`) },
+      { label: "player absorb descriptor", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const a = battle.activeAttackSystem.active.find(item => item.source === "player");
+        const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
+        return !!(d && d.isAbsorb);
+      })()`) }
     ]);
 
     await navigate(cdp, appUrl, desktop);
