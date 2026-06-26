@@ -136,7 +136,7 @@ check("visual smoke guards demo stage drawer overlap", visualSmokeJs.includes("d
 check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
 check("small viewport compact rules exist", styleCss.includes("@media (max-width: 900px), (max-height: 520px)") && styleCss.includes("#demo-detail-drawer"));
 check("mobile demo detail uses bottom sheet layout", styleCss.includes("#demo-detail-drawer .drawer-content") && styleCss.includes("bottom: 8px"));
-check("main menu includes encounter select", indexHtml.includes('id="enemy-select"') && indexHtml.includes('value="encounter:arcane_conduit"') && indexHtml.includes('value="swift"'));
+check("main menu includes encounter select", indexHtml.includes('id="enemy-select"') && indexHtml.includes('value="encounter:arcane_conduit"') && indexHtml.includes('value="encounter:counter_dojo"') && indexHtml.includes('value="swift"'));
 check("battle supports encounter selection", battleJs.includes("encounterOverrideId") && battleJs.includes("applyEncounter") && battleJs.includes("pickEnemyAttackId"));
 check("battle supports encounter phases", battleJs.includes("getCurrentEncounterPhase") && battleJs.includes("maybeEnterEncounterPhase") && battleJs.includes("getEncounterAttackPattern"));
 check("battle result summary exists", battleJs.includes("getBattleResultLines") && rendererJs.includes("战斗摘要") && mainJs.includes("getBattleResultLines") && styleCss.includes("game-over-stats-title"));
