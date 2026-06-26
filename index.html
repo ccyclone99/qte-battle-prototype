@@ -17,14 +17,27 @@
         <button id="btn-practice">练习模式</button>
         <button id="btn-demo">效果演示</button>
       </div>
-      <div class="difficulty-row">
-        <label for="difficulty-select">难度：</label>
-        <select id="difficulty-select">
-          <option value="easy" selected>简单</option>
-          <option value="normal">普通</option>
-          <option value="hard">困难</option>
-          <option value="extreme">极难</option>
-        </select>
+      <div class="difficulty-row menu-config-row">
+        <div class="menu-field">
+          <label for="difficulty-select">难度：</label>
+          <select id="difficulty-select">
+            <option value="easy" selected>简单</option>
+            <option value="normal">普通</option>
+            <option value="hard">困难</option>
+            <option value="extreme">极难</option>
+          </select>
+        </div>
+        <div class="menu-field">
+          <label for="enemy-select">敌人：</label>
+          <select id="enemy-select">
+            <option value="auto" selected>自动匹配</option>
+            <option value="base">魔像士兵</option>
+            <option value="caster">秘术咏唱者</option>
+            <option value="armored">重甲守卫</option>
+            <option value="swift">迅捷刺客</option>
+            <option value="shielded">持盾术卫</option>
+          </select>
+        </div>
       </div>
       <div class="menu-hint">战斗中按 ESC 可返回此菜单</div>
     </div>

@@ -2,7 +2,7 @@
 const SFX = {
   ctx: null,
   enabled: false,
-  masterVolume: 0.35,
+  masterVolume: 0.30,
 
   enable() {
     if (!this.ctx) {
@@ -73,40 +73,40 @@ const SFX = {
 
   // ===== 命名音效 =====
   sfxHit() {
-    this.playNoise({ duration: 0.12, release: 0.08, volume: 0.9 });
-    this.playTone({ type: "sawtooth", freq: 180, freqEnd: 80, duration: 0.12, attack: 0.005, release: 0.08, volume: 0.5 });
+    this.playNoise({ duration: 0.12, release: 0.08, volume: 0.72 });
+    this.playTone({ type: "sawtooth", freq: 180, freqEnd: 80, duration: 0.12, attack: 0.005, release: 0.08, volume: 0.38 });
   },
 
   sfxSlash() {
-    this.playNoise({ duration: 0.14, release: 0.08, volume: 0.6 });
-    this.playTone({ type: "sawtooth", freq: 600, freqEnd: 200, duration: 0.14, attack: 0.005, release: 0.1, volume: 0.5 });
+    this.playNoise({ duration: 0.14, release: 0.08, volume: 0.48 });
+    this.playTone({ type: "sawtooth", freq: 600, freqEnd: 200, duration: 0.14, attack: 0.005, release: 0.1, volume: 0.36 });
   },
 
   sfxGuard() {
-    this.playNoise({ duration: 0.15, release: 0.12, volume: 0.5 });
-    this.playTone({ type: "square", freq: 320, freqEnd: 320, duration: 0.12, attack: 0.005, release: 0.1, volume: 0.45 });
+    this.playNoise({ duration: 0.15, release: 0.12, volume: 0.42 });
+    this.playTone({ type: "square", freq: 320, freqEnd: 320, duration: 0.12, attack: 0.005, release: 0.1, volume: 0.34 });
   },
 
   sfxMagic() {
-    this.playTone({ type: "sine", freq: 440, freqEnd: 880, duration: 0.25, attack: 0.02, release: 0.18, volume: 0.55 });
-    this.playTone({ type: "triangle", freq: 220, freqEnd: 660, duration: 0.3, attack: 0.02, release: 0.22, volume: 0.35 });
+    this.playTone({ type: "sine", freq: 440, freqEnd: 880, duration: 0.25, attack: 0.02, release: 0.18, volume: 0.44 });
+    this.playTone({ type: "triangle", freq: 220, freqEnd: 660, duration: 0.3, attack: 0.02, release: 0.22, volume: 0.28 });
   },
 
   sfxPerfect() {
-    this.playTone({ type: "sine", freq: 880, freqEnd: 1760, duration: 0.25, attack: 0.005, release: 0.18, volume: 0.7 });
-    this.playTone({ type: "sine", freq: 1320, freqEnd: 2640, duration: 0.25, attack: 0.01, release: 0.18, volume: 0.4 });
+    this.playTone({ type: "sine", freq: 880, freqEnd: 1760, duration: 0.25, attack: 0.005, release: 0.18, volume: 0.56 });
+    this.playTone({ type: "sine", freq: 1320, freqEnd: 2640, duration: 0.25, attack: 0.01, release: 0.18, volume: 0.3 });
   },
 
   sfxSuccess() {
-    this.playTone({ type: "sine", freq: 660, freqEnd: 990, duration: 0.18, attack: 0.005, release: 0.12, volume: 0.6 });
+    this.playTone({ type: "sine", freq: 660, freqEnd: 990, duration: 0.18, attack: 0.005, release: 0.12, volume: 0.44 });
   },
 
   sfxFail() {
-    this.playTone({ type: "sawtooth", freq: 200, freqEnd: 100, duration: 0.3, attack: 0.01, release: 0.22, volume: 0.6 });
+    this.playTone({ type: "sawtooth", freq: 200, freqEnd: 100, duration: 0.26, attack: 0.01, release: 0.18, volume: 0.42 });
   },
 
   sfxWindup() {
-    this.playTone({ type: "sine", freq: 120, freqEnd: 240, duration: 0.4, attack: 0.05, release: 0.15, volume: 0.35 });
+    this.playTone({ type: "sine", freq: 120, freqEnd: 240, duration: 0.34, attack: 0.05, release: 0.13, volume: 0.25 });
   },
 
   sfxDodge() {
@@ -115,31 +115,31 @@ const SFX = {
   },
 
   sfxParry() {
-    this.playNoise({ duration: 0.12, release: 0.08, volume: 0.5 });
-    this.playTone({ type: "square", freq: 880, freqEnd: 440, duration: 0.15, attack: 0.005, release: 0.1, volume: 0.55 });
+    this.playNoise({ duration: 0.12, release: 0.08, volume: 0.42 });
+    this.playTone({ type: "square", freq: 880, freqEnd: 440, duration: 0.15, attack: 0.005, release: 0.1, volume: 0.42 });
   },
 
   sfxCounter() {
-    this.playNoise({ duration: 0.14, release: 0.08, volume: 0.6 });
-    this.playTone({ type: "sawtooth", freq: 440, freqEnd: 880, duration: 0.18, attack: 0.005, release: 0.12, volume: 0.6 });
+    this.playNoise({ duration: 0.14, release: 0.08, volume: 0.48 });
+    this.playTone({ type: "sawtooth", freq: 440, freqEnd: 880, duration: 0.18, attack: 0.005, release: 0.12, volume: 0.44 });
   },
 
   sfxCharge() {
-    this.playTone({ type: "sine", freq: 220, freqEnd: 880, duration: 0.4, attack: 0.05, release: 0.15, volume: 0.4 });
+    this.playTone({ type: "sine", freq: 220, freqEnd: 880, duration: 0.34, attack: 0.05, release: 0.13, volume: 0.3 });
   },
 
   sfxChargePeak() {
-    this.playTone({ type: "sine", freq: 440, freqEnd: 1320, duration: 0.24, attack: 0.01, release: 0.14, volume: 0.55 });
-    this.playTone({ type: "triangle", freq: 880, freqEnd: 1760, duration: 0.22, attack: 0.01, release: 0.12, volume: 0.35 });
+    this.playTone({ type: "sine", freq: 440, freqEnd: 1320, duration: 0.22, attack: 0.01, release: 0.12, volume: 0.42 });
+    this.playTone({ type: "triangle", freq: 880, freqEnd: 1760, duration: 0.2, attack: 0.01, release: 0.1, volume: 0.24 });
   },
 
   sfxResourceGain() {
-    this.playTone({ type: "triangle", freq: 392, freqEnd: 784, duration: 0.18, attack: 0.01, release: 0.12, volume: 0.42 });
-    this.playTone({ type: "sine", freq: 523, freqEnd: 1046, duration: 0.16, attack: 0.01, release: 0.1, volume: 0.28 });
+    this.playTone({ type: "triangle", freq: 392, freqEnd: 784, duration: 0.18, attack: 0.01, release: 0.12, volume: 0.34 });
+    this.playTone({ type: "sine", freq: 523, freqEnd: 1046, duration: 0.16, attack: 0.01, release: 0.1, volume: 0.22 });
   },
 
   sfxResourceSpend() {
-    this.playTone({ type: "sine", freq: 520, freqEnd: 260, duration: 0.2, attack: 0.01, release: 0.13, volume: 0.36 });
+    this.playTone({ type: "sine", freq: 520, freqEnd: 260, duration: 0.2, attack: 0.01, release: 0.13, volume: 0.28 });
   },
 
   sfxHeal() {
@@ -147,7 +147,7 @@ const SFX = {
   },
 
   sfxStatus() {
-    this.playTone({ type: "triangle", freq: 330, freqEnd: 660, duration: 0.18, attack: 0.01, release: 0.12, volume: 0.4 });
+    this.playTone({ type: "triangle", freq: 330, freqEnd: 660, duration: 0.16, attack: 0.01, release: 0.1, volume: 0.28 });
   },
 
   sfxBurn() {
@@ -156,26 +156,26 @@ const SFX = {
   },
 
   sfxOverload() {
-    this.playTone({ type: "sawtooth", freq: 160, freqEnd: 90, duration: 0.28, attack: 0.01, release: 0.2, volume: 0.45 });
-    this.playTone({ type: "square", freq: 440, freqEnd: 220, duration: 0.22, attack: 0.01, release: 0.14, volume: 0.22 });
+    this.playTone({ type: "sawtooth", freq: 160, freqEnd: 90, duration: 0.26, attack: 0.01, release: 0.18, volume: 0.34 });
+    this.playTone({ type: "square", freq: 440, freqEnd: 220, duration: 0.2, attack: 0.01, release: 0.12, volume: 0.16 });
   },
 
   sfxAlert() {
-    this.playTone({ type: "sawtooth", freq: 310, freqEnd: 310, duration: 0.2, attack: 0.01, release: 0.12, volume: 0.45 });
+    this.playTone({ type: "sawtooth", freq: 310, freqEnd: 310, duration: 0.16, attack: 0.01, release: 0.1, volume: 0.28 });
   },
 
   sfxWindowOpen() {
-    this.playTone({ type: "square", freq: 740, freqEnd: 740, duration: 0.08, attack: 0.005, release: 0.06, volume: 0.32 });
-    this.playTone({ type: "sine", freq: 980, freqEnd: 1280, duration: 0.12, attack: 0.005, release: 0.08, volume: 0.28 });
+    this.playTone({ type: "square", freq: 740, freqEnd: 740, duration: 0.07, attack: 0.005, release: 0.05, volume: 0.24 });
+    this.playTone({ type: "sine", freq: 980, freqEnd: 1280, duration: 0.1, attack: 0.005, release: 0.07, volume: 0.2 });
   },
 
   sfxThreat() {
-    this.playTone({ type: "sawtooth", freq: 180, freqEnd: 260, duration: 0.18, attack: 0.01, release: 0.12, volume: 0.35 });
+    this.playTone({ type: "sawtooth", freq: 180, freqEnd: 260, duration: 0.16, attack: 0.01, release: 0.1, volume: 0.26 });
   },
 
   sfxShowcase() {
-    this.playTone({ type: "sine", freq: 523, freqEnd: 784, duration: 0.16, attack: 0.01, release: 0.1, volume: 0.32 });
-    this.playTone({ type: "sine", freq: 784, freqEnd: 1175, duration: 0.2, attack: 0.02, release: 0.12, volume: 0.24 });
+    this.playTone({ type: "sine", freq: 523, freqEnd: 784, duration: 0.14, attack: 0.01, release: 0.09, volume: 0.24 });
+    this.playTone({ type: "sine", freq: 784, freqEnd: 1175, duration: 0.18, attack: 0.02, release: 0.1, volume: 0.18 });
   },
 
   sfxTransition(transition) {

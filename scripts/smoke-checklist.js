@@ -16,6 +16,7 @@ const {
 const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const mainJs = fs.readFileSync(path.join(root, "js/main.js"), "utf8");
 const demoModeJs = fs.readFileSync(path.join(root, "js/demo-mode.js"), "utf8");
+const battleJs = fs.readFileSync(path.join(root, "js/battle.js"), "utf8");
 const inputJs = fs.readFileSync(path.join(root, "js/input.js"), "utf8");
 const rendererJs = fs.readFileSync(path.join(root, "js/renderer.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
@@ -89,13 +90,17 @@ check("demo includes showcase category", demoModeJs.includes('key: "showcases"')
 check("demo help advertises showcase", mainJs.includes("亮点演示 Showcase") && mainJs.includes("1-5</b> 选择演示分类"));
 check("enemy readout renderer exists", rendererJs.includes("drawEnemyAttackReadout") && rendererJs.includes("推荐"));
 check("audio has R7 feedback cues", audioJs.includes("sfxWindowOpen") && audioJs.includes("sfxResourceGain") && audioJs.includes("sfxTransition"));
+check("audio has R9 quieter mix baseline", audioJs.includes("masterVolume: 0.30") && audioJs.includes("sfxChargePeak") && audioJs.includes("volume: 0.42"));
 check("keyboard input includes style key 7", inputJs.includes('"7"'));
 check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check-timing.js")));
 check("visual smoke script exists", !!visualSmokeJs);
 check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captureScreenshot"));
+check("visual smoke covers style 7 and replay", visualSmokeJs.includes("battle-style7-qte") && visualSmokeJs.includes("demo-result-replay-qte"));
 check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
 check("small viewport compact rules exist", styleCss.includes("@media (max-width: 900px), (max-height: 520px)") && styleCss.includes("#demo-detail-drawer"));
 check("mobile demo detail uses bottom sheet layout", styleCss.includes("#demo-detail-drawer .drawer-content") && styleCss.includes("bottom: 8px"));
+check("main menu includes manual enemy select", indexHtml.includes('id="enemy-select"') && indexHtml.includes('value="swift"'));
+check("battle supports manual enemy override", battleJs.includes("enemyOverrideId") && battleJs.includes("getEnemySelectionLabel") && mainJs.includes("selectedEnemyId"));
 check("SPEC includes visual smoke command", specMd.includes("node scripts\\visual-smoke.js"));
 check("SPEC syntax check targets source directories", specMd.includes("Get-ChildItem -Path .\\js,.\\scripts"));
 

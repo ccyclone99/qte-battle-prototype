@@ -10,6 +10,7 @@ class BattleSystem {
     this.enemyConfig = EnemyDatabase.base;
     this.enemyMaxHp = this.enemyConfig.maxHp;
     this.enemyHp = this.enemyMaxHp;
+    this.enemyOverrideId = this.resolveEnemyOverride(options.enemyId);
 
     // 回合/阶段状态
     this._turnState = "select_weapon"; // select_weapon | player_turn | enemy_turn | qte_running | resolving | game_over
@@ -54,7 +55,7 @@ class BattleSystem {
     this.resolveDuration = 0.4;
 
     // 消息
-    this.message = "按 1-7 选择战斗风格";
+    this.message = `按 1-7 选择战斗风格｜敌人：${this.getEnemySelectionLabel()}`;
     this.messageTimer = 0;
     this.flashMessage = null;
 
@@ -209,6 +210,26 @@ class BattleSystem {
     this.consumeStyleSelectionInputs();
   }
 
+  resolveEnemyOverride(enemyId) {
+    if (!enemyId || enemyId === "auto") return null;
+    if (enemyId === "base") return "base";
+    if (EnemyDatabase.archetypes && EnemyDatabase.archetypes[enemyId]) return enemyId;
+    return null;
+  }
+
+  getEnemyArchetype(enemyId) {
+    if (enemyId === "base") {
+      return (EnemyDatabase.archetypes && EnemyDatabase.archetypes.base) || EnemyDatabase.base;
+    }
+    return (EnemyDatabase.archetypes && EnemyDatabase.archetypes[enemyId]) || EnemyDatabase.base;
+  }
+
+  getEnemySelectionLabel() {
+    if (!this.enemyOverrideId) return "自动匹配";
+    const enemy = this.getEnemyArchetype(this.enemyOverrideId);
+    return `手动：${enemy.name}`;
+  }
+
   consumeStyleSelectionInputs() {
     while (true) {
       const ev = this.input.peek();
@@ -242,13 +263,15 @@ class BattleSystem {
     this.playerConfig.weapon = style.weapon || null;
     this.playerConfig.spells = style.spells ? [...style.spells] : [];
     this.playerConfig.combatArts = style.combatArts ? [...style.combatArts] : [];
-    this.applyEnemyArchetype(style.preferredEnemy || "base");
-    this.log(`战斗风格：${style.name}；敌人：${this.enemyConfig.name}`);
+    const enemyId = this.enemyOverrideId || style.preferredEnemy || "base";
+    this.applyEnemyArchetype(enemyId);
+    const enemyMode = this.enemyOverrideId ? "手动敌人" : "推荐敌人";
+    this.log(`战斗风格：${style.name}；${enemyMode}：${this.enemyConfig.name}`);
   }
 
   applyEnemyArchetype(enemyId) {
-    const enemy = (EnemyDatabase.archetypes && EnemyDatabase.archetypes[enemyId]) || EnemyDatabase.base;
-    this.enemyId = enemyId;
+    const enemy = this.getEnemyArchetype(enemyId);
+    this.enemyId = enemy === EnemyDatabase.base && enemyId !== "base" ? "base" : enemyId;
     this.enemyConfig = enemy;
     this.enemyMaxHp = enemy.maxHp || EnemyDatabase.base.maxHp;
     this.enemyHp = this.enemyMaxHp;

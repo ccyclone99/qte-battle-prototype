@@ -16,6 +16,7 @@ const btnPractice = document.getElementById("btn-practice");
 const btnDemo = document.getElementById("btn-demo");
 const btnMenu = document.getElementById("btn-menu");
 const difficultySelect = document.getElementById("difficulty-select");
+const enemySelect = document.getElementById("enemy-select");
 
 const gameOverOverlay = document.getElementById("game-over");
 const gameOverTitle = document.getElementById("game-over-title");
@@ -95,6 +96,11 @@ let battle = null;
 let demo = null;
 let lastTime = performance.now();
 let tutorialShownThisSession = false;
+
+function selectedEnemyId() {
+  if (!enemySelect || enemySelect.value === "auto") return null;
+  return enemySelect.value;
+}
 
 function showTutorialIfNeeded() {
   if (tutorialShownThisSession) return;
@@ -245,7 +251,7 @@ function startBattle() {
   SFX.enable();
   input.clear();
   Difficulty.set(difficultySelect.value);
-  battle = new BattleSystem(input, { practiceMode: false });
+  battle = new BattleSystem(input, { practiceMode: false, enemyId: selectedEnemyId() });
   battle.onLog = addLog;
   demo = null;
   appState = "battle";
@@ -267,7 +273,7 @@ function startPractice() {
   SFX.enable();
   input.clear();
   Difficulty.set(difficultySelect.value);
-  battle = new BattleSystem(input, { practiceMode: true });
+  battle = new BattleSystem(input, { practiceMode: true, enemyId: selectedEnemyId() });
   battle.onLog = addLog;
   demo = null;
   appState = "battle";

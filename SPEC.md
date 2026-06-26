@@ -1092,10 +1092,29 @@ Remaining cleanup after R6-B:
 
 Remaining cleanup after R8:
 
-- Tune audio mix after repeated playtesting; current sounds are synthesized placeholders.
-- Add manual enemy matchup selection if balance testing against archetypes becomes slow.
 - Add per-node pose tags only where generic node-timed motion is not enough.
 - Add CI integration for screenshot smoke if this project starts using hosted checks.
+
+### R9 - Targeted Playtest Polish, Completed
+
+- Added main-menu enemy matchup selection:
+  - `自动匹配` keeps the style-driven preferred enemy.
+  - Manual choices can force base, caster, armored, swift, or shielded enemy archetypes for battle and practice.
+- Battle setup now carries an `enemyOverrideId`, logs whether the enemy is recommended or manual, and exposes `getEnemySelectionLabel()` for setup-screen confirmation.
+- The style selection canvas now displays the current enemy matchup mode before the player commits to a battle style.
+- Extended flow smoke to prove manual enemy override can force a non-default archetype without changing the selected style.
+- Tuned synthesized placeholder audio mix:
+  - Reduced master volume from `0.35` to `0.30`.
+  - Lowered repeated impact, slash, guard, Perfect, Success, Fail, charge, enemy warning, response-window, overload, and Showcase peaks.
+  - Kept resource gain/spend and response-window cues distinct but less fatiguing during repeated demo playback.
+- Extended screenshot smoke to include battle style `7`, a demo result preview frame, and the `R` replay path returning into QTE playback.
+- Updated static smoke coverage for enemy selection, R9 audio mix baseline, style `7` screenshots, and replay screenshots.
+
+Remaining cleanup after R9:
+
+- Add per-node pose tags only where generic node-timed motion is not enough.
+- Add CI integration for screenshot smoke if this project starts using hosted checks.
+- Add stronger audio tooling only if synthesized placeholders remain too limited after more playtests.
 
 ## 21. Acceptance Criteria
 
@@ -1140,7 +1159,8 @@ Remaining cleanup after R8:
 - Demo includes Showcase entries that play staged Fire, Absorb, Flame Blade, and enemy-turn examples without needing list paging.
 - Enemy-turn demos show attack type, danger level, recommended key, and window countdown in the detail panel and attack bar.
 - Key combat events have distinct audio feedback.
-- Screenshot smoke covers main menu, Showcase, enemy readouts, battle style `6`, and mobile landscape demo layout.
+- Main menu can force enemy archetypes for matchup testing without changing style loadouts.
+- Screenshot smoke covers main menu, Showcase, enemy readouts, battle style `6`, battle style `7`, result preview replay, and mobile landscape demo layout.
 - Mobile landscape keeps the 16:9 game container inside the viewport without clipping the demo category controls.
 
 ## 22. Verification Commands
@@ -1177,7 +1197,7 @@ Manual browser smoke test:
 - Press `R` on the result preview and confirm the same Fire v2 entry replays.
 - Run Absorb active-chain entry.
 - Run `flow-smoke.js` to cover battle style `6`, battle style `7`, Fire v2 demo playback, spell-list paging, and `overflow_burst` end to end.
-- Run `visual-smoke.js` to cover main menu, Showcase, enemy readout, battle style `6`, and mobile landscape screenshots.
+- Run `visual-smoke.js` to cover main menu, Showcase, enemy readout, battle style `6`, battle style `7`, result replay, and mobile landscape screenshots.
 - Cycle demo style to Dual Blades and run a V2 weapon chain.
 - Cycle demo style to Greatsword and run a V2 weapon chain.
 - In battle, select a Greatsword style and confirm the QTE debug drawer shows V2 chain data.
@@ -1197,12 +1217,11 @@ Manual browser smoke test:
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R9 targeted playtest polish next:
+Move to R10 animation specificity and delivery hardening next:
 
-1. Tune synthesized audio levels after a longer playtest pass, especially charge peaks, enemy warnings, overload, and branch failures.
-2. Add manual enemy matchup selection so specific archetypes can be tested without relying on style defaults.
-3. Add per-node pose tags for only the chains that still read too generically in motion.
-4. Extend screenshot smoke to battle style `7` and at least one result-preview replay frame if future regressions appear there.
-5. Re-run balance checks after any timing, audio, or enemy-readability changes.
+1. Add per-node pose tags for only the chains that still read too generically in motion.
+2. Consider a compact manual visual checklist beside screenshot smoke for poses and audio impressions that automation cannot judge.
+3. Add CI integration for `validate-data`, timing, balance, flow smoke, syntax check, and screenshot smoke if hosted checks become useful.
+4. Re-run balance checks after any pose, timing, audio, or enemy-readability changes.
 
-R1-R8 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, and mobile landscape layout protection. The next bottleneck is repeated playtest tuning rather than missing infrastructure.
+R1-R9 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, and replay regression coverage. The next bottleneck is motion specificity rather than missing test infrastructure.

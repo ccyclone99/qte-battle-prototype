@@ -285,6 +285,15 @@ async function waitReady(cdp) {
   throw new Error("Page did not finish loading");
 }
 
+async function waitForEvaluate(cdp, expression, timeoutMs = 6000, label = expression) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await evaluate(cdp, expression)) return;
+    await wait(120);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
 function pageErrorEvents(cdp) {
   return cdp.events.filter(event => {
     if (event.method === "Runtime.exceptionThrown") return true;
@@ -459,6 +468,41 @@ async function runVisualSmoke() {
     await captureScenario(cdp, "battle-style6-qte", [
       { label: "battle entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
       { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-start");
+    await closeTutorial(cdp);
+    await pressKey(cdp, "7");
+    await wait(240);
+    await pressKey(cdp, "S");
+    await wait(320);
+    await captureScenario(cdp, "battle-style7-qte", [
+      { label: "battle style 7 entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
+      { label: "style 7 mirror text visible", ok: await evaluate(cdp, `document.body.textContent.includes("镜") || document.body.textContent.includes("咒还")`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-demo");
+    await closeTutorial(cdp);
+    await pressKey(cdp, "3");
+    await pressKey(cdp, "6");
+    await waitForEvaluate(
+      cdp,
+      `document.getElementById("turn-indicator").textContent.includes("结算") && document.body.textContent.includes("R")`,
+      14000,
+      "demo result preview"
+    );
+    await captureScenario(cdp, "demo-result-preview", [
+      { label: "demo result preview visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("结算")`) },
+      { label: "replay hint visible", ok: await evaluate(cdp, `document.body.textContent.includes("R") && document.body.textContent.includes("重播")`) }
+    ]);
+    await pressKey(cdp, "R");
+    await waitForEvaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`, 4000, "demo replay qte");
+    await wait(500);
+    await captureScenario(cdp, "demo-result-replay-qte", [
+      { label: "demo replay entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
+      { label: "replayed item remains flame blade", ok: await evaluate(cdp, `document.body.textContent.includes("焰刃") || document.body.textContent.includes("熔甲")`) }
     ]);
 
     await navigate(cdp, appUrl, mobileLandscape);

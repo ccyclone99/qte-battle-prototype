@@ -90,11 +90,11 @@ function runUntil(owner, predicate, timeout = 12) {
   return predicate();
 }
 
-function createBattle() {
+function createBattle(options = {}) {
   const input = new InputBuffer();
   const logs = [];
   Difficulty.set("easy");
-  const battle = new BattleSystem(input, { practiceMode: false });
+  const battle = new BattleSystem(input, { practiceMode: false, ...options });
   battle.onLog = msg => logs.unshift(String(msg));
   tick(battle);
   return { input, battle, logs };
@@ -111,6 +111,16 @@ function verifyBattleStyle(key, expectedStyle, expectedEnemyHp, actionKey, expec
   assert(`style ${key} starts QTE`, battle.turnState === "qte_running", battle.turnState);
   assert(`style ${key} QTE chain`, battle.qteRunner && battle.qteRunner.context.chainId === expectedChainId, battle.qteRunner?.context?.chainId || "none");
   assert(`style ${key} log has style`, logs.some(line => line.includes("战斗风格")), logs.join(" | "));
+}
+
+function verifyManualEnemyOverride() {
+  const { input, battle, logs } = createBattle({ enemyId: "swift" });
+  assert("manual enemy label visible", battle.getEnemySelectionLabel().includes("迅捷刺客"), battle.getEnemySelectionLabel());
+  tap(input, battle, "6");
+  assert("manual enemy keeps selected style", battle.playerConfig.style === "flameforge", battle.playerConfig.style);
+  assert("manual enemy overrides style default", battle.enemyId === "swift", battle.enemyId);
+  assert("manual enemy hp applied", battle.enemyMaxHp === 160, String(battle.enemyMaxHp));
+  assert("manual enemy log mentions manual mode", logs.some(line => line.includes("手动敌人") && line.includes("迅捷刺客")), logs.join(" | "));
 }
 
 function createDemo() {
@@ -169,6 +179,7 @@ function verifyDemoSpellFlows() {
 try {
   verifyBattleStyle("6", "flameforge", 260, "A", "flame_blade");
   verifyBattleStyle("7", "mirrorblade", 170, "S", "absorb_siphon");
+  verifyManualEnemyOverride();
   verifyDemoSpellFlows();
 } catch (err) {
   console.error(err.message);

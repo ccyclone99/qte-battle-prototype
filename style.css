@@ -316,6 +316,18 @@ body {
   color: #cccccc;
 }
 
+.menu-config-row {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 18px;
+}
+
+.menu-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .difficulty-row select {
   padding: 6px 12px;
   font-family: inherit;
@@ -609,6 +621,21 @@ body {
 
   .difficulty-row {
     font-size: 13px;
+    max-width: calc(100% - 24px);
+  }
+
+  .menu-config-row {
+    gap: 7px 10px;
+  }
+
+  .menu-field {
+    gap: 5px;
+  }
+
+  .difficulty-row select {
+    max-width: 120px;
+    padding: 4px 7px;
+    font-size: 12px;
   }
 
   .menu-hint {

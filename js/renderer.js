@@ -1026,6 +1026,11 @@ class CanvasRenderer {
     ctx.textBaseline = "top";
     ctx.fillText("选择你的战斗风格", this.width / 2, this.layout.selectionTitleY);
 
+    const enemyLabel = battle.getEnemySelectionLabel ? battle.getEnemySelectionLabel() : "自动匹配";
+    ctx.fillStyle = "#cfd0df";
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText(`敌人匹配：${enemyLabel}`, this.width / 2, this.layout.selectionTitleY + 42);
+
     const styles = Object.entries(StyleDatabase);
     const compact = styles.length > 5;
     const cardW = compact ? 142 : 154;
