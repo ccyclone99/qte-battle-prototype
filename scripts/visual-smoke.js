@@ -587,6 +587,17 @@ async function runVisualSmoke() {
       attack.elapsed = 0.86;
       battle.activeAttackSystem.updateAttackState(attack);
       attack.paused = true;
+      battle.hitConfirmSystem.confirm({
+        source: "player",
+        target: "enemy",
+        damage: 0,
+        token: "visual-contact-layer",
+        label: "visual-contact-layer",
+        shape: "arc",
+        weapon: "greatsword",
+        color: "#f1c40f",
+        debugLife: 1.4
+      });
       battle.turnBanner = null;
       battle.flashMessage = null;
       battle.messageTimer = 0;
@@ -611,6 +622,12 @@ async function runVisualSmoke() {
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
         const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
         return !!(d && d.isFire && d.isGreatsword);
+      })()`) },
+      { label: "contact impact events active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getCombatContactEvents) return false;
+        const events = r.getCombatContactEvents(battle);
+        return events.some(item => item.confirmed && item.target === "enemy" && item.impact && item.ground && item.radius > 20 && item.ground.y > item.body.y);
       })()`) },
       { label: "player model profile reads fire greatsword", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

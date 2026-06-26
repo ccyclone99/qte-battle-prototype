@@ -117,6 +117,7 @@ check("renderer has encounter stage theme helpers", rendererJs.includes("getEnco
 check("renderer has cinematic focus helpers", rendererJs.includes("getCinematicFocus") && rendererJs.includes("drawCinematicFocus") && rendererJs.includes("drawCinematicLane") && rendererJs.includes("drawCinematicReticle"));
 check("renderer has actor performance helpers", rendererJs.includes("getActorPerformance") && rendererJs.includes("getActorActiveAttack") && rendererJs.includes("drawActorPerformanceAfterimage"));
 check("renderer has timing readability helpers", rendererJs.includes("getQTEReadabilityMetrics") && rendererJs.includes("drawQTEReadabilityPanel") && rendererJs.includes("getEnemyTimingMetrics") && rendererJs.includes("drawEnemyTimingPanel"));
+check("renderer has combat contact performance helpers", rendererJs.includes("getCombatContactEvents") && rendererJs.includes("drawCombatContactLayer") && rendererJs.includes("drawContactBodyImpact") && rendererJs.includes("drawContactGroundImpulse"));
 check("renderer has player equipment model helpers", rendererJs.includes("getPlayerModelProfile") && rendererJs.includes("drawPlayerBackGear") && rendererJs.includes("drawPlayerArmorAccents") && rendererJs.includes("drawPlayerLoadoutDetails") && rendererJs.includes("drawPlayerHeadgear"));
 check("renderer has enemy model accent helpers", rendererJs.includes("getEnemyModelProfile") && rendererJs.includes("drawEnemyModelAccents") && rendererJs.includes("drawEnemyMaterialDetails") && rendererJs.includes("drawEnemyGearDetails") && rendererJs.includes("drawEnemyHeadgear") && rendererJs.includes("model.type"));
 check("renderer has enemy telegraph helpers", rendererJs.includes("getEnemyTelegraph") && rendererJs.includes("drawEnemyTelegraphLane") && rendererJs.includes("drawEnemyTelegraphHit") && rendererJs.includes("drawEnemyAttackPoseOverlay"));
@@ -212,6 +213,8 @@ check("hit confirm supports dynamic trails", hitConfirmJs.includes("buildTrailHi
 check("battle routes damage through hit confirm", battleJs.includes("this.hitConfirmSystem = new HitConfirmSystem(this)") && battleJs.includes("confirmDamage(intent") && battleJs.includes("hitConfirmSystem.confirm"));
 check("battle passes qte hit metadata", battleJs.includes("buildQTEHitMeta") && battleJs.includes("visualEvents") && battleJs.includes("outcomes"));
 check("renderer draws hit confirm overlay", rendererJs.includes("drawHitConfirmOverlays") && rendererJs.includes("drawHitboxShape") && rendererJs.includes("drawHurtboxShape"));
+check("hit confirm overlay is debug-gated", rendererJs.includes("scene.showHitConfirmOverlay") && mainJs.includes("scene.showHitConfirmOverlay"));
+check("visual smoke covers combat contact layer", visualSmokeJs.includes("contact impact events active") && visualSmokeJs.includes("getCombatContactEvents"));
 check("actor reactions accept impact offsets", fxJs.includes("direction: options.direction") && fxJs.includes("distance: options.distance") && fxJs.includes("reaction.distance"));
 check("qte debug shows hit confirm", qteDebugJs.includes("hitConfirmSystem.getDebugLines"));
 

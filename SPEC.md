@@ -1973,6 +1973,24 @@ Acceptance criteria:
 - Static smoke protects the split between style numbers and style keys.
 - Visual smoke verifies `023 · 逆势双刃 / 风格 8` and `008 · 东方诸国剑术 / 风格 4` are both visible in the main-menu grid.
 
+### R31 Combat Contact Performance Layer, Completed
+
+Goal: confirmed hits should read as contact on the body and floor, not only as hitbox debug shapes, floating numbers, or generic flashes.
+
+Implemented direction:
+
+- `CanvasRenderer.getCombatContactEvents()` converts active hit-confirm records into render-friendly contact events with target, direction, body point, floor point, force, radius, and contact kind.
+- `drawCombatContactLayer()` renders those events as body-attached impact blooms, directional streaks, ground impulse ellipses, heavy-hit cracks, and whiff rings.
+- The layer supports melee arcs, beams/spells, heavy hits, duplicate/miss records, and both player-to-enemy and enemy-to-player directions through the same hit-confirm data.
+- The existing hitbox/hurtbox debug overlay remains available behind the QTE debug drawer instead of always drawing over the player-facing combat view.
+- This pass is render-only and does not change collision, damage, hit timing, QTE windows, active attacks, or enemy AI.
+
+Acceptance criteria:
+
+- Renderer exposes combat contact event and drawing helpers.
+- Visual smoke injects a confirmed hit record and verifies a combat contact event is active during the player active-attack screenshot.
+- Static smoke protects helper coverage, the debug-gated hitbox overlay, and the visual-smoke assertion.
+
 ## 22. Verification Commands
 
 ```powershell

@@ -82,6 +82,7 @@ class CanvasRenderer {
     this.drawCharacters(scene, t);
     this.drawAttackEffects(scene, t);
     this.drawHitConfirmOverlays(scene);
+    this.drawCombatContactLayer(scene, t);
     if (scene.effectBursts) scene.effectBursts.render(ctx);
     this.drawCinematicFocus(scene, t);
 
@@ -1411,6 +1412,7 @@ class CanvasRenderer {
   }
 
   drawHitConfirmOverlays(scene) {
+    if (!scene || !scene.showHitConfirmOverlay) return;
     if (!scene.hitConfirmSystem || !Array.isArray(scene.hitConfirmSystem.active)) return;
     const hits = scene.hitConfirmSystem.active;
     if (hits.length === 0) return;
@@ -1430,6 +1432,214 @@ class CanvasRenderer {
         this.drawHurtboxShape(ctx, hit.hurtbox, hit.confirmed ? "#ffffff" : color, alpha * 0.65);
       }
     }
+    ctx.restore();
+  }
+
+  getCombatContactEvents(scene) {
+    const system = scene && scene.hitConfirmSystem;
+    if (!system || !Array.isArray(system.active)) return [];
+
+    return system.active.map(hit => {
+      if (!hit || !hit.hurtbox || !hit.hitbox) return null;
+      const maxLife = hit.maxLife || 1;
+      const lifeRatio = Utils.clamp((hit.life ?? maxLife) / maxLife, 0, 1);
+      if (lifeRatio <= 0.02) return null;
+
+      const hurtbox = hit.hurtbox;
+      const center = hurtbox.anchor || {
+        x: hurtbox.x + (hurtbox.w || 0) / 2,
+        y: hurtbox.y + (hurtbox.h || 0) / 2
+      };
+      const direction = this.getContactDirection(hit);
+      const width = hurtbox.w || (hit.target === "player" ? 70 : 90);
+      const height = hurtbox.h || (hit.target === "player" ? 110 : 130);
+      const progress = 1 - lifeRatio;
+      const confirmed = !!(hit.confirmed && !hit.duplicate && hit.overlap);
+      const profile = hit.profile || {};
+      const kind = profile.kind || hit.hitbox.kind || hit.shape || "arc";
+      const color = profile.color || (confirmed ? "#f1c40f" : "#95a5a6");
+      const force = Utils.clamp((profile.impactForce || 1) + (hit.damage || 0) / 120, 0.65, 1.95);
+      const radius = Utils.clamp(18 + (profile.width || 42) * 0.32 + (hit.damage || 0) * 0.24, 22, 78);
+
+      return {
+        id: hit.id || hit.token || "",
+        source: hit.source || "system",
+        target: hit.target,
+        label: hit.label || "",
+        confirmed,
+        duplicate: !!hit.duplicate,
+        overlap: !!hit.overlap,
+        kind,
+        color,
+        force,
+        radius,
+        damage: hit.damage || 0,
+        direction,
+        lifeRatio,
+        progress,
+        alpha: confirmed ? 0.92 * lifeRatio : 0.42 * lifeRatio,
+        impact: {
+          x: center.x - direction * width * 0.32,
+          y: center.y - height * 0.12 - Math.sin(progress * Math.PI) * 7
+        },
+        body: {
+          x: center.x,
+          y: center.y,
+          w: width,
+          h: height
+        },
+        ground: {
+          x: center.x - direction * 8,
+          y: Math.min(this.height - 72, center.y + height * 0.42)
+        }
+      };
+    }).filter(Boolean);
+  }
+
+  getContactDirection(hit) {
+    const points = hit && hit.hitbox && hit.hitbox.points;
+    const start = points && points.length > 0 ? points[0] : (hit.hitbox && hit.hitbox.start);
+    const end = points && points.length > 1 ? points[points.length - 1] : (hit.hitbox && hit.hitbox.end);
+    if (start && end && Math.abs(end.x - start.x) > 0.01) {
+      return Math.sign(end.x - start.x);
+    }
+    return hit && hit.target === "enemy" ? 1 : -1;
+  }
+
+  drawCombatContactLayer(scene, t) {
+    const contacts = this.getCombatContactEvents(scene);
+    if (contacts.length === 0) return;
+
+    const ctx = this.ctx;
+    ctx.save();
+    for (const contact of contacts.slice(0, 5).reverse()) {
+      this.drawContactGroundImpulse(ctx, contact, t);
+      if (contact.confirmed) {
+        this.drawContactBodyImpact(ctx, contact, t);
+      } else {
+        this.drawContactWhiff(ctx, contact, t);
+      }
+    }
+    ctx.restore();
+  }
+
+  drawContactGroundImpulse(ctx, contact, t) {
+    const alpha = contact.alpha * (contact.confirmed ? 0.48 : 0.26);
+    if (alpha <= 0.02) return;
+    const p = this.easeOutCubic(contact.progress);
+    const heavy = contact.force > 1.18 || contact.radius > 52;
+    const color = contact.confirmed ? contact.color : "#95a5a6";
+
+    ctx.save();
+    ctx.translate(contact.ground.x, contact.ground.y);
+    ctx.scale(1 + p * 0.55, 1 + p * 0.18);
+    ctx.globalAlpha = alpha;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = this.hexToRgba(color, 0.14);
+    ctx.strokeStyle = this.hexToRgba(color, 0.56);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = heavy ? 18 : 10;
+    ctx.lineWidth = heavy ? 3 : 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, contact.radius * 1.15, Math.max(7, contact.radius * 0.22), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    if (contact.confirmed && heavy) {
+      ctx.globalAlpha = alpha * 0.72;
+      ctx.shadowBlur = 8;
+      ctx.lineCap = "round";
+      for (let i = 0; i < 5; i++) {
+        const side = i - 2;
+        const len = contact.radius * (0.42 + i * 0.05);
+        const x0 = side * contact.radius * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(x0, 0);
+        ctx.lineTo(x0 + contact.direction * len, 8 + Math.abs(side) * 4);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawContactBodyImpact(ctx, contact, t) {
+    const alpha = contact.alpha;
+    if (alpha <= 0.03) return;
+    const p = this.easeOutCubic(contact.progress);
+    const isBeam = contact.kind === "beam" || contact.kind === "spell" || contact.kind === "projectile";
+    const radius = contact.radius * (0.72 + p * 0.42);
+    const streak = contact.radius * (0.95 + contact.force * 0.28);
+
+    ctx.save();
+    ctx.translate(contact.impact.x, contact.impact.y);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = contact.color;
+    ctx.shadowBlur = isBeam ? 28 : 20;
+
+    const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius);
+    grad.addColorStop(0, this.hexToRgba("#ffffff", 0.88));
+    grad.addColorStop(0.32, this.hexToRgba(contact.color, isBeam ? 0.52 : 0.42));
+    grad.addColorStop(1, this.hexToRgba(contact.color, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.lineCap = "round";
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.72);
+    ctx.lineWidth = isBeam ? 3 : 4;
+    ctx.beginPath();
+    ctx.moveTo(-contact.direction * streak * 0.48, -8);
+    ctx.lineTo(contact.direction * streak * 0.42, 7);
+    ctx.stroke();
+
+    ctx.strokeStyle = this.hexToRgba(contact.color, 0.82);
+    ctx.lineWidth = isBeam ? 2 : 3;
+    const spokes = isBeam ? 8 : 7;
+    for (let i = 0; i < spokes; i++) {
+      const angle = (i / spokes) * Math.PI * 2 + t * 0.25;
+      const inner = radius * 0.24;
+      const outer = radius * (0.78 + ((i % 3) * 0.09));
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+      ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+      ctx.stroke();
+    }
+
+    if (isBeam) {
+      ctx.strokeStyle = this.hexToRgba(contact.color, 0.55);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 2; i++) {
+        const r = radius * (0.78 + i * 0.34 + p * 0.22);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawContactWhiff(ctx, contact, t) {
+    const alpha = contact.alpha * 0.7;
+    if (alpha <= 0.02) return;
+    const p = this.easeOutCubic(contact.progress);
+
+    ctx.save();
+    ctx.translate(contact.impact.x, contact.impact.y);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = this.hexToRgba("#95a5a6", 0.72);
+    ctx.shadowColor = "#95a5a6";
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 7]);
+    ctx.beginPath();
+    ctx.arc(0, 0, contact.radius * (0.72 + p * 0.35), -0.6 + t * 0.2, Math.PI * 1.25 + t * 0.2);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
