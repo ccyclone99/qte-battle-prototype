@@ -115,6 +115,7 @@ check("renderer has enemy silhouette helper", rendererJs.includes("drawEnemySilh
 check("renderer has stage and nameplate helpers", rendererJs.includes("drawBattleStage") && rendererJs.includes("drawActorGroundSigil") && rendererJs.includes("drawCombatNameplates"));
 check("renderer has encounter stage theme helpers", rendererJs.includes("getEncounterStageTheme") && rendererJs.includes("drawEncounterBackdrop") && rendererJs.includes("drawEncounterFloorDetails") && rendererJs.includes("drawStageGlyph"));
 check("renderer has cinematic focus helpers", rendererJs.includes("getCinematicFocus") && rendererJs.includes("drawCinematicFocus") && rendererJs.includes("drawCinematicLane") && rendererJs.includes("drawCinematicReticle"));
+check("renderer has actor performance helpers", rendererJs.includes("getActorPerformance") && rendererJs.includes("getActorActiveAttack") && rendererJs.includes("drawActorPerformanceAfterimage"));
 check("renderer has player equipment model helpers", rendererJs.includes("drawPlayerBackGear") && rendererJs.includes("drawPlayerArmorAccents") && rendererJs.includes("drawPlayerHeadgear"));
 check("renderer has enemy model accent helpers", rendererJs.includes("drawEnemyModelAccents") && rendererJs.includes("drawEnemyHeadgear") && rendererJs.includes("model.type"));
 check("renderer has enemy telegraph helpers", rendererJs.includes("getEnemyTelegraph") && rendererJs.includes("drawEnemyTelegraphLane") && rendererJs.includes("drawEnemyTelegraphHit") && rendererJs.includes("drawEnemyAttackPoseOverlay"));

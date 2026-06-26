@@ -259,6 +259,159 @@ class CanvasRenderer {
     })[0];
   }
 
+  getActorPerformance(scene, actor, reaction = null, pose = null) {
+    const isPlayer = actor === "player";
+    const dir = isPlayer ? 1 : -1;
+    const currentReaction = reaction || this.getActorReaction(scene, actor);
+    const reactionProgress = currentReaction && Number.isFinite(currentReaction.progress) ? currentReaction.progress : 0;
+    const reactionPulse = Math.sin(reactionProgress * Math.PI);
+    const performance = {
+      actor,
+      offsetX: 0,
+      offsetY: 0,
+      lean: 0,
+      scaleX: 1,
+      scaleY: 1,
+      shadowScale: 1,
+      armReach: 0,
+      stride: 0,
+      attack: 0,
+      windup: 0,
+      brace: 0,
+      cast: 0,
+      hitSquash: 0,
+      afterimageAlpha: 0,
+      afterimageCount: 0,
+      actionProgress: 0,
+      poseIntensity: 0,
+      enemyPose: null,
+      motion: pose && pose.motion ? pose.motion : ""
+    };
+
+    if (currentReaction && currentReaction.type) {
+      if (currentReaction.type === "attack") {
+        performance.attack = Math.max(performance.attack, 0.48 + reactionPulse * 0.42);
+        performance.armReach += 12 * reactionPulse;
+        performance.stride += 10 * reactionPulse;
+        performance.lean += dir * 0.05 * reactionPulse;
+        performance.afterimageAlpha = Math.max(performance.afterimageAlpha, 0.10 * reactionPulse);
+      } else if (currentReaction.type === "windup") {
+        performance.windup = Math.max(performance.windup, 0.52 + reactionPulse * 0.36);
+        performance.armReach += 6 * reactionPulse;
+        performance.lean -= dir * 0.05 * reactionPulse;
+      } else if (currentReaction.type === "cast") {
+        performance.cast = Math.max(performance.cast, 0.45 + reactionPulse * 0.35);
+        performance.offsetY -= 2 * reactionPulse;
+        performance.shadowScale += 0.04 * reactionPulse;
+      } else if (currentReaction.type === "guard") {
+        performance.brace = Math.max(performance.brace, 0.5 + reactionPulse * 0.34);
+        performance.scaleX -= 0.03 * reactionPulse;
+        performance.scaleY += 0.04 * reactionPulse;
+      } else if (currentReaction.type === "dodge") {
+        performance.afterimageAlpha = Math.max(performance.afterimageAlpha, 0.26 * reactionPulse);
+        performance.afterimageCount = Math.max(performance.afterimageCount, 2);
+        performance.lean -= dir * 0.10 * reactionPulse;
+        performance.stride += 16 * reactionPulse;
+      } else if (currentReaction.type === "hit" || currentReaction.type === "crit" || currentReaction.type === "stagger") {
+        const hard = currentReaction.type === "crit" ? 1.25 : 1;
+        performance.hitSquash = Math.max(performance.hitSquash, 0.36 * hard * reactionPulse);
+        performance.scaleX += 0.06 * hard * reactionPulse;
+        performance.scaleY -= 0.05 * hard * reactionPulse;
+        performance.lean += dir * 0.08 * hard * reactionPulse;
+      }
+    }
+
+    const active = this.getActorActiveAttack(scene, actor, "source");
+    if (active) {
+      const profile = active.profile || {};
+      const progress = Utils.clamp(active.progress || 0, 0, 1);
+      const activePulse = Math.sin(progress * Math.PI);
+      const phasePower = active.phase === "impact"
+        ? 1
+        : (active.phase === "reaction" ? 0.82 : (active.phase === "startup" ? 0.52 : 0.34));
+      const isSpellShape = profile.type === "projectile" || profile.type === "beam" || profile.type === "pulse";
+      performance.actionProgress = Math.max(performance.actionProgress, progress);
+      performance.motion = active.intent && (active.intent.motion || active.intent.visualEvent || active.intent.chainId) || performance.motion;
+      performance.offsetX += dir * (isSpellShape ? 5 : 16) * phasePower * Math.max(0.2, activePulse);
+      performance.offsetY -= (isSpellShape ? 3 : 5) * phasePower * activePulse;
+      performance.lean += dir * (isSpellShape ? 0.04 : 0.11) * phasePower;
+      performance.stride += (isSpellShape ? 4 : 18) * phasePower * activePulse;
+      performance.armReach += (isSpellShape ? 8 : 30) * phasePower;
+      performance.shadowScale += 0.06 * phasePower;
+      if (isSpellShape) {
+        performance.cast = Math.max(performance.cast, 0.58 + phasePower * 0.30);
+      } else {
+        performance.attack = Math.max(performance.attack, 0.58 + phasePower * 0.34);
+        performance.afterimageAlpha = Math.max(performance.afterimageAlpha, 0.12 + phasePower * 0.16);
+        performance.afterimageCount = Math.max(performance.afterimageCount, active.intent && active.intent.hitCount > 1 ? 3 : 2);
+      }
+    }
+
+    const incoming = this.getActorActiveAttack(scene, actor, "target");
+    if (incoming && incoming.phase !== "startup") {
+      const pressure = incoming.phase === "impact" ? 0.74 : (incoming.phase === "reaction" ? 0.52 : 0.22);
+      performance.brace = Math.max(performance.brace, pressure);
+      performance.lean -= dir * 0.04 * pressure;
+      if (incoming.phase === "impact") {
+        performance.hitSquash = Math.max(performance.hitSquash, 0.22);
+      }
+    }
+
+    if (scene && scene.enemyAttack) {
+      const telegraph = this.getEnemyTelegraph(scene.enemyAttack);
+      if (!isPlayer) {
+        const phase = scene.enemyAttackPhase || "none";
+        if (phase !== "none" && phase !== "canceled") {
+          const response = phase === "response";
+          const hit = phase === "hit";
+          const windup = phase === "windup";
+          const phaseIntensity = hit ? 1 : (response ? 0.74 : (windup ? 0.42 : 0.22));
+          performance.enemyPose = telegraph.pose || "lunge";
+          performance.poseIntensity = Math.max(performance.poseIntensity, phaseIntensity);
+          performance.armReach = Math.max(performance.armReach, hit ? 44 : (response ? 30 : 12));
+          performance.windup = Math.max(performance.windup, windup ? 0.58 : 0);
+          performance.offsetX += dir * (hit ? 14 : (response ? 7 : -4)) * phaseIntensity;
+          performance.lean += dir * (telegraph.pose === "overhead" ? 0.03 : 0.08) * phaseIntensity;
+          performance.stride += (hit ? 20 : 10) * phaseIntensity;
+          performance.afterimageAlpha = Math.max(performance.afterimageAlpha, response || hit ? 0.16 * phaseIntensity : 0);
+          performance.afterimageCount = Math.max(performance.afterimageCount, response || hit ? 2 : 0);
+          if (telegraph.pose === "cast") performance.cast = Math.max(performance.cast, 0.52 + phaseIntensity * 0.34);
+          if (telegraph.pose === "bash") performance.brace = Math.max(performance.brace, 0.35 + phaseIntensity * 0.32);
+        }
+      } else if (scene.turnState === "enemy_turn" && scene.enemyAttackPhase === "response") {
+        performance.brace = Math.max(performance.brace, 0.42);
+        performance.lean -= dir * 0.035;
+      }
+    }
+
+    const squash = performance.hitSquash;
+    if (squash > 0) {
+      performance.scaleX += squash * 0.08;
+      performance.scaleY -= squash * 0.07;
+      performance.shadowScale += squash * 0.10;
+    }
+    performance.afterimageAlpha = Utils.clamp(performance.afterimageAlpha, 0, 0.42);
+    performance.afterimageCount = Math.max(performance.afterimageAlpha > 0.04 ? 1 : 0, Math.min(3, performance.afterimageCount || 0));
+    return performance;
+  }
+
+  getActorActiveAttack(scene, actor, role = "source") {
+    const system = scene && scene.activeAttackSystem;
+    if (!system || !Array.isArray(system.active) || system.active.length === 0) return null;
+    const candidates = system.active.filter(attack => {
+      if (!attack || attack.completed || attack.canceled) return false;
+      return role === "target" ? attack.target === actor : attack.source === actor;
+    });
+    if (candidates.length === 0) return null;
+    const priority = { impact: 0, reaction: 1, startup: 2, recovery: 3 };
+    return candidates.slice().sort((a, b) => {
+      const ap = priority[a.phase] ?? 4;
+      const bp = priority[b.phase] ?? 4;
+      if (ap !== bp) return ap - bp;
+      return (b.elapsed || 0) - (a.elapsed || 0);
+    })[0];
+  }
+
   resolveCinematicAnchor(anchor) {
     const anchors = {
       playerCore: { x: 220, y: 360 },
@@ -1781,11 +1934,12 @@ class CanvasRenderer {
     const styleColor = style ? style.color : (weapon ? weapon.color : "#3498db");
     const actionTiming = this.getActionTiming(scene, t);
     const pose = this.getCurrentPose(scene);
+    const playerPerformance = this.getActorPerformance(scene, "player", playerReaction, pose);
 
     // 待机呼吸
     let bob = Math.sin(t * 2) * 2;
     let px = basePx + playerReaction.offsetX;
-    let py = basePy + bob + playerReaction.offsetY;
+    let py = basePy + bob + playerReaction.offsetY + playerPerformance.offsetY;
 
     // 架势位移
     const pState = pose.state;
@@ -1801,11 +1955,13 @@ class CanvasRenderer {
       stanceOffset = motion === "overflowCompress" ? 6 : 14;
     }
     else if (pState === "shield") stanceOffset = 8;
+    stanceOffset += playerPerformance.offsetX;
     px += stanceOffset;
 
-    this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42, "rgba(52, 152, 219, 0.3)");
+    this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42 * playerPerformance.shadowScale, "rgba(52, 152, 219, 0.3)");
     this.drawActorGroundSigil(ctx, basePx + stanceOffset, basePy + 45, 50, styleColor, "player", t);
     const playerStatusVisuals = this.getActorStatusVisuals(scene, "player");
+    this.drawActorPerformanceAfterimage(ctx, "player", px, py, styleColor, playerPerformance, t);
     this.drawPlayerStatusAuras(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
     this.drawActorMotionLines(ctx, px, py, playerReaction, "player", styleColor);
     this.drawPlayerSilhouette(ctx, scene, {
@@ -1818,6 +1974,7 @@ class CanvasRenderer {
       reaction: playerReaction,
       progress: actionTiming.progress,
       pose,
+      performance: playerPerformance,
       t
     });
     this.drawPlayerStatusOverlays(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
@@ -1828,26 +1985,30 @@ class CanvasRenderer {
     const baseEy = this.height - 190;
     const eBob = Math.sin(t * 2 + 1) * 2;
     const enemyReaction = this.getActorReaction(scene, "enemy");
+    const enemyPerformance = this.getActorPerformance(scene, "enemy", enemyReaction, null);
     let ex = baseEx + enemyReaction.offsetX;
-    let ey = baseEy + eBob + enemyReaction.offsetY;
+    let ey = baseEy + eBob + enemyReaction.offsetY + enemyPerformance.offsetY;
 
     // 敌方蓄力前冲
     let enemyForward = 0;
     if (scene.enemyAttackPhase === "response") enemyForward = -25;
     else if (scene.enemyAttackPhase === "hit") enemyForward = -40;
+    enemyForward += enemyPerformance.offsetX;
     ex += enemyForward;
 
     const enemyConfig = scene.enemyConfig || EnemyDatabase.base;
     const enemyStatusVisuals = this.getActorStatusVisuals(scene, "enemy");
-    this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58, "rgba(192, 57, 43, 0.3)");
+    this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58 * enemyPerformance.shadowScale, "rgba(192, 57, 43, 0.3)");
     this.drawActorGroundSigil(ctx, baseEx + enemyForward, baseEy + 55, 62, enemyConfig.color || "#e74c3c", "enemy", t);
     this.drawEnemyStatusAuras(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
+    this.drawActorPerformanceAfterimage(ctx, "enemy", ex, ey, enemyConfig.color || "#e74c3c", enemyPerformance, t);
     this.drawActorMotionLines(ctx, ex, ey, enemyReaction, "enemy", enemyConfig.color || "#e74c3c");
     this.drawEnemySilhouette(ctx, scene, {
       x: ex,
       y: ey,
       config: enemyConfig,
       reaction: enemyReaction,
+      performance: enemyPerformance,
       t
     });
     this.drawEnemyStatusOverlays(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
@@ -2332,6 +2493,37 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  drawActorPerformanceAfterimage(ctx, actor, x, y, color, performance, t) {
+    if (!performance || performance.afterimageAlpha <= 0.02) return;
+    const count = Math.max(1, Math.min(3, performance.afterimageCount || 1));
+    const forward = actor === "enemy" ? -1 : 1;
+    const alpha = performance.afterimageAlpha;
+    const width = actor === "enemy" ? 52 : 42;
+    const height = actor === "enemy" ? 72 : 58;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = color || "#ffffff";
+    ctx.fillStyle = this.hexToRgba(color || "#ffffff", 0.18);
+    ctx.shadowColor = color || "#ffffff";
+    ctx.shadowBlur = 16;
+    for (let i = count; i >= 1; i--) {
+      const ratio = i / count;
+      const ox = -forward * (16 + i * 13 + (performance.stride || 0) * 0.2);
+      const oy = 2 + i * 2 + Math.sin(t * 9 + i) * 1.5;
+      ctx.globalAlpha = alpha * (0.38 + (1 - ratio) * 0.24);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x + ox - width / 2, y + oy - height / 2 + 4, width, height, actor === "enemy" ? 12 : 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x + ox, y + oy - height / 2 - 14, actor === "enemy" ? 14 : 12, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   getActorStatusVisuals(scene, target) {
     const statuses = scene && scene.statusSystem && scene.statusSystem.list
       ? scene.statusSystem.list(target)
@@ -2636,19 +2828,26 @@ class CanvasRenderer {
       reaction,
       progress,
       pose,
+      performance,
       t
     } = options;
+    const perf = performance || {};
     const scale = reaction.scale || 1;
-    const motion = pose ? pose.motion : state;
-    const isAttack = state === "swordAttack";
+    const motion = perf.motion || (pose ? pose.motion : state);
+    const isAttack = state === "swordAttack" || (perf.attack || 0) > 0.35;
     const isShield = state === "shield";
-    const isCast = state === "casting" || state === "charge";
-    const attackEase = this.easeOutCubic(progress || 0);
+    const isCast = state === "casting" || state === "charge" || (perf.cast || 0) > 0.42;
+    const attackEase = Math.max(this.easeOutCubic(progress || 0), perf.actionProgress || 0, perf.attack || 0);
+    const armReach = perf.armReach || 0;
+    const stride = perf.stride || 0;
+    const brace = perf.brace || 0;
+    const castPower = perf.cast || 0;
     let lean = isAttack ? -0.14 + attackEase * 0.22 : (isShield ? -0.10 : (isCast ? -0.06 : 0));
     if (motion === "dualDash") lean = -0.24 + attackEase * 0.15;
     if (motion === "dualRetreat") lean = 0.08 - attackEase * 0.18;
     if (motion === "greatswordEarthsplit" || motion === "flameBladeBurst") lean = -0.24 + attackEase * 0.34;
     if (motion === "greatswordCharge" || motion === "overflowCompress") lean = -0.14;
+    lean += perf.lean || 0;
     const bodyColor = weaponId === "greatsword" ? "#33506f" : (weaponId === "dualBlades" ? "#255f69" : "#2f5b8f");
     const trimColor = styleColor || (weapon ? weapon.color : "#3498db");
     const hasFire = scene.playerConfig && Array.isArray(scene.playerConfig.spells) && scene.playerConfig.spells.includes("fire");
@@ -2657,13 +2856,14 @@ class CanvasRenderer {
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
+    ctx.scale(perf.scaleX || 1, perf.scaleY || 1);
     ctx.rotate(lean + (reaction.rotation || 0));
 
     this.drawPlayerBackGear(ctx, weaponId, trimColor, motion, attackEase);
 
     // legs
-    this.drawLimb(ctx, -12, 22, -22, 50, "#24364d", 9);
-    this.drawLimb(ctx, 10, 22, 20, 50, "#24364d", 9);
+    this.drawLimb(ctx, -12, 22, -22 - stride * 0.25, 50, "#24364d", 9);
+    this.drawLimb(ctx, 10, 22, 20 + stride * 0.38, 50 - Math.min(8, stride * 0.12), "#24364d", 9);
 
     // torso
     ctx.fillStyle = bodyColor;
@@ -2693,24 +2893,24 @@ class CanvasRenderer {
     ctx.fillText(weapon ? (weapon.icon || weapon.name[0]) : "?", 0, 1);
 
     if (isShield) {
-      const shieldX = motion === "mirrorGuard" ? 58 : 50;
+      const shieldX = (motion === "mirrorGuard" ? 58 : 50) + brace * 9;
       this.drawLimb(ctx, 18, -10, shieldX - 8, -6, "#d7e7ff", 7);
       this.drawShieldSilhouette(ctx, shieldX, -4, trimColor, t);
       if (motion === "mirrorGuard") this.drawCastFocus(ctx, shieldX + 6, -4, trimColor, t);
       this.drawLimb(ctx, -16, -8, -34, 10, "#d7e7ff", 7);
     } else if (isCast) {
       if (motion === "overflowCompress") {
-        this.drawLimb(ctx, 16, -10, 34, -5, "#d7e7ff", 7);
-        this.drawLimb(ctx, -16, -8, -34, -5, "#d7e7ff", 7);
-        this.drawCastFocus(ctx, 0, -18, trimColor, t);
+        this.drawLimb(ctx, 16, -10, 34 + castPower * 8, -5 - castPower * 4, "#d7e7ff", 7);
+        this.drawLimb(ctx, -16, -8, -34 - castPower * 8, -5 - castPower * 4, "#d7e7ff", 7);
+        this.drawCastFocus(ctx, 0, -18 - castPower * 4, trimColor, t);
       } else if (motion === "absorbSiphon" || motion === "absorbRelease" || motion === "overflowBurst") {
-        this.drawLimb(ctx, 16, -10, 52 + attackEase * 10, -18, "#d7e7ff", 7);
-        this.drawCastFocus(ctx, 62 + attackEase * 10, -20, trimColor, t);
+        this.drawLimb(ctx, 16, -10, 52 + attackEase * 10 + armReach * 0.2, -18 - castPower * 5, "#d7e7ff", 7);
+        this.drawCastFocus(ctx, 62 + attackEase * 10 + armReach * 0.2, -20 - castPower * 5, trimColor, t);
         this.drawLimb(ctx, -16, -8, -46, -18, "#d7e7ff", 7);
         this.drawCastFocus(ctx, -54, -20, trimColor, t);
       } else {
-        this.drawLimb(ctx, 16, -10, 43, -30, "#d7e7ff", 7);
-        this.drawCastFocus(ctx, 52, -35, trimColor, t);
+        this.drawLimb(ctx, 16, -10, 43 + armReach * 0.25, -30 - castPower * 8, "#d7e7ff", 7);
+        this.drawCastFocus(ctx, 52 + armReach * 0.25, -35 - castPower * 8, trimColor, t);
         this.drawLimb(ctx, -16, -8, -38, -22, "#d7e7ff", 7);
       }
       if (weaponId === "staff") {
@@ -2721,21 +2921,21 @@ class CanvasRenderer {
       if (weaponId === "dualBlades") {
         const retreat = motion === "dualRetreat";
         const finisher = motion === "dualFinisher";
-        this.drawLimb(ctx, 16, -10, 42 + attackEase * (retreat ? -16 : 28), -18 + attackEase * (finisher ? -8 : 12), "#d7e7ff", 7);
-        this.drawLimb(ctx, -16, -8, -38 + attackEase * (retreat ? -18 : 16), -4 + attackEase * 8, "#d7e7ff", 7);
-        this.drawWeaponSilhouette(ctx, weaponId, 48 + attackEase * (retreat ? -16 : 28), -18 + attackEase * (finisher ? -8 : 12), trimColor, -0.55 + attackEase * 0.9, finisher ? 1.1 : 0.95);
-        this.drawWeaponSilhouette(ctx, weaponId, -44 + attackEase * (retreat ? -18 : 16), -4 + attackEase * 8, trimColor, Math.PI - 0.35 - attackEase * 0.65, finisher ? 1.0 : 0.85);
+        this.drawLimb(ctx, 16, -10, 42 + attackEase * (retreat ? -16 : 28) + armReach * 0.45, -18 + attackEase * (finisher ? -8 : 12), "#d7e7ff", 7);
+        this.drawLimb(ctx, -16, -8, -38 + attackEase * (retreat ? -18 : 16) + armReach * 0.18, -4 + attackEase * 8, "#d7e7ff", 7);
+        this.drawWeaponSilhouette(ctx, weaponId, 48 + attackEase * (retreat ? -16 : 28) + armReach * 0.45, -18 + attackEase * (finisher ? -8 : 12), trimColor, -0.55 + attackEase * 0.9, finisher ? 1.1 : 0.95);
+        this.drawWeaponSilhouette(ctx, weaponId, -44 + attackEase * (retreat ? -18 : 16) + armReach * 0.18, -4 + attackEase * 8, trimColor, Math.PI - 0.35 - attackEase * 0.65, finisher ? 1.0 : 0.85);
       } else {
-        let weaponX = 48 + attackEase * 18;
+        let weaponX = 48 + attackEase * 18 + armReach * 0.35;
         let weaponY = -18 + attackEase * 12;
         let angle = -0.22 + attackEase * 0.55;
         let weaponScale = 1;
         if (motion === "greatswordDraw") {
-          weaponX = 16 + attackEase * 34;
+          weaponX = 16 + attackEase * 34 + armReach * 0.25;
           weaponY = 22 - attackEase * 34;
           angle = -1.15 + attackEase * 0.72;
         } else if (motion === "greatswordEarthsplit" || motion === "flameBladeBurst" || motion === "greatswordOvercharge") {
-          weaponX = 34 + attackEase * 28;
+          weaponX = 34 + attackEase * 28 + armReach * 0.30;
           weaponY = -36 + attackEase * 42;
           angle = -1.05 + attackEase * 1.2;
           weaponScale = 1.15;
@@ -2744,6 +2944,19 @@ class CanvasRenderer {
         this.drawLimb(ctx, -16, -8, -32 + attackEase * 10, 2, "#d7e7ff", 7);
         this.drawWeaponSilhouette(ctx, weaponId, weaponX, weaponY, trimColor, angle, weaponScale);
       }
+    } else if (brace > 0.05) {
+      const guardX = 36 + brace * 18;
+      this.drawLimb(ctx, 16, -8, guardX, -14, "#d7e7ff", 7);
+      this.drawLimb(ctx, -16, -8, guardX - 18, 4, "#d7e7ff", 7);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.18 + brace * 0.22;
+      ctx.strokeStyle = trimColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(guardX + 2, -5, 24 + brace * 6, -0.9, 0.95);
+      ctx.stroke();
+      ctx.restore();
     } else {
       this.drawLimb(ctx, 16, -8, 36, 7, "#d7e7ff", 7);
       this.drawLimb(ctx, -16, -8, -36, 10, "#d7e7ff", 7);
@@ -2875,7 +3088,8 @@ class CanvasRenderer {
   }
 
   drawEnemySilhouette(ctx, scene, options) {
-    const { x, y, config, reaction, t } = options;
+    const { x, y, config, reaction, performance, t } = options;
+    const perf = performance || {};
     const scale = reaction.scale || 1;
     const color = scene.enemyStunTimer > 0 ? "#f1c40f" : (config.color || EnemyDatabase.base.color);
     const icon = config.icon || "敌";
@@ -2888,9 +3102,14 @@ class CanvasRenderer {
     const isGolem = modelType === "golem";
     const reactionType = reaction.type || "";
     const reactionPulse = Math.sin((reaction.progress || 0) * Math.PI);
-    const attackReach = reactionType === "attack" ? (isSwift ? 34 : 26) * reactionPulse : 0;
-    const windupPull = reactionType === "windup" ? 12 * reactionPulse : 0;
-    const lean = (isSwift ? -0.16 : (isArmored ? -0.04 : (scene.enemyAttackPhase === "response" ? -0.16 : 0))) + (reaction.rotation || 0);
+    const enemyPose = perf.enemyPose || (scene.enemyAttack ? this.getEnemyTelegraph(scene.enemyAttack).pose : "idle");
+    const poseIntensity = perf.poseIntensity || 0;
+    const attackReach = Math.max(reactionType === "attack" ? (isSwift ? 34 : 26) * reactionPulse : 0, perf.armReach || 0);
+    const windupPull = (reactionType === "windup" ? 12 * reactionPulse : 0) + (perf.windup || 0) * 9;
+    const lean = (isSwift ? -0.16 : (isArmored ? -0.04 : (scene.enemyAttackPhase === "response" ? -0.16 : 0))) + (reaction.rotation || 0) + (perf.lean || 0);
+    const stride = perf.stride || 0;
+    const castPower = perf.cast || 0;
+    const brace = perf.brace || 0;
     const torsoW = isArmored ? 72 : (isSwift ? 48 : (isCaster ? 54 : 60));
     const torsoH = isArmored ? 72 : (isSwift ? 64 : 66);
     const limbColor = isGolem ? "#8b4a3c" : (isCaster ? "#dec7ff" : "#f3d4d4");
@@ -2898,11 +3117,12 @@ class CanvasRenderer {
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale * (isArmored ? 1.08 : 1), scale * (isSwift ? 0.96 : 1));
+    ctx.scale(perf.scaleX || 1, perf.scaleY || 1);
     ctx.rotate(lean);
 
     // legs
-    this.drawLimb(ctx, -14, 28, -28 - (isSwift ? 7 : 0), 58, "#3a2028", isArmored ? 12 : (isSwift ? 7 : 9));
-    this.drawLimb(ctx, 12, 28, 22 + (isSwift ? 10 : 0), 58, "#3a2028", isArmored ? 12 : (isSwift ? 7 : 9));
+    this.drawLimb(ctx, -14, 28, -28 - (isSwift ? 7 : 0) - stride * 0.25, 58, "#3a2028", isArmored ? 12 : (isSwift ? 7 : 9));
+    this.drawLimb(ctx, 12, 28, 22 + (isSwift ? 10 : 0) + stride * 0.38, 58 - Math.min(9, stride * 0.12), "#3a2028", isArmored ? 12 : (isSwift ? 7 : 9));
 
     if (isCaster || isSwift) {
       ctx.fillStyle = this.hexToRgba(color, isCaster ? 0.22 : 0.18);
@@ -2956,23 +3176,37 @@ class CanvasRenderer {
 
     // arms and archetype gear
     if (isCaster) {
-      this.drawLimb(ctx, -24, -10, -54 - attackReach + windupPull, -24, limbColor, 7);
-      this.drawCastFocus(ctx, -66 - attackReach + windupPull, -28, color, t);
-      this.drawLimb(ctx, 24, -8, 45, 2, limbColor, 7);
+      this.drawLimb(ctx, -24, -10, -54 - attackReach + windupPull, -24 - castPower * 8, limbColor, 7);
+      this.drawCastFocus(ctx, -66 - attackReach + windupPull, -28 - castPower * 8, color, t);
+      this.drawLimb(ctx, 24, -8, 45 + castPower * 8, 2 - castPower * 5, limbColor, 7);
     } else if (isShielded) {
-      this.drawLimb(ctx, -26, -6, -52 - attackReach + windupPull, -2, limbColor, 8);
-      this.drawShieldSilhouette(ctx, -62 - attackReach + windupPull, -2, color, t);
-      this.drawLimb(ctx, 24, -8, 48 - attackReach * 0.35, 10, limbColor, 8);
-      this.drawWeaponSilhouette(ctx, "greatsword", 48 - attackReach * 0.35, 10, color, -0.15, 0.46);
+      const bashPush = enemyPose === "bash" ? 22 * poseIntensity : 0;
+      this.drawLimb(ctx, -26, -6, -52 - attackReach - bashPush + windupPull, -2 - brace * 4, limbColor, 8);
+      this.drawShieldSilhouette(ctx, -62 - attackReach - bashPush + windupPull, -2 - brace * 4, color, t);
+      this.drawLimb(ctx, 24, -8, 48 - attackReach * 0.35, 10 + brace * 3, limbColor, 8);
+      this.drawWeaponSilhouette(ctx, "greatsword", 48 - attackReach * 0.35, 10 + brace * 3, color, -0.15, 0.46);
     } else if (isSwift) {
-      this.drawLimb(ctx, -22, -10, -54 - attackReach, 0, limbColor, 6);
-      this.drawLimb(ctx, 22, -8, 54 - attackReach * 0.4, -12, limbColor, 6);
-      this.drawWeaponSilhouette(ctx, "dualBlades", -56 - attackReach, 0, color, Math.PI * 0.9, 0.55);
-      this.drawWeaponSilhouette(ctx, "dualBlades", 54, -12, color, -Math.PI * 0.25, 0.55);
+      const sweep = enemyPose === "sweep" ? poseIntensity : 0;
+      const lunge = enemyPose === "lunge" ? poseIntensity : 0;
+      this.drawLimb(ctx, -22, -10, -54 - attackReach - lunge * 12, 0 + sweep * 12, limbColor, 6);
+      this.drawLimb(ctx, 22, -8, 54 - attackReach * 0.4 - sweep * 18, -12 - sweep * 9, limbColor, 6);
+      this.drawWeaponSilhouette(ctx, "dualBlades", -56 - attackReach - lunge * 12, 0 + sweep * 12, color, Math.PI * (0.9 - sweep * 0.18), 0.55);
+      this.drawWeaponSilhouette(ctx, "dualBlades", 54 - sweep * 18, -12 - sweep * 9, color, -Math.PI * (0.25 + sweep * 0.20), 0.55);
     } else {
-      this.drawLimb(ctx, -26, -8, -50 - attackReach + windupPull, 8, limbColor, isGolem ? 10 : 8);
-      this.drawLimb(ctx, 26, -8, 54 - attackReach * 0.3, 0, limbColor, isGolem ? 10 : 8);
-      if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -54 - attackReach + windupPull, 8, color, Math.PI * 0.95, isArmored ? 0.7 : 0.55);
+      if (enemyPose === "overhead" && poseIntensity > 0.12) {
+        const lift = 58 * poseIntensity;
+        this.drawLimb(ctx, -26, -8, -32 - windupPull, -26 - lift, limbColor, isGolem ? 10 : 8);
+        this.drawLimb(ctx, 26, -8, 34 - attackReach * 0.2, -4, limbColor, isGolem ? 10 : 8);
+        if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -34 - windupPull, -34 - lift, color, -Math.PI * 0.45 + poseIntensity * 0.35, isArmored ? 0.78 : 0.62);
+      } else if (enemyPose === "sweep" && poseIntensity > 0.12) {
+        this.drawLimb(ctx, -26, -8, -52 - attackReach + windupPull, 0 + poseIntensity * 12, limbColor, isGolem ? 10 : 8);
+        this.drawLimb(ctx, 26, -8, 50 - attackReach * 0.3, 4 - poseIntensity * 8, limbColor, isGolem ? 10 : 8);
+        if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -56 - attackReach + windupPull, 2 + poseIntensity * 10, color, Math.PI * (0.85 - poseIntensity * 0.16), isArmored ? 0.72 : 0.58);
+      } else {
+        this.drawLimb(ctx, -26, -8, -50 - attackReach + windupPull, 8, limbColor, isGolem ? 10 : 8);
+        this.drawLimb(ctx, 26, -8, 54 - attackReach * 0.3, 0, limbColor, isGolem ? 10 : 8);
+        if (isArmored || isGolem) this.drawWeaponSilhouette(ctx, "greatsword", -54 - attackReach + windupPull, 8, color, Math.PI * 0.95, isArmored ? 0.7 : 0.55);
+      }
     }
 
     this.drawEnemyAttackPoseOverlay(ctx, modelType, scene.enemyAttack, scene.enemyAttackPhase, color, t, reactionPulse);

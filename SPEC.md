@@ -1900,6 +1900,25 @@ Acceptance criteria:
 - Visual smoke verifies player active attacks produce `activeAttack` focus and enemy response windows produce `enemyResponse` focus.
 - Static smoke protects helper coverage and visual-smoke assertions.
 
+### R27 Actor Performance Layer, Completed
+
+Goal: attacks should read through the character bodies, not only through external trails, bars, or floating effects.
+
+Implemented direction:
+
+- `CanvasRenderer.getActorPerformance()` converts actor reactions, active attacks, and enemy telegraph phases into render-only body-performance values.
+- Player silhouettes now use active attack state for forward pressure, weapon reach, casting lift, guard bracing, hit squash, and motion afterimages.
+- Enemy silhouettes now map telegraph poses (`lunge`, `sweep`, `overhead`, `cast`, `bash`) into body, arm, weapon, shield, and casting positions.
+- The afterimage layer is actor-attached, so fast melee and enemy response windows read as body motion instead of disconnected lane effects.
+- This layer does not change timing, hit confirm, damage, QTE windows, or enemy AI decisions.
+
+Acceptance criteria:
+
+- Renderer exposes actor performance and afterimage helpers.
+- Visual smoke verifies player active attacks produce attack/reach/afterimage performance values.
+- Visual smoke verifies enemy response windows produce telegraph-pose performance values.
+- Static smoke protects helper coverage.
+
 ## 22. Verification Commands
 
 ```powershell

@@ -594,6 +594,12 @@ async function runVisualSmoke() {
         const f = r && typeof battle !== "undefined" ? r.getCinematicFocus(battle) : null;
         return !!(f && f.kind === "activeAttack" && f.source === "player" && f.intensity > 0.4);
       })()`) },
+      { label: "player actor performance pose", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorPerformance) return false;
+        const p = r.getActorPerformance(battle, "player", battle.actorReactions.get("player"), r.getCurrentPose(battle));
+        return !!(p && p.attack > 0.45 && p.armReach > 16 && p.afterimageAlpha > 0.08);
+      })()`) },
       { label: "player fire attack descriptor", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
@@ -691,6 +697,12 @@ async function runVisualSmoke() {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const f = r && typeof battle !== "undefined" ? r.getCinematicFocus(battle) : null;
         return !!(f && f.kind === "enemyResponse" && f.phase === "response" && f.intensity > 0.5);
+      })()`) },
+      { label: "enemy actor performance pose", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorPerformance) return false;
+        const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
+        return !!(p && p.enemyPose === "cast" && p.poseIntensity > 0.6 && p.armReach > 20);
       })()`) },
       { label: "renderer telegraph reads curse burst", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
