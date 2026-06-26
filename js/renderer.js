@@ -4331,11 +4331,14 @@ class CanvasRenderer {
     const barH = 30;
     const x = (this.width - barW) / 2;
     const y = this.layout.qteBarY;
+    const enemyMetrics = this.getEnemyTimingMetrics(scene, attack, active);
 
     const impactTime = active ? active.profile.impactTime : attack.windup + attack.hitTime;
     const totalTime = Math.max(0.001, impactTime);
     const currentTime = active ? active.elapsed : scene.enemyAttackTimer;
     const progress = Utils.clamp(currentTime / totalTime, 0, 1);
+
+    this.drawEnemyTimingPanel(ctx, enemyMetrics, x, y, barW, barH);
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
@@ -4367,6 +4370,8 @@ class CanvasRenderer {
     // 命中点标记
     ctx.fillStyle = "#e74c3c";
     ctx.fillRect(x + barW * impactRatio - 2, y - 4, 4, barH + 8);
+
+    this.drawEnemyWindowLabels(ctx, enemyMetrics, x, y, barW, barH);
 
     // 边框
     ctx.strokeStyle = "#5a5a6a";
@@ -4436,6 +4441,98 @@ class CanvasRenderer {
     return { type, threat, threatColor, responseKeys };
   }
 
+  getEnemyTimingMetrics(scene, attack, active = null) {
+    if (!scene || !attack) return null;
+    const meta = this.getEnemyAttackMeta(attack);
+    const incoming = active || (scene.getIncomingActiveAttack
+      ? scene.getIncomingActiveAttack()
+      : (
+        scene.activeAttackSystem && scene.activeAttackSystem.active
+          ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
+          : null
+      ));
+    const impactTime = incoming ? incoming.profile.impactTime : attack.windup + attack.hitTime;
+    const totalTime = Math.max(0.001, impactTime);
+    const currentTime = incoming ? incoming.elapsed : scene.enemyAttackTimer;
+    const responseStart = incoming
+      ? incoming.profile.reactionStart
+      : Math.max(0, impactTime - Math.min(attack.responseDuration || Difficulty.responseDuration(), Utils.clamp(attack.hitTime + 0.28, 0.48, 0.92)));
+    const progress = Utils.clamp(currentTime / totalTime, 0, 1);
+    const responseStartRatio = Utils.clamp(responseStart / totalTime, 0, 1);
+    const inResponse = scene.enemyAttackPhase === "response";
+    const hit = scene.enemyAttackPhase === "hit";
+    const timeToWindow = Math.max(0, responseStart - currentTime);
+    const timeToHit = Math.max(0, impactTime - currentTime);
+    const stateLabel = hit ? "命中" : (inResponse ? "窗口开启" : "预警中");
+    const stateColor = hit ? "#e74c3c" : (inResponse ? "#2ecc71" : meta.threatColor);
+
+    return {
+      meta,
+      attackName: attack.name || "敌方攻击",
+      progress,
+      responseStartRatio,
+      impactRatio: 1,
+      stateLabel,
+      stateColor,
+      timeToWindow,
+      timeToHit,
+      inResponse,
+      hit
+    };
+  }
+
+  drawEnemyTimingPanel(ctx, metrics, x, y, barW, barH) {
+    if (!metrics) return;
+    const panelX = x - 14;
+    const panelY = y - 14;
+    const panelW = barW + 28;
+    const panelH = barH + 68;
+    const accent = metrics.stateColor || "#e74c3c";
+    const timeText = metrics.inResponse || metrics.hit
+      ? `距命中 ${metrics.timeToHit.toFixed(1)}s`
+      : `距防御窗 ${metrics.timeToWindow.toFixed(1)}s`;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(6, 8, 14, 0.34)";
+    ctx.strokeStyle = this.hexToRgba(accent, metrics.inResponse ? 0.54 : 0.28);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelY, panelW, panelH, 8);
+    ctx.fill();
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = metrics.inResponse ? 9 : 3;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = this.hexToRgba(accent, metrics.inResponse ? 0.12 : 0.07);
+    ctx.fillRect(panelX + 2, panelY + 2, panelW - 4, 4);
+
+    this.drawTimingChip(ctx, x + 18, y - 58, metrics.stateLabel, metrics.stateColor, 88);
+    this.drawTimingChip(ctx, x + barW - 122, y - 58, timeText, "#cfd0df", 124);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = "#aeb7c4";
+    ctx.fillText(`敌方 ${Math.min(100, Math.round(metrics.progress * 100))}%`, x + barW / 2, y - 69);
+    ctx.restore();
+  }
+
+  drawEnemyWindowLabels(ctx, metrics, x, y, barW, barH) {
+    if (!metrics) return;
+    const windowX = x + barW * ((metrics.responseStartRatio + metrics.impactRatio) / 2);
+    const hitX = x + barW * metrics.impactRatio;
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillText("防御窗", windowX, y - 8);
+    ctx.fillStyle = "#e74c3c";
+    ctx.fillText("命中", hitX - 18, y - 8);
+    ctx.restore();
+  }
+
   drawEnemyAttackReadout(scene, attack, x, y, barW, totalTime) {
     const ctx = this.ctx;
     const meta = this.getEnemyAttackMeta(attack);
@@ -4459,16 +4556,12 @@ class CanvasRenderer {
     ctx.save();
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.font = "bold 13px sans-serif";
-    ctx.fillStyle = meta.threatColor;
-    ctx.fillText(`${meta.type} · ${meta.threat} · 推荐 ${meta.responseKeys}`, x + barW / 2, y - 62);
-
-    ctx.font = "12px sans-serif";
-    ctx.fillStyle = inResponse ? "#2ecc71" : "#dddddd";
+    ctx.font = "bold 12px sans-serif";
     const timing = inResponse
       ? `窗口开启 · ${timeToHit.toFixed(1)}s 后命中`
       : `预警中 · ${timeToWindow.toFixed(1)}s 后开窗`;
-    ctx.fillText(timing, x + barW / 2, y + 50);
+    ctx.fillStyle = inResponse ? "#2ecc71" : meta.threatColor;
+    ctx.fillText(this.truncateText(ctx, `${meta.type} · ${meta.threat} · 推荐 ${meta.responseKeys} · ${timing}`, barW - 40), x + barW / 2, y + 58);
 
     if (inResponse) {
       const pulse = 0.45 + Math.sin(performance.now() / 80) * 0.18;
@@ -4496,6 +4589,9 @@ class CanvasRenderer {
     const x = (this.width - barW) / 2;
     const y = this.layout.qteBarY;
     const windowBounds = runner.getWindowBounds();
+    const metrics = this.getQTEReadabilityMetrics(scene);
+
+    this.drawQTEReadabilityPanel(ctx, metrics, x, y, barW, barH, this.width / 2);
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
@@ -4525,6 +4621,8 @@ class CanvasRenderer {
       ctx.stroke();
       ctx.shadowBlur = 0;
     }
+
+    this.drawQTEWindowLabels(ctx, metrics, x, y, barW, barH);
 
     // 节奏节点：拍子标记（下一个拍子高亮脉冲）
     if (node.input.type === "rhythm") {
@@ -4570,22 +4668,21 @@ class CanvasRenderer {
     ctx.strokeRect(x, y, barW, barH);
 
     // 阶段标题
-    const stageTitle = this.getNodeStageTitle(node);
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 18px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(stageTitle, this.width / 2, y - 46);
+    ctx.fillText(metrics ? metrics.stageTitle : this.getNodeStageTitle(node), this.width / 2, y - 48);
 
     // 链标题
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(runner.chain.name || "QTE", this.width / 2, y - 26);
+    ctx.fillText(metrics ? this.truncateText(ctx, metrics.chainName, barW - 220) : (runner.chain.name || "QTE"), this.width / 2, y - 27);
 
     // 输入提示
-    const hint = this.getNodeInputHint(node);
+    const hint = metrics ? metrics.hint : this.getNodeInputHint(node);
     if (hint) {
       ctx.fillStyle = "#dddddd";
       ctx.font = "bold 14px sans-serif";
@@ -4593,6 +4690,122 @@ class CanvasRenderer {
       ctx.textBaseline = "top";
       ctx.fillText(hint, this.width / 2, y + barH + 10);
     }
+  }
+
+  getQTEReadabilityMetrics(scene) {
+    const runner = scene && scene.qteRunner;
+    if (!runner) return null;
+    const node = runner.currentNode ? runner.currentNode() : null;
+    if (!node) return null;
+    const bounds = runner.getWindowBounds ? runner.getWindowBounds() : null;
+    if (!bounds) return null;
+
+    const duration = Math.max(0.001, bounds.duration || node.duration || 1);
+    const timer = Math.max(0, runner.nodeTimer || 0);
+    const progress = runner.currentNodeProgress ? runner.currentNodeProgress() : Utils.clamp(timer / duration, 0, 1);
+    const windowStartRatio = Utils.clamp(bounds.start / duration, 0, 1);
+    const windowEndRatio = Utils.clamp(bounds.end / duration, 0, 1);
+    const perfectRatio = bounds.perfect === null || bounds.perfect === undefined
+      ? null
+      : Utils.clamp(bounds.perfect / duration, 0, 1);
+    const inWindow = timer >= bounds.start && timer <= bounds.end;
+    const stateLabel = inWindow ? "窗口内" : (timer < bounds.start ? "等待窗口" : "窗口已过");
+    const stateColor = inWindow ? "#2ecc71" : (timer < bounds.start ? "#f1c40f" : "#e74c3c");
+    const nextTime = inWindow ? Math.max(0, duration - timer) : Math.max(0, bounds.start - timer);
+    const nextLabel = inWindow ? "距节点结束" : (timer < bounds.start ? "距判定窗" : "距超时");
+    const inputKey = node.input && node.input.type === "hold_release"
+      ? `松开 ${node.input.key}`
+      : (node.input ? node.input.key : "");
+
+    return {
+      node,
+      chainName: runner.chain && runner.chain.name ? runner.chain.name : "QTE",
+      stageTitle: this.getNodeStageTitle(node),
+      hint: this.getNodeInputHint(node),
+      inputKey,
+      duration,
+      timer,
+      progress,
+      timeLeft: Math.max(0, duration - timer),
+      nextTime,
+      nextLabel,
+      windowStartRatio,
+      windowEndRatio,
+      perfectRatio,
+      inWindow,
+      stateLabel,
+      stateColor
+    };
+  }
+
+  drawQTEReadabilityPanel(ctx, metrics, x, y, barW, barH, centerX = this.width / 2) {
+    if (!metrics) return;
+    const panelX = x - 14;
+    const panelY = y - 14;
+    const panelW = barW + 28;
+    const panelH = barH + 68;
+    const accent = metrics.stateColor || "#f1c40f";
+
+    ctx.save();
+    ctx.fillStyle = "rgba(6, 8, 14, 0.34)";
+    ctx.strokeStyle = this.hexToRgba(accent, metrics.inWindow ? 0.54 : 0.28);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelY, panelW, panelH, 8);
+    ctx.fill();
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = metrics.inWindow ? 9 : 3;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = this.hexToRgba(accent, metrics.inWindow ? 0.12 : 0.07);
+    ctx.fillRect(panelX + 2, panelY + 2, panelW - 4, 4);
+
+    this.drawTimingChip(ctx, x + 18, y - 58, metrics.stateLabel, metrics.stateColor, 82);
+    this.drawTimingChip(ctx, x + barW - 116, y - 58, `${metrics.nextLabel} ${metrics.nextTime.toFixed(1)}s`, "#cfd0df", 118);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = "#aeb7c4";
+    ctx.fillText(`节点 ${Math.min(100, Math.round(metrics.progress * 100))}%`, centerX, y - 69);
+    ctx.restore();
+  }
+
+  drawTimingChip(ctx, x, y, text, color, width = 92) {
+    ctx.save();
+    ctx.fillStyle = this.hexToRgba(color || "#ffffff", 0.13);
+    ctx.strokeStyle = this.hexToRgba(color || "#ffffff", 0.46);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, 22, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color || "#ffffff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.truncateText(ctx, text || "", width - 12), x + width / 2, y + 11);
+    ctx.restore();
+  }
+
+  drawQTEWindowLabels(ctx, metrics, x, y, barW, barH) {
+    if (!metrics) return;
+    const windowMid = x + barW * ((metrics.windowStartRatio + metrics.windowEndRatio) / 2);
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillText("判定窗", windowMid, y - 8);
+
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillStyle = "#cfd0df";
+    ctx.fillText(`剩余 ${metrics.timeLeft.toFixed(1)}s`, x + barW - 10, y + barH / 2);
+    ctx.restore();
   }
 
   getNodeStageTitle(node) {
@@ -4628,6 +4841,9 @@ class CanvasRenderer {
     if (!node) return metrics;
 
     const windowBounds = runner.getWindowBounds();
+    const readability = this.getQTEReadabilityMetrics(scene);
+
+    this.drawQTEReadabilityPanel(ctx, readability, x, y, barW, barH, stage.centerX);
 
     // 背景
     ctx.fillStyle = "#2a2a3a";
@@ -4657,6 +4873,8 @@ class CanvasRenderer {
       ctx.stroke();
       ctx.shadowBlur = 0;
     }
+
+    this.drawQTEWindowLabels(ctx, readability, x, y, barW, barH);
 
     // 节奏节点：拍子标记（下一个拍子高亮脉冲）
     if (node.input.type === "rhythm") {
@@ -4702,22 +4920,21 @@ class CanvasRenderer {
     ctx.strokeRect(x, y, barW, barH);
 
     // 阶段标题
-    const stageTitle = this.getNodeStageTitle(node);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 18px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(stageTitle, stage.centerX, y - 46);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(readability ? readability.stageTitle : this.getNodeStageTitle(node), stage.centerX, y - 48);
 
     // 链标题
     ctx.fillStyle = "#f1c40f";
     ctx.font = "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(this.truncateText(ctx, runner.chain.name || "QTE", barW - 40), stage.centerX, y - 26);
+    ctx.fillText(this.truncateText(ctx, readability ? readability.chainName : (runner.chain.name || "QTE"), barW - 220), stage.centerX, y - 27);
 
     // 输入提示
-    const hint = this.getNodeInputHint(node);
+    const hint = readability ? readability.hint : this.getNodeInputHint(node);
     if (hint) {
       ctx.fillStyle = "#dddddd";
       ctx.font = "bold 14px sans-serif";

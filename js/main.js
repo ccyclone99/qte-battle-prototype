@@ -112,12 +112,14 @@ function styleOptionLabel(style) {
 function createStyleChoiceButton(value, style) {
   const button = document.createElement("button");
   const selected = styleSelect && styleSelect.value === value;
+  const keyEight = style && style.key === "8";
   button.type = "button";
-  button.className = `style-choice${value === "manual" ? " manual" : ""}${selected ? " selected" : ""}`;
+  button.className = `style-choice${value === "manual" ? " manual" : ""}${keyEight ? " key-eight" : ""}${selected ? " selected" : ""}`;
   button.dataset.styleId = value;
+  if (style) button.dataset.styleKey = style.key;
   button.setAttribute("role", "radio");
   button.setAttribute("aria-checked", selected ? "true" : "false");
-  button.setAttribute("aria-label", style ? `${style.number} · ${style.name}，快捷键 ${style.key}` : "进战斗后手动选择");
+  button.setAttribute("aria-label", style ? `风格 ${style.key}，${style.number} · ${style.name}` : "进战斗后手动选择");
   if (style && style.color) button.style.setProperty("--style-color", style.color);
 
   const number = document.createElement("span");
@@ -130,7 +132,7 @@ function createStyleChoiceButton(value, style) {
 
   const shortcut = document.createElement("span");
   shortcut.className = "style-choice-shortcut";
-  shortcut.textContent = style ? `按 ${style.key}` : "";
+  shortcut.textContent = style ? `风格 ${style.key}` : "";
 
   button.append(number, name, shortcut);
   return button;

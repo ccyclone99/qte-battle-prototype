@@ -441,14 +441,14 @@ async function runVisualSmoke() {
         if (!btn) return false;
         const rect = btn.getBoundingClientRect();
         const style = getComputedStyle(btn);
-        return btn.textContent.includes("023") && btn.textContent.includes("逆势双刃") && btn.textContent.includes("8") && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+        return btn.textContent.includes("023") && btn.textContent.includes("逆势双刃") && btn.textContent.includes("风格 8") && btn.dataset.styleKey === "8" && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
       })()`) },
       { label: "style 008 visible in menu grid", ok: await evaluate(cdp, `(() => {
         const btn = document.querySelector('#style-choice-grid button[data-style-id="eastern"]');
         if (!btn) return false;
         const rect = btn.getBoundingClientRect();
         const style = getComputedStyle(btn);
-        return btn.textContent.includes("008") && btn.textContent.includes("东方诸国剑术") && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+        return btn.textContent.includes("008") && btn.textContent.includes("东方诸国剑术") && btn.textContent.includes("风格 4") && btn.dataset.styleKey === "4" && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
       })()`) },
       { label: "encounter select visible", ok: await evaluate(cdp, `document.body.textContent.includes("自动推荐") && document.body.textContent.includes("熔炉守门人")`) }
     ]);
@@ -510,6 +510,12 @@ async function runVisualSmoke() {
         return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "forge");
       })()`) },
       { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) },
+      { label: "qte readability metrics active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getQTEReadabilityMetrics) return false;
+        const m = r.getQTEReadabilityMetrics(battle);
+        return !!(m && m.stageTitle && m.chainName && m.windowEndRatio > m.windowStartRatio && m.timeLeft >= 0 && m.stateLabel);
+      })()`) },
       { label: "battle qte suppresses stale overlays", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const scene = typeof battle !== "undefined" ? battle : null;
@@ -715,6 +721,12 @@ async function runVisualSmoke() {
         if (!r || typeof battle === "undefined" || !r.getActorPerformance) return false;
         const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
         return !!(p && p.enemyPose === "cast" && p.poseIntensity > 0.6 && p.armReach > 20);
+      })()`) },
+      { label: "enemy timing metrics active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyTimingMetrics) return false;
+        const m = r.getEnemyTimingMetrics(battle, battle.enemyAttack);
+        return !!(m && m.stateLabel === "窗口开启" && m.inResponse && m.responseStartRatio >= 0 && m.timeToHit >= 0);
       })()`) },
       { label: "enemy model profile reads caster gear", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

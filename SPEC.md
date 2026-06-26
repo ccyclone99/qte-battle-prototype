@@ -1937,6 +1937,42 @@ Acceptance criteria:
 - Visual smoke verifies Fire Greatsword player profile, armored enemy gear profile, and caster enemy gear profile.
 - Static smoke protects model helper coverage.
 
+### R29 Timing Readability HUD, Completed
+
+Goal: QTE and enemy response timing should be readable as a focused timing surface instead of scattered floating labels.
+
+Implemented direction:
+
+- `CanvasRenderer.getQTEReadabilityMetrics()` derives current node, stage title, chain name, state, time remaining, window ratios, and Perfect position from the existing QTE runner.
+- QTE bars now sit inside a subtle timing panel with state chips, node progress, judgement-window labels, remaining-time text, and the original chain/stage/hint hierarchy.
+- Demo QTE bars reuse the same readability panel so demo and battle timing presentation stay consistent.
+- `CanvasRenderer.getEnemyTimingMetrics()` derives enemy state, response-window ratio, time-to-window, and time-to-hit from the existing enemy active attack/timer.
+- Enemy attack bars now use the same panel language with `预警中` / `窗口开启` / `命中` chips and clearer defense-window/impact labels.
+- This pass is render-only and does not change QTE judgement windows, enemy timing, hit confirm, damage, or input handling.
+
+Acceptance criteria:
+
+- Renderer exposes QTE and enemy timing readability helpers.
+- Visual smoke verifies QTE readability metrics are active during battle QTE.
+- Visual smoke verifies enemy timing metrics are active during response windows.
+- Static smoke protects helper coverage.
+
+### R30 Style 8 Menu Clarity, Completed
+
+Goal: the online first screen should make style `8` unambiguous, while still preserving lore numbers like `008`.
+
+Implemented direction:
+
+- Main-menu style cards now show the selection key as `风格 N` instead of the looser `按 N`.
+- `023 · 逆势双刃` is explicitly marked as `风格 8` and gets a stronger card outline.
+- `008 · 东方诸国剑术` keeps its lore number and is explicitly marked as `风格 4`, so `008` is no longer confused with the eighth selectable style.
+- The hidden native select still remains the state source, so battle/practice startup behavior is unchanged.
+
+Acceptance criteria:
+
+- Static smoke protects the split between style numbers and style keys.
+- Visual smoke verifies `023 · 逆势双刃 / 风格 8` and `008 · 东方诸国剑术 / 风格 4` are both visible in the main-menu grid.
+
 ## 22. Verification Commands
 
 ```powershell
