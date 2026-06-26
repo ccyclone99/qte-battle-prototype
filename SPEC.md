@@ -2055,6 +2055,24 @@ Acceptance criteria:
 - Static smoke protects the stable-UI camera helper surface.
 - Visual smoke forces an impact camera impulse during a player active-attack screenshot and verifies the camera reports `uiStable`.
 
+### R35 Actor Damage State Pass, Completed
+
+Goal: player and enemy health state should be readable on the bodies themselves, not only through HP bars or floating numbers.
+
+Implemented direction:
+
+- `CanvasRenderer.getActorDamageVisuals()` derives render-only wound state from current HP/max HP, critical health, defeated state, and recent hit reactions.
+- `drawActorDamageMarks()` adds model-attached scratches, cracks, low-health pulse rings, and defeated ground stains.
+- Player and enemy damage marks draw after the base silhouette and before status overlays, so burn, stun, shield, and absorb effects can still sit above them.
+- The effect is non-textual and persistent across frames, reducing reliance on floating damage feedback.
+- This pass does not change HP values, damage, hit confirm, status rules, QTE timing, enemy AI, or input handling.
+
+Acceptance criteria:
+
+- Renderer exposes actor damage visual helpers.
+- Static smoke protects the helper surface.
+- Visual smoke forces wounded player and critical enemy states during an existing active-attack screenshot and verifies the derived damage visuals.
+
 ## 22. Verification Commands
 
 ```powershell

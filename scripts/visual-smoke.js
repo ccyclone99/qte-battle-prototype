@@ -570,6 +570,8 @@ async function runVisualSmoke() {
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
       battle.activeAttackSystem.clear();
+      battle.playerHp = 38;
+      battle.enemyHp = Math.max(1, Math.floor(battle.enemyMaxHp * 0.30));
       battle.resourceSystem.add("heat", 88);
       battle.statusSystem.apply({ target: "enemy", type: "burn", turns: 2 }, { source: "visual-smoke" });
       battle.statusSystem.apply({ target: "enemy", type: "armorBreak", turns: 2 }, { source: "visual-smoke" });
@@ -643,6 +645,13 @@ async function runVisualSmoke() {
         if (!r || typeof battle === "undefined" || !r.getCombatContactEvents) return false;
         const events = r.getCombatContactEvents(battle);
         return events.some(item => item.confirmed && item.target === "enemy" && item.impact && item.ground && item.radius > 20 && item.ground.y > item.body.y);
+      })()`) },
+      { label: "actor damage visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorDamageVisuals) return false;
+        const player = r.getActorDamageVisuals(battle, "player");
+        const enemy = r.getActorDamageVisuals(battle, "enemy");
+        return !!(player && enemy && player.wounded > 0.5 && !player.defeated && enemy.critical && enemy.tier >= 3);
       })()`) },
       { label: "player model profile reads fire greatsword", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

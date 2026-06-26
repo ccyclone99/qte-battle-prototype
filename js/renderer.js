@@ -2444,6 +2444,7 @@ class CanvasRenderer {
       playerRig,
       t
     });
+    this.drawActorDamageMarks(ctx, "player", px, py, this.getActorDamageVisuals(scene, "player"), styleColor, t);
     this.drawPlayerStatusOverlays(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
     this.drawActorReactionOverlay(px, py, 35, playerReaction);
 
@@ -2479,6 +2480,7 @@ class CanvasRenderer {
       performance: enemyPerformance,
       t
     });
+    this.drawActorDamageMarks(ctx, "enemy", ex, ey, this.getActorDamageVisuals(scene, "enemy"), enemyConfig.color || "#e74c3c", t);
     this.drawEnemyStatusOverlays(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
     this.drawActorReactionOverlay(ex, ey, 50, enemyReaction);
 
@@ -2989,6 +2991,114 @@ class CanvasRenderer {
       ctx.arc(x + ox, y + oy - height / 2 - 14, actor === "enemy" ? 14 : 12, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  getActorDamageVisuals(scene, target) {
+    const maxHp = target === "player"
+      ? Number(scene && scene.playerMaxHp || 100)
+      : Number(scene && scene.enemyMaxHp || (scene && scene.enemyConfig && scene.enemyConfig.maxHp) || 100);
+    const hp = target === "player"
+      ? Number((scene && scene.playerHp) ?? maxHp)
+      : Number((scene && scene.enemyHp) ?? maxHp);
+    const ratio = maxHp > 0 ? Utils.clamp(hp / maxHp, 0, 1) : 1;
+    const wounded = Utils.clamp(1 - ratio, 0, 1);
+    const critical = ratio > 0 && ratio <= 0.34;
+    const defeated = hp <= 0;
+    const reaction = scene && scene.actorReactions && scene.actorReactions.get
+      ? scene.actorReactions.get(target)
+      : null;
+    const recentHit = !!(reaction && (reaction.type === "hit" || reaction.type === "crit" || reaction.type === "stagger"));
+
+    return {
+      hp,
+      maxHp,
+      ratio,
+      wounded,
+      critical,
+      defeated,
+      recentHit,
+      tier: defeated ? 4 : (critical ? 3 : (wounded >= 0.42 ? 2 : (wounded >= 0.16 ? 1 : 0)))
+    };
+  }
+
+  drawActorDamageMarks(ctx, target, x, y, visuals, color, t) {
+    if (!visuals || visuals.wounded < 0.08) return;
+
+    const enemy = target === "enemy";
+    const severity = visuals.tier || 0;
+    const wounded = visuals.wounded || 0;
+    const pulse = visuals.critical ? 0.55 + Math.sin(t * 7.5) * 0.12 : 0;
+    const markColor = visuals.critical ? "#ff5a4f" : (enemy ? "#ff8a5c" : "#ff7b72");
+    const count = Math.min(6, 2 + severity + Math.floor(wounded * 3));
+    const marks = enemy
+      ? [
+        [-22, -32, -7, -15, -15, 4],
+        [18, -26, 5, -8, 16, 13],
+        [-4, -44, 6, -23, -2, -6],
+        [28, 4, 13, 18, 24, 33],
+        [-30, 8, -16, 24, -28, 38],
+        [4, 16, -8, 30, 7, 42]
+      ]
+      : [
+        [-16, -25, -4, -10, -13, 5],
+        [18, -18, 6, -3, 15, 14],
+        [-2, -36, 5, -20, -2, -4],
+        [24, 4, 12, 16, 21, 29],
+        [-24, 7, -13, 22, -23, 34],
+        [2, 14, -5, 28, 6, 38]
+      ];
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    if (visuals.critical) {
+      ctx.strokeStyle = this.hexToRgba("#e74c3c", 0.22 + pulse * 0.20);
+      ctx.fillStyle = this.hexToRgba("#e74c3c", 0.04 + pulse * 0.06);
+      ctx.shadowColor = "#e74c3c";
+      ctx.shadowBlur = 16 + pulse * 18;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(x, y - (enemy ? 4 : 0), enemy ? 76 : 58, enemy ? 88 : 72, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = this.hexToRgba(markColor, 0.42 + wounded * 0.36);
+    ctx.shadowColor = markColor;
+    ctx.shadowBlur = 10 + wounded * 10;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    for (let i = 0; i < count; i++) {
+      const mark = marks[i % marks.length];
+      const jitter = Math.sin(t * 3.1 + i) * (visuals.recentHit ? 1.8 : 0.6);
+      ctx.lineWidth = 2 + Math.min(2, wounded * 2.4);
+      ctx.globalAlpha = 0.46 + wounded * 0.30 - i * 0.035;
+      ctx.beginPath();
+      ctx.moveTo(x + mark[0], y + mark[1] + jitter);
+      ctx.lineTo(x + mark[2], y + mark[3] - jitter * 0.4);
+      ctx.lineTo(x + mark[4], y + mark[5] + jitter * 0.6);
+      ctx.stroke();
+
+      if (severity >= 2 && i < 3) {
+        ctx.globalAlpha *= 0.55;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + mark[2], y + mark[3]);
+        ctx.lineTo(x + mark[2] + (i % 2 === 0 ? 10 : -10), y + mark[3] + 10 + i * 2);
+        ctx.stroke();
+      }
+    }
+
+    if (visuals.defeated) {
+      ctx.globalAlpha = 0.24;
+      ctx.fillStyle = "#e74c3c";
+      ctx.beginPath();
+      ctx.ellipse(x, y + (enemy ? 56 : 48), enemy ? 74 : 56, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 
