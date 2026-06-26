@@ -1859,6 +1859,27 @@ Acceptance criteria:
 - Visual smoke forces heat, burn, armor break, stun, absorb, shield enchant, and overload states in screenshot scenarios.
 - Static smoke protects the helper surface and screenshot coverage.
 
+### R25 Encounter Stage Identity, Completed
+
+Goal: named encounters should read as authored places, not only as text labels over the same generic floor.
+
+Implemented direction:
+
+- `CanvasRenderer.getEncounterStageTheme()` maps encounter ID/name/terrain to stage themes.
+- `drawBattleStage()` now renders encounter-specific backdrop and floor details:
+  - `ember_bulwark`: forge furnaces, molten glow, and floor heat cracks.
+  - `arcane_conduit`: arcane pillars, rotating glyphs, and floor circles.
+  - `knife_rain`: rain alley silhouettes, rain streaks, and puddles.
+  - `shield_rite`: ritual hall arches, shield emblems, and floor rings.
+  - `counter_dojo`: training posts, timing stripes, and crossed practice blades.
+- The theme layer is render-only and does not alter combat rules.
+
+Acceptance criteria:
+
+- Renderer exposes encounter stage theme/backdrop/floor helper methods.
+- Visual smoke verifies style `6` resolves to forge theme, style `7` to arcane theme, and style `8` to dojo theme.
+- Static smoke protects the helper surface and visual-smoke coverage.
+
 ## 22. Verification Commands
 
 ```powershell

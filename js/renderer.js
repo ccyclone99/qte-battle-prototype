@@ -1681,18 +1681,16 @@ class CanvasRenderer {
   drawBattleStage(scene, t) {
     const ctx = this.ctx;
     const floorY = this.height - 150;
-    const terrain = scene.encounterConfig && scene.encounterConfig.terrain ? scene.encounterConfig.terrain : "";
-    const isArcane = /回廊|错拍|仪式/.test(terrain);
-    const isForge = /熔炉|火|炉/.test(terrain);
-    const isRain = /雨|巷/.test(terrain);
-    const accent = isForge ? "#e67e22" : (isRain ? "#27ae60" : (isArcane ? "#9b59b6" : "#3498db"));
+    const theme = this.getEncounterStageTheme(scene);
+    const accent = theme.accent;
 
     ctx.save();
     const sky = ctx.createLinearGradient(0, floorY - 170, 0, this.height);
-    sky.addColorStop(0, "rgba(12, 14, 24, 0.0)");
-    sky.addColorStop(1, "rgba(6, 8, 14, 0.42)");
+    sky.addColorStop(0, this.hexToRgba(theme.haze || "#0c0e18", 0.02));
+    sky.addColorStop(1, this.hexToRgba(theme.haze || "#06080e", 0.42));
     ctx.fillStyle = sky;
     ctx.fillRect(0, floorY - 170, this.width, 170);
+    this.drawEncounterBackdrop(ctx, theme, floorY, t);
 
     ctx.fillStyle = "#1e1e2a";
     ctx.fillRect(0, floorY, this.width, this.height - floorY);
@@ -1717,6 +1715,7 @@ class CanvasRenderer {
       ctx.lineTo(x, this.height);
       ctx.stroke();
     }
+    this.drawEncounterFloorDetails(ctx, theme, floorY, t);
 
     const lanePulse = 0.45 + Math.sin(t * 2.2) * 0.08;
     ctx.strokeStyle = this.hexToRgba(accent, lanePulse);
@@ -1733,6 +1732,277 @@ class CanvasRenderer {
       ctx.fillStyle = this.hexToRgba("#2ecc71", 0.08 + Math.sin(t * 12) * 0.03);
       ctx.fillRect(0, floorY - 5, this.width, 8);
     }
+    ctx.restore();
+  }
+
+  getEncounterStageTheme(scene) {
+    const terrain = scene && scene.encounterConfig && scene.encounterConfig.terrain ? scene.encounterConfig.terrain : "";
+    const encounterId = scene && scene.activeEncounterId ? scene.activeEncounterId : "";
+    const name = scene && scene.encounterConfig && scene.encounterConfig.name ? scene.encounterConfig.name : "";
+    const text = `${encounterId} ${name} ${terrain}`;
+
+    if (/ember_bulwark|熔炉|熔心|炉|火/.test(text)) {
+      return { key: "forge", accent: "#e67e22", secondary: "#c0392b", haze: "#2b1308" };
+    }
+    if (/arcane_conduit|秘术|回廊|法阵|咒|过载/.test(text)) {
+      return { key: "arcane", accent: "#9b59b6", secondary: "#5dade2", haze: "#1a0f2f" };
+    }
+    if (/knife_rain|雨|巷|迅刺|贴身/.test(text)) {
+      return { key: "rain", accent: "#27ae60", secondary: "#5dade2", haze: "#0d1f24" };
+    }
+    if (/shield_rite|折盾|仪式|圆厅|誓约/.test(text)) {
+      return { key: "rite", accent: "#d4ac0d", secondary: "#9b59b6", haze: "#251f0a" };
+    }
+    if (/counter_dojo|逆势|错拍|训练场/.test(text)) {
+      return { key: "dojo", accent: "#16a085", secondary: "#f1c40f", haze: "#07251f" };
+    }
+    return { key: "neutral", accent: "#3498db", secondary: "#95a5a6", haze: "#0c0e18" };
+  }
+
+  drawEncounterBackdrop(ctx, theme, floorY, t) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const accent = theme.accent || "#3498db";
+    const secondary = theme.secondary || accent;
+
+    if (theme.key === "forge") {
+      this.drawForgeBackdrop(ctx, floorY, accent, secondary, t);
+    } else if (theme.key === "arcane") {
+      this.drawArcaneBackdrop(ctx, floorY, accent, secondary, t);
+    } else if (theme.key === "rain") {
+      this.drawRainBackdrop(ctx, floorY, accent, secondary, t);
+    } else if (theme.key === "rite") {
+      this.drawRiteBackdrop(ctx, floorY, accent, secondary, t);
+    } else if (theme.key === "dojo") {
+      this.drawDojoBackdrop(ctx, floorY, accent, secondary, t);
+    } else {
+      ctx.strokeStyle = this.hexToRgba(accent, 0.14);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(120, floorY - 86);
+      ctx.lineTo(this.width - 120, floorY - 86);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawForgeBackdrop(ctx, floorY, accent, secondary, t) {
+    const furnaceXs = [110, this.width - 110];
+    for (const x of furnaceXs) {
+      ctx.save();
+      ctx.translate(x, floorY - 74);
+      ctx.fillStyle = "rgba(54, 31, 24, 0.55)";
+      ctx.strokeStyle = this.hexToRgba(accent, 0.42);
+      ctx.lineWidth = 2;
+      ctx.shadowColor = accent;
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.roundRect(-38, -74, 76, 102, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = this.hexToRgba(secondary, 0.28 + Math.sin(t * 5 + x) * 0.04);
+      ctx.beginPath();
+      ctx.roundRect(-24, -24, 48, 38, 8);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = this.hexToRgba(accent, 0.18);
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 5; i++) {
+      const y = floorY - 140 + i * 20;
+      ctx.beginPath();
+      ctx.moveTo(170, y);
+      ctx.lineTo(260, y - 8);
+      ctx.moveTo(this.width - 260, y - 8);
+      ctx.lineTo(this.width - 170, y);
+      ctx.stroke();
+    }
+  }
+
+  drawArcaneBackdrop(ctx, floorY, accent, secondary, t) {
+    for (const x of [130, 250, this.width - 250, this.width - 130]) {
+      ctx.fillStyle = "rgba(48, 32, 70, 0.34)";
+      ctx.strokeStyle = this.hexToRgba(accent, 0.34);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x - 18, floorY - 150, 36, 142, 10);
+      ctx.fill();
+      ctx.stroke();
+      this.drawStageGlyph(ctx, x, floorY - 166, 18, secondary, t + x * 0.01, 0.22);
+    }
+    this.drawStageGlyph(ctx, this.width / 2, floorY - 92, 72, accent, t * 0.45, 0.16);
+    this.drawStageGlyph(ctx, this.width / 2, floorY - 92, 42, secondary, -t * 0.65, 0.18);
+  }
+
+  drawRainBackdrop(ctx, floorY, accent, secondary, t) {
+    ctx.fillStyle = "rgba(10, 16, 22, 0.62)";
+    ctx.beginPath();
+    ctx.moveTo(0, floorY - 150);
+    ctx.lineTo(230, floorY - 110);
+    ctx.lineTo(190, floorY + 6);
+    ctx.lineTo(0, floorY + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(this.width, floorY - 150);
+    ctx.lineTo(this.width - 230, floorY - 110);
+    ctx.lineTo(this.width - 190, floorY + 6);
+    ctx.lineTo(this.width, floorY + 6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = this.hexToRgba(secondary, 0.20);
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 34; i++) {
+      const x = (i * 43 + (t * 80 % 43)) % this.width;
+      const y = floorY - 170 + (i % 7) * 24;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 12, y + 38);
+      ctx.stroke();
+    }
+  }
+
+  drawRiteBackdrop(ctx, floorY, accent, secondary, t) {
+    ctx.strokeStyle = this.hexToRgba(accent, 0.18);
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(this.width / 2, floorY + 14, 230 - i * 42, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.stroke();
+    }
+    for (const x of [160, this.width - 160]) {
+      ctx.fillStyle = "rgba(62, 49, 24, 0.35)";
+      ctx.strokeStyle = this.hexToRgba(accent, 0.32);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x - 18, floorY - 110, 36, 110, 6);
+      ctx.fill();
+      ctx.stroke();
+      this.drawStageShield(ctx, x, floorY - 62, secondary, 0.22 + Math.sin(t * 4) * 0.04);
+    }
+  }
+
+  drawDojoBackdrop(ctx, floorY, accent, secondary, t) {
+    ctx.strokeStyle = this.hexToRgba(accent, 0.24);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 7; i++) {
+      const x = 190 + i * 96;
+      ctx.beginPath();
+      ctx.moveTo(x, floorY - 122);
+      ctx.lineTo(x, floorY + 4);
+      ctx.stroke();
+    }
+    ctx.fillStyle = this.hexToRgba(secondary, 0.08 + Math.sin(t * 4) * 0.02);
+    for (let i = 0; i < 4; i++) {
+      const w = 70 + i * 18;
+      ctx.fillRect(this.width / 2 - w / 2, floorY - 118 + i * 24, w, 5);
+    }
+    ctx.strokeStyle = this.hexToRgba(secondary, 0.25);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(this.width / 2 - 38, floorY - 118);
+    ctx.lineTo(this.width / 2 + 34, floorY - 42);
+    ctx.moveTo(this.width / 2 + 38, floorY - 118);
+    ctx.lineTo(this.width / 2 - 34, floorY - 42);
+    ctx.stroke();
+  }
+
+  drawEncounterFloorDetails(ctx, theme, floorY, t) {
+    const accent = theme.accent || "#3498db";
+    const secondary = theme.secondary || accent;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    if (theme.key === "forge") {
+      ctx.strokeStyle = this.hexToRgba(accent, 0.34);
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 5; i++) {
+        const x = 220 + i * 130;
+        ctx.beginPath();
+        ctx.moveTo(x, floorY + 12);
+        ctx.lineTo(x + 34, floorY + 42 + Math.sin(t * 3 + i) * 2);
+        ctx.lineTo(x - 8, floorY + 82);
+        ctx.stroke();
+      }
+    } else if (theme.key === "arcane") {
+      this.drawStageGlyph(ctx, this.width / 2, floorY + 42, 112, accent, t * 0.5, 0.18);
+      this.drawStageGlyph(ctx, this.width / 2, floorY + 42, 68, secondary, -t * 0.7, 0.16);
+    } else if (theme.key === "rain") {
+      ctx.strokeStyle = this.hexToRgba(secondary, 0.18);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 6; i++) {
+        const x = 160 + i * 125;
+        ctx.beginPath();
+        ctx.ellipse(x, floorY + 58 + (i % 2) * 18, 44, 8, -0.08, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (theme.key === "rite") {
+      ctx.strokeStyle = this.hexToRgba(accent, 0.25);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(this.width / 2, floorY + 40, 250, 54, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      for (const x of [280, this.width - 280]) this.drawStageShield(ctx, x, floorY + 28, secondary, 0.18);
+    } else if (theme.key === "dojo") {
+      ctx.strokeStyle = this.hexToRgba(accent, 0.20);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 5; i++) {
+        const y = floorY + 20 + i * 20;
+        ctx.beginPath();
+        ctx.moveTo(170 + i * 24, y);
+        ctx.lineTo(this.width - 170 - i * 24, y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = this.hexToRgba(secondary, 0.10);
+      ctx.fillRect(this.width / 2 - 34, floorY + 18, 68, 76);
+    }
+
+    ctx.restore();
+  }
+
+  drawStageGlyph(ctx, x, y, radius, color, t, alpha = 0.2) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(t);
+    ctx.strokeStyle = this.hexToRgba(color || "#9b59b6", alpha);
+    ctx.lineWidth = 2;
+    ctx.shadowColor = color || "#9b59b6";
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      const px = Math.cos(a) * radius * 0.78;
+      const py = Math.sin(a) * radius * 0.78;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawStageShield(ctx, x, y, color, alpha = 0.22) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = this.hexToRgba(color || "#d4ac0d", alpha);
+    ctx.strokeStyle = this.hexToRgba(color || "#d4ac0d", alpha + 0.18);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -24);
+    ctx.lineTo(20, -10);
+    ctx.lineTo(15, 18);
+    ctx.lineTo(0, 30);
+    ctx.lineTo(-15, 18);
+    ctx.lineTo(-20, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 

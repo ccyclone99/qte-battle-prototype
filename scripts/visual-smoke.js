@@ -498,6 +498,10 @@ async function runVisualSmoke() {
     await captureScenario(cdp, "battle-style6-qte", [
       { label: "battle entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
       { label: "style 6 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("熔炉守门人")`) },
+      { label: "style 6 forge stage theme", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "forge");
+      })()`) },
       { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) },
       { label: "battle qte suppresses stale overlays", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
@@ -532,6 +536,10 @@ async function runVisualSmoke() {
     await captureScenario(cdp, "battle-style7-qte", [
       { label: "battle style 7 entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
       { label: "style 7 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("秘术回廊")`) },
+      { label: "style 7 arcane stage theme", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "arcane");
+      })()`) },
       { label: "style 7 mirror text visible", ok: await evaluate(cdp, `document.body.textContent.includes("镜") || document.body.textContent.includes("咒还")`) }
     ]);
 
@@ -663,6 +671,10 @@ async function runVisualSmoke() {
     await captureScenario(cdp, "battle-enemy-telegraph", [
       { label: "enemy telegraph turn active", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.turnState === "enemy_turn"`) },
       { label: "enemy telegraph attack active", ok: await evaluate(cdp, `battle.enemyAttack && battle.enemyAttack.id === "curseBurst" && battle.enemyAttackPhase === "response"`) },
+      { label: "style 8 dojo stage theme", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "dojo");
+      })()`) },
       { label: "renderer telegraph reads curse burst", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         return !!(r && battle.enemyAttack && r.getEnemyTelegraph(battle.enemyAttack).shape === "circle" && r.getEnemyAttackMeta(battle.enemyAttack).type === "咒爆");
