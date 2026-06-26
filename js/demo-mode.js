@@ -83,6 +83,7 @@ class DemoMode {
     this.chargeFxTimer = 0;
 
     this.categories = [
+      { key: "showcases", name: "亮点演示", icon: "★", description: "一键观看火焰、咒还、武器链和防御反击的完整高光片段。" },
       { key: "weapons", name: "风格链", icon: "⚔", description: "展示当前风格武器的 QTE 链、输入节点和伤害分支。" },
       { key: "spells", name: "咒术", icon: "🔥", description: "展示蓄力、反伤、破甲、咒还吸收和能量过载。" },
       { key: "arts", name: "战技", icon: "🗡", description: "展示反击、必暴、闪避取消、追加攻击和打断。" },
@@ -280,8 +281,8 @@ class DemoMode {
           this.message = `${this.categories[idx - 1].name} — 按数字选择效果，ESC 返回`;
           return;
         }
-        // W 键或 5 切换风格
-        if (key === "W" || key === "5") {
+        // W 键切换风格
+        if (key === "W") {
           this.input.consume();
           this.cycleWeapon();
           return;
@@ -367,10 +368,173 @@ class DemoMode {
 
   // ========== 演示项构造 ==========
 
+  getShowcaseItems() {
+    const phase = (label, detail, key, effect) => ({ duration: 0.8, label, detail, key, effect });
+    const fireShowcase = [
+      phase("① 火星弹分支", "过早松手会保留补正，而不是直接断链。", "A", (demo) => {
+        demo.spawnFloatingText("Early", 220, 220, "popup");
+        demo.spawnFloatingText("火星弹", 740, 210, "status");
+        demo.spawnFloatingText("-16", 740, 250, "damage");
+        demo.emitTransitionVisual({ visualEvent: "fireSparkHit", damage: 16 });
+        demo.log("火球分支：过早聚焰 -> 火星弹补正");
+      }),
+      phase("② 标准爆燃", "稳定聚焰进入标准火球，获得热量并施加燃烧。", "A", (demo) => {
+        demo.spawnFloatingText("Success", 220, 220, "popup");
+        demo.spawnFloatingText("-32", 740, 245, "damage");
+        demo.resourceSystem.add("heat", 12);
+        demo.emitTransitionVisual({ visualEvent: "fireball", damage: 32, resource: { heat: 12 } });
+        demo.log("火球分支：标准爆燃命中");
+      }),
+      phase("③ 临界大火球", "Perfect 聚焰触发大火球、燃烧和短眩晕。", "A", (demo) => {
+        demo.spawnFloatingText("PERFECT", 220, 220, "popup");
+        demo.spawnFloatingText("-55", 740, 245, "crit");
+        demo.enemyHp = Math.max(0, demo.enemyHp - 55);
+        demo.enemyStunTimer = 0.4;
+        demo.resourceSystem.add("heat", 18);
+        demo.applyStatusResults([demo.statusSystem.apply({ target: "enemy", type: "burn", turns: 2 }, { source: "showcase-fire" })].filter(Boolean));
+        demo.emitTransitionVisual({ visualEvent: "fireballBig", damage: 55, stunEnemy: 0.4, resource: { heat: 18 } });
+        demo.log("火球分支：Perfect 临界大火球");
+      }),
+      phase("④ 分支对比完成", "Early 有补正，Success 稳定，Perfect 才是爆发和状态收益。", "", (demo) => {
+        demo.spawnFloatingText("火焰链路清晰", 480, 230, "status");
+        demo.flashScreen("#e67e22", 0.16);
+        if (SFX.sfxShowcase) SFX.sfxShowcase();
+      })
+    ];
+
+    const absorbShowcase = [
+      phase("① 刻下咒还印", "先建立吸收结构，准备把外部法术压进能量槽。", "S", (demo) => {
+        demo.spawnFloatingText("刻印", 220, 220, "status");
+        demo.emitTransitionVisual({ visualEvent: "absorbGlyph" });
+        demo.log("咒还：刻下引流印");
+      }),
+      phase("② 回流节奏", "踩准节奏获得大量法术能量。", "S", (demo) => {
+        demo.spawnFloatingText("+60 法术能量", 220, 210, "status");
+        demo.resourceSystem.add("spellEnergy", 60);
+        demo.emitTransitionVisual({ visualEvent: "absorbSiphonPeak", resource: { spellEnergy: 60 } });
+        demo.log("咒还：回流节奏完成");
+      }),
+      phase("③ 溢流准备", "能量过上限后进入高风险爆发窗口。", "D", (demo) => {
+        demo.playerState.spellEnergy = 120;
+        demo.spawnFloatingText("溢流 120", 220, 210, "popup");
+        demo.applyStatusResults([demo.statusSystem.apply({ target: "player", type: "overload", turns: 1 }, { source: "showcase-absorb" })].filter(Boolean));
+        demo.emitTransitionVisual({ visualEvent: "overflowBurst" });
+        if (typeof SFX !== "undefined" && SFX.sfxResourceGain) SFX.sfxResourceGain();
+        demo.log("咒还：能量进入溢流区");
+      }),
+      phase("④ 裂隙爆发", "消耗法术能量，换取高伤害和短眩晕。", "D", (demo) => {
+        demo.playerState.spellEnergy = 60;
+        demo.spawnFloatingText("-60 法术能量", 220, 230, "status");
+        demo.spawnFloatingText("-78", 740, 245, "crit");
+        demo.enemyHp = Math.max(0, demo.enemyHp - 78);
+        demo.enemyStunTimer = 0.45;
+        demo.emitTransitionVisual({ visualEvent: "overflowBurstPeak", damage: 78, stunEnemy: 0.45, resource: { spellEnergy: -60 } });
+        demo.log("咒还：溢流裂隙爆发");
+      })
+    ];
+
+    const flameBladeShowcase = [
+      phase("① 引火上刃", "武器链开始积累热量。", "A", (demo) => {
+        demo.spawnFloatingText("刃上起火", 220, 220, "status");
+        demo.resourceSystem.add("heat", 8);
+        demo.emitTransitionVisual({ visualEvent: "fireBladeIgnite", resource: { heat: 8 } });
+      }),
+      phase("② 熔甲压斩", "火焰武器链施加破甲，为终结爆发铺路。", "A", (demo) => {
+        demo.spawnFloatingText("破甲", 740, 200, "status");
+        demo.spawnFloatingText("-22", 740, 245, "damage");
+        demo.resourceSystem.add("heat", 12);
+        demo.applyStatusResults([demo.statusSystem.apply({ target: "enemy", type: "armorBreak", turns: 1 }, { source: "showcase-flame-blade" })].filter(Boolean));
+        demo.emitTransitionVisual({ visualEvent: "fireBladeSlash", damage: 22, resource: { heat: 12 } });
+      }),
+      phase("③ 爆燃收束", "终结段把热量、燃烧和控制一次性打出来。", "D", (demo) => {
+        demo.spawnFloatingText("-56", 740, 245, "crit");
+        demo.enemyHp = Math.max(0, demo.enemyHp - 56);
+        demo.enemyStunTimer = 0.35;
+        demo.resourceSystem.add("heat", 14);
+        demo.applyStatusResults([demo.statusSystem.apply({ target: "enemy", type: "burn", turns: 2 }, { source: "showcase-flame-blade" })].filter(Boolean));
+        demo.emitTransitionVisual({ visualEvent: "fireBladeBurst", damage: 56, stunEnemy: 0.35, resource: { heat: 14 } });
+      }),
+      phase("④ 武器+咒术联动", "风格链现在能同时表达武器身份、咒术资源和状态收益。", "", (demo) => {
+        demo.spawnFloatingText("热量 / 破甲 / 燃烧", 480, 230, "status");
+        demo.flashScreen("#f39c12", 0.14);
+      })
+    ];
+
+    const defenseShowcase = [
+      phase("① 敌人意图出现", "攻击条显示类型、危险等级和推荐应对。", "", (demo) => {
+        demo.enemyAttack = Difficulty.scaleAttack({ id: "curseBurst", ...EnemyDatabase.attacks.curseBurst });
+        demo.enemyAttackTimer = 0.35;
+        demo.enemyAttackPhase = "windup";
+        demo.demoDefenseKey = "SPACE/F";
+        demo.showTurnBanner("敌方回合", "#e74c3c");
+        demo.log("敌方回合：咒爆开始预警");
+        if (SFX.sfxThreat) SFX.sfxThreat();
+      }),
+      phase("② 绿色窗口打开", "窗口打开后再输入，过早按键会被丢弃。", "SPACE", (demo) => {
+        demo.enemyAttackTimer = Math.max(0, demo.enemyAttack.windup - Difficulty.responseDuration() + 0.05);
+        demo.enemyAttackPhase = "response";
+        demo.spawnFloatingText("可防御", 480, 250, "status");
+        if (SFX.sfxWindowOpen) SFX.sfxWindowOpen();
+      }),
+      phase("③ 镜咒折返", "法术类攻击可以用咒还防御反射。", "F", (demo) => {
+        demo.spawnFloatingText("折返！", 220, 220, "popup");
+        demo.spawnFloatingText("-24", 740, 245, "crit");
+        demo.playerState.spellEnergy = 32;
+        demo.resourceSystem.add("spellEnergy", 32);
+        demo.emitTransitionVisual({ visualEvent: "mirrorGuardPerfect", damage: 24, resource: { spellEnergy: 32 } });
+      }),
+      phase("④ 防御反击完成", "敌方回合不只是躲伤害，也能转成资源和反击。", "", (demo) => {
+        demo.enemyAttackPhase = "none";
+        demo.enemyAttack = null;
+        demo.spawnFloatingText("资源反转", 220, 220, "status");
+        demo.flashScreen("#9b59b6", 0.14);
+      })
+    ];
+
+    return [
+      {
+        name: "Showcase · 火球三分支对比",
+        description: "连续展示火星弹、标准爆燃和临界大火球三种结果。",
+        actionSequence: fireShowcase,
+        setup: (demo) => demo.applyStyle("fire"),
+        preview: "Early / Success / Perfect 分支一眼对比",
+        details: ["展示重点：分支结果、热量、燃烧、眩晕、爆发差异。"]
+      },
+      {
+        name: "Showcase · 咒还到溢流爆发",
+        description: "从咒还引流、能量过载到裂隙爆发的完整资源链。",
+        actionSequence: absorbShowcase,
+        setup: (demo) => demo.applyStyle("mirrorblade"),
+        preview: "引流 -> 溢流 -> 爆发",
+        details: ["展示重点：法术能量、过载风险、溢流消耗和爆发收益。"]
+      },
+      {
+        name: "Showcase · 焰刃破甲燃烧",
+        description: "展示武器链与火焰咒术融合后的破甲、热量和燃烧收益。",
+        actionSequence: flameBladeShowcase,
+        setup: (demo) => demo.applyStyle("flameforge"),
+        preview: "引火上刃 -> 熔甲压斩 -> 爆燃收束",
+        details: ["展示重点：武器链、咒术资源和状态收益同时可见。"]
+      },
+      {
+        name: "Showcase · 敌方回合防反",
+        description: "展示敌人意图、绿色反应窗口、推荐按键和防御反击收益。",
+        actionSequence: defenseShowcase,
+        setup: (demo) => demo.applyStyle("mirrorblade"),
+        preview: "敌方预警 -> 绿色窗口 -> 镜咒折返",
+        details: ["展示重点：危险等级、输入时机、反击和资源反转。"]
+      }
+    ];
+  }
+
   getItems(category) {
     const items = [];
     const weaponId = this.playerConfig.weapon;
     const weapon = WeaponDatabase[weaponId];
+
+    if (category === "showcases") {
+      return this.getShowcaseItems();
+    }
 
     if (category === "weapons") {
       const style = StyleDatabase[this.playerConfig.style];
@@ -779,6 +943,7 @@ class DemoMode {
     this.resultLines = [];
     this.lastTimelineRows = [];
     this.log(`演示：${item.name}`);
+    this.resetHP();
     if (item.setup) item.setup(this);
     this.detailLines = this.buildItemDetailLines(item);
 
@@ -890,6 +1055,7 @@ class DemoMode {
     this.enemyAttack = Difficulty.scaleAttack({ id: attackId, ...baseAttack });
 
     this.showTurnBanner("敌方回合", "#e74c3c");
+    if (typeof SFX !== "undefined" && SFX.sfxThreat) SFX.sfxThreat();
     this.log(`演示：敌人准备 ${this.enemyAttack.name}，${this.enemyAttack.hint}`);
     this.message = `${item.name} — 观察敌人攻击预警，命中后进入 QTE 再按键`;
     this.previewTitle = item.name;
@@ -934,12 +1100,14 @@ class DemoMode {
     if (this.enemyAttackPhase === "windup" && this.enemyAttackTimer >= responseStart) {
       this.enemyAttackPhase = "response";
       this.log(`绿色窗口出现：命中后按 [${this.demoDefenseKey}]`);
+      if (typeof SFX !== "undefined" && SFX.sfxWindowOpen) SFX.sfxWindowOpen();
     }
 
     if (this.enemyAttackTimer >= attack.windup && this.enemyAttackPhase !== "hit") {
       this.enemyAttackPhase = "hit";
       this.freezeTimer = 0.5;
       this.log(`敌人 ${attack.name} 即将命中！`);
+      if (typeof SFX !== "undefined" && SFX.sfxAlert) SFX.sfxAlert();
       this.startDefenseQTE(this.pendingDefenseItem);
     }
   }
@@ -1244,6 +1412,9 @@ class DemoMode {
 
   emitTransitionVisual(transition) {
     this.effectQueue.emitTransition(transition);
+    if (typeof SFX !== "undefined" && SFX.sfxTransition) {
+      SFX.sfxTransition(transition);
+    }
   }
 
   updateChargeEffects(dt) {
@@ -1588,14 +1759,14 @@ class DemoMode {
 
   getControlHint() {
     if (this.state === "main") {
-      return "1-4 选择分类 | W/5 切换风格 | M 自动/手动 | 6 难度 | ESC 返回";
+      return `1-${this.categories.length} 选择分类 | W 切换风格 | M 自动/手动 | 6 难度 | ESC 返回`;
     }
     if (this.state === "list") {
       const count = this.getCurrentPageItems().length;
       return `1-${count} 播放条目 | A/← 上页 | D/→ 下页 | M 自动/手动 | ESC 返回分类`;
     }
     if (this.state === "enemy_windup") {
-      return "观察敌人攻击条和绿色窗口 | 命中前会进入 QTE | M 切换自动/手动 | ESC 返回列表";
+      return "看危险等级/推荐按键/绿色窗口 | 命中前会进入 QTE | M 切换自动/手动 | ESC 返回列表";
     }
     if (this.state === "qte") {
       return this.manualMode ? "按 QTE 提示按键输入 | M 切换模式 | ESC 中止" : "自动慢放中：观察判定窗、节点推进和结算记录 | M 切换模式 | ESC 中止";
@@ -1640,6 +1811,23 @@ class DemoMode {
         lines.push(`敌人攻击：${this.enemyAttack.name}`);
         lines.push(`提示：${this.enemyAttack.hint}`);
         lines.push(`准备按键：[${this.demoDefenseKey || "?"}]`);
+        lines.push(...this.getEnemyAttackReadoutLines(this.enemyAttack));
+      }
+      return lines;
+    }
+
+    if (this.state === "action_sequence") {
+      const seq = this.actionSequence;
+      const phase = seq ? seq.phases[seq.phaseIndex] : null;
+      lines.push(this.previewText || "效果演示播放中。");
+      if (phase) {
+        lines.push(`当前阶段：${phase.label || "演示阶段"}`);
+        if (phase.detail) lines.push(`阶段说明：${phase.detail}`);
+        if (phase.key) lines.push(`提示按键：[${phase.key}]`);
+      }
+      if (this.enemyAttack) {
+        lines.push(`敌人攻击：${this.enemyAttack.name}`);
+        lines.push(...this.getEnemyAttackReadoutLines(this.enemyAttack));
       }
       return lines;
     }
@@ -1681,6 +1869,27 @@ class DemoMode {
     }
 
     return lines.concat(this.getTimelineLines(4));
+  }
+
+  getEnemyAttackReadoutLines(attack = this.enemyAttack) {
+    if (!attack) return [];
+    const id = attack.id || "";
+    const isSpell = attack.interruptible || id.includes("spell") || id.includes("arcane") || id.includes("curse");
+    const type = isSpell ? "法术" : (id.includes("heavy") || id.includes("shield") ? "重击" : "物理");
+    const isHighThreat = attack.damage >= 30 || attack.stunOnHit || id.includes("heavy") || id.includes("curse");
+    const threat = isHighThreat ? "高危" : (attack.windup <= 0.75 ? "快攻" : "中危");
+    const responseKeys = [...new Set((attack.allowedResponses || []).map(item => item === "guard" ? "F" : "SPACE"))].join(" / ") || "?";
+    const responseDuration = attack.responseDuration || Difficulty.responseDuration();
+    const responseStart = Math.max(0, attack.windup - responseDuration);
+    const timeToWindow = Math.max(0, responseStart - this.enemyAttackTimer);
+    const timeToHit = Math.max(0, attack.windup - this.enemyAttackTimer);
+    return [
+      `类型/危险：${type} / ${threat}`,
+      `推荐应对：${responseKeys}`,
+      this.enemyAttackPhase === "response"
+        ? `窗口状态：已开启，${timeToHit.toFixed(1)}s 后命中`
+        : `窗口状态：预警中，${timeToWindow.toFixed(1)}s 后开窗`
+    ];
   }
 
   getTimelineLines(limit = 8) {

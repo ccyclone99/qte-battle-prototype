@@ -47,8 +47,9 @@ const battleHelpHtml = `
 `;
 
 const demoHelpMain = `
-  <div><b>1-4</b> 选择演示分类</div>
-  <div><b>W / 5</b> 切换战斗风格</div>
+  <div><b>1-5</b> 选择演示分类</div>
+  <div><b>1</b> 亮点演示 Showcase</div>
+  <div><b>W</b> 切换战斗风格</div>
   <div><b>M</b> 切换手动/自动</div>
   <div><b>6</b> 切换难度</div>
   <div><b>T</b> QTE 调试</div>
@@ -336,7 +337,7 @@ function startDemo() {
   resetUICache();
   setTurnIndicator("演示 - 主菜单", "demo");
   setDifficultyBadge(Difficulty.get().name);
-  addLog("进入效果演示模式 — 按 W 切换风格，1-4 选择分类");
+  addLog("进入效果演示模式 — 1 亮点演示，W 切换风格，1-5 选择分类");
   setHelpContent(demoHelpMain);
   demoDetailDrawer.classList.remove("hidden");
   showTutorialIfNeeded();
@@ -438,6 +439,12 @@ function updateDemoUI() {
   if (demo.getPlaybackLines) {
     parts.push(`<div style="color:#f1c40f;margin-top:8px;font-weight:700">状态</div>`);
     for (const line of demo.getPlaybackLines().slice(0, 8)) {
+      parts.push(`<div>${line}</div>`);
+    }
+  }
+  if (demo.state === "action_sequence" && demo.getStatusLines) {
+    parts.push(`<div style="color:#f1c40f;margin-top:8px;font-weight:700">当前演示</div>`);
+    for (const line of demo.getStatusLines().slice(0, 10)) {
       parts.push(`<div>${line}</div>`);
     }
   }

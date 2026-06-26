@@ -18,6 +18,7 @@ const mainJs = fs.readFileSync(path.join(root, "js/main.js"), "utf8");
 const demoModeJs = fs.readFileSync(path.join(root, "js/demo-mode.js"), "utf8");
 const inputJs = fs.readFileSync(path.join(root, "js/input.js"), "utf8");
 const rendererJs = fs.readFileSync(path.join(root, "js/renderer.js"), "utf8");
+const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
 const results = [];
 
 function check(label, condition) {
@@ -80,6 +81,10 @@ check("touch controls handle virtual ESC", mainJs.includes("handleVirtualSystemK
 check("demo mode exposes system escape handler", demoModeJs.includes("handleSystemEscape") && mainJs.includes("demo.handleSystemEscape"));
 check("demo detail opens by default", mainJs.includes('demoDetailDrawer.classList.remove("hidden")'));
 check("demo detail uses status lines", mainJs.includes("demo.getStatusLines") && mainJs.includes("demo.getControlHint"));
+check("demo includes showcase category", demoModeJs.includes('key: "showcases"') && demoModeJs.includes("Showcase · 火球三分支对比"));
+check("demo help advertises showcase", mainJs.includes("亮点演示 Showcase") && mainJs.includes("1-5</b> 选择演示分类"));
+check("enemy readout renderer exists", rendererJs.includes("drawEnemyAttackReadout") && rendererJs.includes("推荐"));
+check("audio has R7 feedback cues", audioJs.includes("sfxWindowOpen") && audioJs.includes("sfxResourceGain") && audioJs.includes("sfxTransition"));
 check("keyboard input includes style key 7", inputJs.includes('"7"'));
 check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check-timing.js")));
 
@@ -96,6 +101,7 @@ console.log("  1. Demo mode -> spell chains -> flame_blade shows timeline, heat 
 console.log("  2. Demo preview -> press R and confirm the same item replays without stale result rows.");
 console.log("  3. Demo mode -> spell chains -> overflow_burst shows spellEnergy cost, overload burst, and no console errors.");
 console.log("  4. Battle style 6 and 7 load their preferred enemy archetypes and keep HUD/resources visible.");
+console.log("  5. Demo mode -> showcase category -> fire/absorb/defense entries show staged captions and no console errors.");
 
 if (failures > 0) {
   console.error(`Smoke checklist failed: ${failures}`);

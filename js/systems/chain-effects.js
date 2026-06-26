@@ -64,6 +64,10 @@ const ChainEffectSystem = {
       if (scene.log) {
         scene.log(`${applied > 0 ? "获得" : "消耗"} ${Math.abs(applied)} ${label}`);
       }
+      if (typeof SFX !== "undefined") {
+        if (applied > 0 && SFX.sfxResourceGain) SFX.sfxResourceGain();
+        if (applied < 0 && SFX.sfxResourceSpend) SFX.sfxResourceSpend();
+      }
     }
 
     return results;
@@ -110,6 +114,11 @@ const ChainEffectSystem = {
       }
       if (scene.log) {
         scene.log(`${status.target === "player" ? "玩家" : "敌人"}获得状态：${label}`);
+      }
+      if (typeof SFX !== "undefined") {
+        if (status.id === "burn" && SFX.sfxBurn) SFX.sfxBurn();
+        else if (status.id === "overload" && SFX.sfxOverload) SFX.sfxOverload();
+        else if (SFX.sfxStatus) SFX.sfxStatus();
       }
     }
   },

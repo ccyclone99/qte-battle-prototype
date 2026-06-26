@@ -306,6 +306,7 @@ class BattleSystem {
       this.input.clear(); // 丢弃窗口期前的过早按键
       this.setMessage("敌方攻击：绿色窗口按 SPACE/F 防御");
       SFX.sfxWindup();
+      if (SFX.sfxWindowOpen) SFX.sfxWindowOpen();
     }
 
     if (this.enemyAttackPhase === "response") {
@@ -1070,6 +1071,9 @@ class BattleSystem {
 
   emitTransitionVisual(transition) {
     this.effectQueue.emitTransition(transition);
+    if (typeof SFX !== "undefined" && SFX.sfxTransition) {
+      SFX.sfxTransition(transition);
+    }
   }
 
   updateChargeEffects(dt) {

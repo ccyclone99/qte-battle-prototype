@@ -124,7 +124,19 @@ function createDemo() {
 
 function verifyDemoSpellFlows() {
   const { input, demo, logs } = createDemo();
-  tap(input, demo, "2");
+  tap(input, demo, "1");
+  assert("demo opens showcase category", demo.state === "list" && demo.category === "showcases", `${demo.state}/${demo.category}`);
+  tap(input, demo, "1");
+  assert("demo showcase selected", demo.currentItem && /Showcase/.test(demo.currentItem.name), demo.currentItem?.name || "none");
+  assert("demo showcase enters sequence", demo.state === "action_sequence", demo.state);
+  assert("demo showcase reaches preview", runUntil(demo, () => demo.state === "preview", 8), demo.state);
+  assert("demo showcase logs fire branch", logs.some(line => line.includes("火球分支")), logs.slice(0, 10).join(" | "));
+  demo.handleSystemEscape();
+  tick(demo, 0.5);
+  demo.handleSystemEscape();
+  tick(demo, 0.2);
+
+  tap(input, demo, "3");
   assert("demo opens spell category", demo.state === "list" && demo.category === "spells", `${demo.state}/${demo.category}`);
   assert("demo starts on page 1", demo.listPage === 0, String(demo.listPage));
 

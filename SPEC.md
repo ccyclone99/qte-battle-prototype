@@ -19,6 +19,9 @@ The prototype should become a content-extensible combat sandbox:
 - Demo playback speed and node pauses tuned.
 - Difficulty timing now keeps QTE speed close to base data and widens/narrows windows around the intended timing point.
 - Staff chant, Fire charge, and Absorb siphon timings tuned to avoid stalled charge/rhythm playback.
+- R7 feedback pass added audio cues for charge peaks, resource changes, status application, enemy windows, and transition impacts.
+- Demo mode now opens with a Showcase category for high-signal staged examples.
+- Enemy attack bars now show attack type, danger level, recommended response keys, and response-window countdowns.
 - Fireball charge particles moved out of renderer-side draw calls.
 - QTE handfeel padding added for press, hold-release, rhythm, and timeout grace.
 - Chain metadata added to all current chains:
@@ -165,11 +168,11 @@ The prototype should become a content-extensible combat sandbox:
 
 ### Demo
 
-- `1-4`: choose category
+- `1-5`: choose category
 - number keys: choose demo item
 - `A` / left arrow: previous page
 - `D` / right arrow: next page
-- `W` / `5`: cycle style
+- `W`: cycle style
 - `6`: cycle difficulty
 
 ## 7. Handfeel Spec
@@ -765,6 +768,11 @@ Demo mode is both a showcase and a debugging tool.
 
 ### Required Demo Features
 
+- Showcase category
+  - Fireball branch comparison
+  - Absorb siphon into overflow burst
+  - Flame blade armor-break/burn chain
+  - Enemy-turn defense/counter readout
 - Auto playback
 - Manual playback
 - Difficulty toggle
@@ -1050,10 +1058,28 @@ Remaining cleanup after R6-A:
 
 Remaining cleanup after R6-B:
 
-- Add audio pass for hit confirmation, charge peaks, resource gain, status application, branch failure, and overflow.
 - Add per-node pose tags if future chain nodes need exact bespoke animation poses.
 - Add automated screenshot smoke once silhouette and audio pass settle.
 - Add mobile/touch layout polish.
+
+### R7 - Feedback And Showcase, Completed
+
+- Added named audio cues for charge peaks, resource gain/spend, status application, burn, overload, enemy response windows, threat warnings, and showcase starts.
+- Routed transition, resource, and status results into audio feedback for battle and demo flows.
+- Added the `亮点演示` demo category with four staged entries:
+  - Fireball Early/Success/Perfect branch comparison.
+  - Absorb siphon into overload and overflow burst.
+  - Flame blade heat, armor-break, and burn chain.
+  - Enemy-turn warning, green window, and mirror-guard counter.
+- Added stage captions and per-phase key prompts to action-sequence demos.
+- Upgraded enemy attack bars with attack type, danger level, recommended keys, response-window countdown, and green-window pulse.
+- Updated static and flow smoke coverage for Showcase, enemy readouts, and R7 audio methods.
+
+Remaining cleanup after R7:
+
+- Add browser screenshot smoke automation for main menu, Showcase, spell QTE, enemy windup, and battle style 6/7.
+- Tune audio mix after repeated playtesting; current sounds are synthesized placeholders.
+- Add mobile/touch layout polish for the new 5-category demo menu.
 
 ## 21. Acceptance Criteria
 
@@ -1095,6 +1121,9 @@ Remaining cleanup after R6-B:
 - Absorb active-chain demo entries show spell energy and absorb-ready result.
 - Demo detail panel shows chain input flow, reference damage, projected timeline, actual timeline, and result summary.
 - Demo result preview supports replaying the current item with `R`.
+- Demo includes Showcase entries that play staged Fire, Absorb, Flame Blade, and enemy-turn examples without needing list paging.
+- Enemy-turn demos show attack type, danger level, recommended key, and window countdown in the detail panel and attack bar.
+- Key combat events have distinct audio feedback.
 
 ## 22. Verification Commands
 
@@ -1114,6 +1143,8 @@ Browser smoke test:
 - Open `http://localhost:8765/`.
 - Confirm main menu HUD is hidden.
 - Enter demo mode.
+- Open Showcase and run Fire branch comparison.
+- Run enemy-turn Showcase and confirm type/danger/recommended key/countdown are visible.
 - Open spell demos.
 - Run Fire v2 entry.
 - Press `R` on the result preview and confirm the same Fire v2 entry replays.
@@ -1138,12 +1169,12 @@ Browser smoke test:
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R6-C polish next:
+Move to R8 regression and layout polish next:
 
-1. Add an audio pass for timing confirmation, perfect hits, branch failures, resource gain, status application, and overflow.
-2. Add screenshot smoke automation for main menu, style select, Fire demo, Absorb demo, and battle style 6/7.
+1. Add screenshot smoke automation for main menu, Showcase, Fire demo, enemy windup, and battle style 6/7.
+2. Revisit mobile/touch layout now that demo has five categories.
 3. Add manual enemy matchup selection if balance testing against archetypes becomes slow.
 4. Add per-node pose tags only where generic node-timed motion is not enough.
-5. Revisit mobile/touch layout after screenshots cover the core desktop flow.
+5. Tune synthesized audio levels after a longer playtest pass.
 
-R1-R6B now provide content, observability, reusable visual primitives, readable character staging, and baseline feedback. The next bottleneck is audio confirmation and regression-proof visual testing.
+R1-R7 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, and clearer enemy intent. The next bottleneck is regression-proof visual testing and responsive layout polish.
