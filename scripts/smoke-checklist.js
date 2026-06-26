@@ -78,6 +78,8 @@ check("touch controls include mouse fallback", mainJs.includes('addEventListener
 check("touch controls use delegated hit mapping", mainJs.includes("getVirtualKeyFromEvent") && mainJs.includes("nearestDistance"));
 check("touch controls handle virtual ESC", mainJs.includes("handleVirtualSystemKey") && mainJs.includes('appState === "battle"'));
 check("demo mode exposes system escape handler", demoModeJs.includes("handleSystemEscape") && mainJs.includes("demo.handleSystemEscape"));
+check("demo detail opens by default", mainJs.includes('demoDetailDrawer.classList.remove("hidden")'));
+check("demo detail uses status lines", mainJs.includes("demo.getStatusLines") && mainJs.includes("demo.getControlHint"));
 check("keyboard input includes style key 7", inputJs.includes('"7"'));
 
 let failures = 0;

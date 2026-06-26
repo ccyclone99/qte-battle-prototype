@@ -338,6 +338,7 @@ function startDemo() {
   setDifficultyBadge(Difficulty.get().name);
   addLog("进入效果演示模式 — 按 W 切换风格，1-4 选择分类");
   setHelpContent(demoHelpMain);
+  demoDetailDrawer.classList.remove("hidden");
   showTutorialIfNeeded();
 }
 
@@ -415,8 +416,30 @@ function updateDemoUI() {
 
   // 演示详情内容
   const parts = [];
-  if (demo.previewTitle) {
+  if (demo.getCurrentItemTitle) {
+    parts.push(`<div style="color:#fff;font-weight:700;margin-bottom:6px">${demo.getCurrentItemTitle()}</div>`);
+  } else if (demo.previewTitle) {
     parts.push(`<div style="color:#fff;font-weight:700;margin-bottom:6px">${demo.previewTitle}</div>`);
+  }
+  if (demo.getPhaseTitle) {
+    parts.push(`<div style="color:#9fb7ff;margin-bottom:6px">${demo.getPhaseTitle()}</div>`);
+  }
+  if (demo.state === "main" || demo.state === "list") {
+    const statusLines = demo.getStatusLines ? demo.getStatusLines() : [];
+    for (const line of statusLines.slice(0, 16)) {
+      parts.push(`<div>${line}</div>`);
+    }
+    if (demo.getControlHint) {
+      parts.push(`<div style="color:#f1c40f;margin-top:8px">${demo.getControlHint()}</div>`);
+    }
+    setDemoDetailHtml(parts.join(""));
+    return;
+  }
+  if (demo.getPlaybackLines) {
+    parts.push(`<div style="color:#f1c40f;margin-top:8px;font-weight:700">状态</div>`);
+    for (const line of demo.getPlaybackLines().slice(0, 8)) {
+      parts.push(`<div>${line}</div>`);
+    }
   }
   if (demo.detailLines && demo.detailLines.length > 0) {
     for (const line of demo.detailLines.slice(0, 12)) {
@@ -462,11 +485,8 @@ function updateDemoUI() {
       }
     }
   }
-  if (demo.state === "main" || demo.state === "list") {
-    parts.push(`<div style="color:#f1c40f;margin-top:8px;font-weight:700">当前风格</div>`);
-    const style = demo.currentStyle ? demo.currentStyle() : null;
-    parts.push(`<div>${style ? style.name : "无"}</div>`);
-    parts.push(`<div>模式：${demo.manualMode ? "手动试玩" : "自动慢放"}</div>`);
+  if (demo.getControlHint) {
+    parts.push(`<div style="color:#f1c40f;margin-top:8px">${demo.getControlHint()}</div>`);
   }
 
   setDemoDetailHtml(parts.join(""));
