@@ -14,6 +14,7 @@ const {
 } = context;
 
 const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const utilsJs = fs.readFileSync(path.join(root, "js/utils.js"), "utf8");
 const mainJs = fs.readFileSync(path.join(root, "js/main.js"), "utf8");
 const demoModeJs = fs.readFileSync(path.join(root, "js/demo-mode.js"), "utf8");
 const battleJs = fs.readFileSync(path.join(root, "js/battle.js"), "utf8");
@@ -121,6 +122,11 @@ check("verify script supports visual toggle", verifyJs.includes("--skip-visual")
 check("CI workflow runs verify", ciYml.includes("node scripts/verify.js --ci --skip-visual"));
 check("manual playtest checklist exists", manualChecklistMd.includes("Battle Feel") && manualChecklistMd.includes("Demo Direction") && manualChecklistMd.includes("Audio"));
 check("README documents verify command", readmeMd.includes("node scripts/verify.js") && readmeMd.includes("--skip-visual"));
+check("R12 handfeel profiles exist", utilsJs.includes("getChainHandfeel") && utilsJs.includes("getDemoPacing") && utilsJs.includes("overflow_burst"));
+check("battle applies chain handfeel", battleJs.includes("Utils.getChainHandfeel(chainConfig") && battleJs.includes("Utils.getChainHandfeel(chain, { chainId, source: \"enemy\" })"));
+check("demo applies chain pacing", demoModeJs.includes("Utils.getDemoPacing") && demoModeJs.includes("getActiveDirectorLines") && demoModeJs.includes("getPreviewSummaryLines"));
+check("renderer shows demo focus panel", rendererJs.includes("drawDemoFocusPanel") && rendererJs.includes("演示摘要"));
+check("R12 tuned core timings", chainsJs.includes("beats: [0.34, 0.72, 1.08, 1.42]") && chainsJs.includes("duration: 1.35") && chainsJs.includes("chargeMul: 1.08"));
 
 let failures = 0;
 console.log("Smoke checklist:");

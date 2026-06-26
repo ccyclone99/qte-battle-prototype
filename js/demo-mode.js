@@ -15,6 +15,7 @@ class DemoMode {
     this.resultLines = [];
     this.lastTimelineRows = [];
     this.currentItem = null;
+    this.activeDemoPacing = null;
     this.currentCategoryName = "";
     this.listPage = 0;
     this.pageSize = 6;
@@ -366,6 +367,71 @@ class DemoMode {
     return this.playerConfig.style ? StyleDatabase[this.playerConfig.style] : null;
   }
 
+  getChainId(chain) {
+    if (!chain) return null;
+    for (const [id, item] of Object.entries(ChainDatabase)) {
+      if (item === chain) return id;
+    }
+    return null;
+  }
+
+  defaultDirectorLines(chain, chainId = "") {
+    if (!chain) return [];
+    const tags = new Set(chain.tags || []);
+    const lines = [];
+
+    if (chain.family === "greatsword") lines.push("观察重武器起手、蓄力和后摇差异");
+    if (chain.family === "dualBlades") lines.push("观察高速连段、分支和收刀补救");
+    if (chain.family === "staff") lines.push("观察节奏吟唱与最终释放");
+    if (chain.family === "fire") lines.push("观察热量、燃烧和火焰分支");
+    if (chain.family === "absorb") lines.push("观察法术能量、吸收和过载风险");
+    if (tags.has("armorBreak")) lines.push("看破甲状态何时出现");
+    if (tags.has("spender")) lines.push("看资源消耗如何换爆发");
+    if (tags.has("defense")) lines.push("看绿色窗口和防御收益");
+    if (chainId) lines.push(`调试焦点：${chainId}`);
+
+    return lines.slice(0, 3);
+  }
+
+  getDirectorLines(item = this.currentItem, limit = 4) {
+    if (!item) return [];
+    const chainId = item.chainId || this.getChainId(item.chain);
+    const lines = item.director && item.director.length > 0
+      ? item.director
+      : this.defaultDirectorLines(item.chain, chainId);
+    return lines.slice(0, limit);
+  }
+
+  getActiveDirectorLines(limit = 4) {
+    const lines = [];
+    const itemLines = this.getDirectorLines(this.currentItem, 2);
+    if (this.qteRunner) {
+      const node = this.qteRunner.currentNode();
+      if (node) {
+        lines.push(`当前节点：${node.name}`);
+        if (node.input && node.input.type === "hold_release") lines.push("焦点：松手窗口提前出现，别等满条");
+        else if (node.input && node.input.type === "rhythm") lines.push("焦点：按节拍推进，乱按会记 miss");
+        else lines.push("焦点：绿色窗内成功，金线附近 Perfect");
+      }
+    }
+    return lines.concat(itemLines).slice(0, limit);
+  }
+
+  getPreviewSummaryLines(limit = 7) {
+    const lines = [];
+    for (const line of this.getDirectorLines(this.currentItem, 2)) {
+      lines.push(`看点：${line}`);
+    }
+    for (const line of (this.resultLines || []).slice(0, 4)) {
+      lines.push(line);
+    }
+    const timeline = this.getActualTimelineLines(4).filter(line => line !== "时间轴" && line !== "时间轴：无");
+    for (const line of timeline.slice(0, 3)) {
+      lines.push(line);
+    }
+    return lines.slice(0, limit);
+  }
+
   // ========== 演示项构造 ==========
 
   getShowcaseItems() {
@@ -547,8 +613,10 @@ class DemoMode {
           name: `${weapon.name} · ${chainConfig.name} [${chainKey}]`,
           description: chainConfig.description,
           chain: chainConfig,
+          chainId,
           source: "player",
-          preview: `${style ? style.name : weapon.name} — ${chainConfig.name}`
+          preview: `${style ? style.name : weapon.name} — ${chainConfig.name}`,
+          director: this.defaultDirectorLines(chainConfig, chainId)
         });
       }
       // 普通攻击
@@ -581,79 +649,97 @@ class DemoMode {
           name: "烈火重重 · 火星分支",
           description: "聚焰过早会切到火星弹，仍保留一次补正输入。",
           chain: fireChain,
+          chainId: "fireball_evolution_v2",
           source: "player",
           forceOutcome: "early",
-          preview: "点燃过快 / 聚焰过早 → 火星弹"
+          preview: "点燃过快 / 聚焰过早 → 火星弹",
+          director: ["观察 Early 分支不会断链", "看火星弹作为补正输出", "对比 Perfect 路线的热量收益"]
         },
         {
           name: "烈火重重 · 标准爆燃",
           description: "稳定点燃、正常聚焰后释放标准火球。",
           chain: fireChain,
+          chainId: "fireball_evolution_v2",
           source: "player",
           forceOutcome: "success",
-          preview: "点燃 → 聚焰 → 标准火球"
+          preview: "点燃 → 聚焰 → 标准火球",
+          director: ["观察标准火球路线", "看热量中量增长", "作为 Early / Perfect 对照基线"]
         },
         {
           name: "烈火重重 · 临界大火球",
           description: "完美聚焰会放大火球并附加短暂眩晕与燃烧提示。",
           chain: fireChain,
+          chainId: "fireball_evolution_v2",
           source: "player",
           forceOutcome: "perfect",
-          preview: "完美点燃 → 临界聚焰 → 爆燃火球"
+          preview: "完美点燃 → 临界聚焰 → 爆燃火球",
+          director: ["看聚焰临界点", "观察爆燃火球与燃烧状态", "对比标准路线的伤害和热量"]
         },
         {
           name: "咒还 · 引流刻印",
           description: "主动刻下咒还印，踩准回流节奏后获得法术能量。",
           chain: absorbChain,
+          chainId: "absorb_siphon",
           source: "player",
           forceOutcome: "success",
-          preview: "刻印 → 回流节奏 → 反咒命中"
+          preview: "刻印 → 回流节奏 → 反咒命中",
+          director: ["观察节奏点逐个推进", "看法术能量回流", "准备后续咒还反击"]
         },
         {
           name: "咒还 · 完美回流",
           description: "完美回流可获得更多法术能量，并准备下一次吸收反击。",
           chain: absorbChain,
+          chainId: "absorb_siphon",
           source: "player",
           forceOutcome: "perfect",
-          preview: "完美刻印 → 完美回流 → 反咒爆发"
+          preview: "完美刻印 → 完美回流 → 反咒爆发",
+          director: ["看 Perfect 节奏奖励", "观察吸收准备状态", "为溢流爆发积累资源"]
         },
         {
           name: "烈火重重 · 焰刃熔甲",
           description: "火焰与武器融合，命中会积累热量，Perfect 路线附加破甲与燃烧。",
           chain: flameBladeChain,
+          chainId: "flame_blade",
           source: "player",
           forceOutcome: "perfect",
-          preview: "引火上刃 → 熔甲压斩 → 爆燃收束"
+          preview: "引火上刃 → 熔甲压斩 → 爆燃收束",
+          director: ["先看热量增长", "再看熔甲破甲状态", "最后看爆燃收束附加燃烧"]
         },
         {
           name: "烈火重重 · 盾焰格挡",
           description: "格挡瞬间爆出火环，展示 Fire 的防御反应链。",
           chain: shieldFlareChain,
+          chainId: "shield_flare",
           source: "enemy",
           attackId: "slash",
           forceOutcome: "perfect",
-          preview: "敌方横扫 → 盾焰反冲 → 返还燃烧"
+          preview: "敌方横扫 → 盾焰反冲 → 返还燃烧",
+          director: ["看敌方绿色窗口", "看盾焰反冲减伤", "观察燃烧回敬"]
         },
         {
           name: "咒还 · 镜咒弹反",
           description: "用镜面咒还折返法术，展示 Absorb 的防御反应链。",
           chain: mirrorGuardChain,
+          chainId: "mirror_guard",
           source: "enemy",
           attackId: "spellCast",
           forceOutcome: "perfect",
-          preview: "敌方法术 → 镜面展开 → 法术折返"
+          preview: "敌方法术 → 镜面展开 → 法术折返",
+          director: ["看法术被镜面接住", "观察能量获得", "看吸收准备状态"]
         },
         {
           name: "咒还 · 溢流爆发",
           description: "消耗 60 法术能量，将过载压成高伤爆发。",
           chain: overflowBurstChain,
+          chainId: "overflow_burst",
           source: "player",
           forceOutcome: "perfect",
           setup: (demo) => {
             demo.playerState.spellEnergy = 120;
             demo.resourceSystem.add("spellEnergy", 0);
           },
-          preview: "压缩溢流 → 裂隙爆发"
+          preview: "压缩溢流 → 裂隙爆发",
+          director: ["先确认法术能量池", "看压缩溢流的蓄力窗", "最后看裂隙爆发消耗与高伤害"]
         },
         {
           name: "烈火重重 · 盾火反伤",
@@ -914,17 +1000,21 @@ class DemoMode {
           name: `${defense.name} · Perfect`,
           description: `完美执行 ${defense.name}`,
           chain: chainConfig,
+          chainId: defense.chainId,
           source: "enemy",
-          preview: `完美 ${defense.name}：完全规避 + 反击`
+          preview: `完美 ${defense.name}：完全规避 + 反击`,
+          director: ["看敌方读招", "看绿色窗口", "观察防御收益"]
         });
         // 失败版
         items.push({
           name: `${defense.name} · 失败`,
           description: `${defense.name} 失败时的效果`,
           chain: chainConfig,
+          chainId: defense.chainId,
           source: "enemy",
           forceOutcome: "fail",
-          preview: `${defense.name} 失败：受击减伤/反击失败`
+          preview: `${defense.name} 失败：受击减伤/反击失败`,
+          director: ["对照失败反馈", "观察承伤/硬直", "确认提示不遮挡按键"]
         });
       }
     }
@@ -1120,7 +1210,12 @@ class DemoMode {
     const scaled = Difficulty.scaleChain(item.chain);
     this.qteRunner = new QTEChainRunner(scaled, {
       source: item.source || "enemy",
+      chainId: item.chainId || this.getChainId(item.chain),
       chainFamily: item.chain ? item.chain.family : null,
+      handfeel: Utils.getChainHandfeel(item.chain, {
+        chainId: item.chainId || this.getChainId(item.chain),
+        source: item.source || "enemy"
+      }),
       ...(item.context || {}),
       onNodeEffect: (node, outcome, transition) => {
         this.freezeTimer = item.source === "enemy" ? 0.22 : 0.12;
@@ -1138,8 +1233,12 @@ class DemoMode {
       }
     });
 
-    this.qteRunner.timeScale = this.defenseTimeScale;
-    this.qteRunner.postNodePause = this.defensePostNodePause;
+    this.activeDemoPacing = Utils.getDemoPacing(item.chain, {
+      ...item,
+      chainId: item.chainId || this.getChainId(item.chain)
+    });
+    this.qteRunner.timeScale = this.activeDemoPacing.timeScale;
+    this.qteRunner.postNodePause = this.activeDemoPacing.postNodePause;
 
     const forceOutcome = item.forceOutcome || null;
     if (this.manualMode && !forceOutcome) {
@@ -1227,12 +1326,17 @@ class DemoMode {
       this.showTurnBanner("敌方回合", "#e74c3c");
     }
     const scaled = Difficulty.scaleChain(item.chain);
+    const chainId = item.chainId || this.getChainId(item.chain);
+    const pacing = Utils.getDemoPacing(item.chain, { ...item, chainId });
+    this.activeDemoPacing = pacing;
     this.qteRunner = new QTEChainRunner(scaled, {
       source: item.source || "player",
+      chainId,
       chainFamily: item.chain ? item.chain.family : null,
+      handfeel: Utils.getChainHandfeel(item.chain, { chainId, source: item.source || "player" }),
       ...(item.context || {}),
       onNodeEffect: (node, outcome, transition) => {
-        this.freezeTimer = 0.12;
+        this.freezeTimer = Math.min(0.20, pacing.resultFreeze * 0.25);
         if (transition.message) this.log(transition.message);
         this.showOutcomeFeedback(outcome);
         this.emitTransitionVisual(transition);
@@ -1252,9 +1356,9 @@ class DemoMode {
       this.qteRunner.postNodePause = 0;
       this.message = `${item.name} — 手动试玩：请在判定窗口内按键`;
     } else {
-      // 自动演示：轻微慢放并保留短停顿，避免蓄力/节奏链显得拖沓。
-      this.qteRunner.timeScale = this.normalDemoTimeScale;
-      this.qteRunner.postNodePause = this.normalPostNodePause;
+      // 自动演示：链路自带 pacing，避免蓄力链拖沓、爆发链又过快。
+      this.qteRunner.timeScale = pacing.timeScale;
+      this.qteRunner.postNodePause = pacing.postNodePause;
       if (item.forceOutcome) {
         this.qteRunner.forceOutcome(item.forceOutcome);
       } else {
@@ -1298,8 +1402,9 @@ class DemoMode {
             this.qteRunner.forcedOutcome = null;
             this.message = `${this.previewTitle} — 手动试玩`;
           } else {
-            this.qteRunner.timeScale = isDefense ? this.defenseTimeScale : this.normalDemoTimeScale;
-            this.qteRunner.postNodePause = isDefense ? this.defensePostNodePause : this.normalPostNodePause;
+            const pacing = this.activeDemoPacing || Utils.getDemoPacing(this.currentItem?.chain, this.currentItem || {});
+            this.qteRunner.timeScale = pacing.timeScale;
+            this.qteRunner.postNodePause = pacing.postNodePause;
             this.qteRunner.forceOutcome(this.currentItem?.forceOutcome || "perfect");
             this.message = `${this.previewTitle} — 自动演示中`;
           }
@@ -1396,7 +1501,7 @@ class DemoMode {
       this.log("敌人已复活（演示模式）");
     }
 
-    this.freezeTimer = 0.8;
+    this.freezeTimer = this.activeDemoPacing ? this.activeDemoPacing.resultFreeze : 0.8;
     this.qteRunner = null;
     this.input.clear();
     this.setState("preview");
@@ -1573,6 +1678,11 @@ class DemoMode {
 
     if (item.description) {
       lines.push(`机制：${item.description}`);
+    }
+
+    const directorLines = this.getDirectorLines(item, 4);
+    if (directorLines.length > 0) {
+      lines.push(`导演焦点：${directorLines.join(" / ")}`);
     }
 
     if (item.chain) {
@@ -1833,7 +1943,7 @@ class DemoMode {
     }
 
     if (this.state === "qte") {
-      return this.getQTEInspectorLines().concat(this.getActualTimelineLines(6));
+      return this.getActiveDirectorLines(3).concat(this.getQTEInspectorLines(), this.getActualTimelineLines(6));
     }
 
     if (this.state === "preview") {
@@ -1917,6 +2027,8 @@ class DemoMode {
       `计时：${Math.max(0, this.qteRunner.nodeTimer).toFixed(2)}s / ${node.duration.toFixed(2)}s`,
       `判定窗：${bounds.start.toFixed(2)}s - ${bounds.end.toFixed(2)}s`,
       `Perfect 点：${bounds.perfect === null || bounds.perfect === undefined ? "无" : bounds.perfect.toFixed(2) + "s"}`,
+      `演示节奏：x${this.qteRunner.timeScale.toFixed(2)} / 节点停顿 ${this.qteRunner.postNodePause.toFixed(2)}s`,
+      `手感：press +${this.qteRunner.handfeel.windowPad.toFixed(2)} / hold +${this.qteRunner.handfeel.holdWindowPad.toFixed(2)} / rhythm +${this.qteRunner.handfeel.rhythmPad.toFixed(2)}`,
       `判定方式：${forced ? this.formatOutcome(forced) : "手动输入"}`,
       `已完成：${completed}`
     ];

@@ -556,6 +556,7 @@ class BattleSystem {
       chainId,
       chainFamily: chainConfig.family,
       isSwordChain: this.isSwordChain(chainKey),
+      handfeel: Utils.getChainHandfeel(chainConfig, { chainId, source: "player" }),
       onNodeEffect: (node, outcome, transition) => {
         if (node.input.type === "hold_release" || node.input.type === "rhythm") {
           this.playerState.currentState = "charge";
@@ -598,6 +599,7 @@ class BattleSystem {
       chainFamily: chainConfig.family,
       counterAttack: true,
       isSwordChain: true,
+      handfeel: Utils.getChainHandfeel(chainConfig, { chainId, source: "player", counterAttack: true }),
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
         this.showOutcomeFeedback(outcome);
@@ -635,6 +637,7 @@ class BattleSystem {
       followUp: true,
       interruptEnemy: true,
       isSwordChain: true,
+      handfeel: Utils.getChainHandfeel(chainConfig, { chainId, source: "player", followUp: true }),
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
         this.showOutcomeFeedback(outcome);
@@ -738,6 +741,14 @@ class BattleSystem {
         ? (this.statusSystem.getDefinition("armorBreak").damageTakenMul || 1 + SpellDatabase.fire.armorBreakDamageBonus)
         : (1 + SpellDatabase.fire.armorBreakDamageBonus);
       damage = Math.floor(damage * statusMul);
+      if (damage > 0) {
+        const bonusLabel = `+${Math.round((statusMul - 1) * 100)}% 破甲`;
+        this.spawnFloatingText(bonusLabel, 740, 235, "status");
+        if (context && (context.chainFamily === "fire" || context.chainFamily === "absorb")) {
+          this.spawnFloatingText("武器×咒术协同", 740, 205, "status");
+          this.log(`破甲协同触发：${context.chainFamily === "fire" ? "火焰" : "咒还"}链获得增伤`);
+        }
+      }
     }
 
     // 烈火重重：剑对防御敌人增伤
@@ -1287,6 +1298,7 @@ class BattleSystem {
       source: "enemy",
       chainId,
       chainFamily: chain.family,
+      handfeel: Utils.getChainHandfeel(chain, { chainId, source: "enemy" }),
       onNodeEffect: (node, outcome, transition) => {
         if (transition.message) this.setMessage(transition.message);
         this.showOutcomeFeedback(outcome);

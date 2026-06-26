@@ -1936,6 +1936,11 @@ class CanvasRenderer {
         this.drawDemoCounterAttackIndicator(ctx);
       }
 
+      const focusLines = scene.getActiveDirectorLines ? scene.getActiveDirectorLines(4) : [];
+      if (focusLines.length > 0) {
+        this.drawDemoFocusPanel(ctx, focusLines, 128, 760);
+      }
+
       this.drawDemoQTEBar(scene);
 
       const node = scene.qteRunner ? scene.qteRunner.currentNode() : null;
@@ -1980,6 +1985,36 @@ class CanvasRenderer {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("🗡", this.width - 160, 125);
+    ctx.restore();
+  }
+
+  drawDemoFocusPanel(ctx, lines, y, maxWidth = 760) {
+    const cleanLines = (lines || []).filter(Boolean).slice(0, 4);
+    if (cleanLines.length === 0) return;
+
+    const lineH = 20;
+    const padX = 18;
+    const padY = 10;
+    const w = maxWidth;
+    const h = padY * 2 + cleanLines.length * lineH;
+    const x = (this.width - w) / 2;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(10, 12, 18, 0.62)";
+    ctx.strokeStyle = "rgba(241, 196, 15, 0.45)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    cleanLines.forEach((line, idx) => {
+      ctx.fillStyle = idx === 0 ? "#f1c40f" : "#d9deea";
+      ctx.font = idx === 0 ? "bold 14px sans-serif" : "13px sans-serif";
+      ctx.fillText(this.truncateText(ctx, line, w - padX * 2), x + padX, y + padY + idx * lineH);
+    });
     ctx.restore();
   }
 
@@ -2279,12 +2314,35 @@ class CanvasRenderer {
     this.wrapText(ctx, scene.previewText, this.width / 2, 115, 720, 28);
 
     // 结算/结果摘要
-    if (scene.resultLines && scene.resultLines.length > 0) {
+    const summaryLines = scene.getPreviewSummaryLines
+      ? scene.getPreviewSummaryLines(8)
+      : (scene.resultLines || []).slice(0, 6);
+    if (summaryLines.length > 0) {
+      const panelW = 860;
+      const panelX = (this.width - panelW) / 2;
+      const panelY = 205;
+      const lineH = 23;
+      const panelH = 28 + summaryLines.length * lineH;
+
+      ctx.fillStyle = "rgba(10, 12, 18, 0.68)";
+      ctx.strokeStyle = "rgba(241, 196, 15, 0.45)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(panelX, panelY, panelW, panelH, 8);
+      ctx.fill();
+      ctx.stroke();
+
       ctx.fillStyle = "#f1c40f";
-      ctx.font = "bold 16px sans-serif";
-      ctx.textAlign = "center";
+      ctx.font = "bold 15px sans-serif";
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(scene.resultLines[scene.resultLines.length - 1], this.width / 2, 340);
+      ctx.fillText("演示摘要", panelX + 18, panelY + 10);
+
+      ctx.font = "13px sans-serif";
+      summaryLines.forEach((line, idx) => {
+        ctx.fillStyle = line.startsWith("看点：") ? "#f1c40f" : "#d9deea";
+        ctx.fillText(this.truncateText(ctx, line, panelW - 36), panelX + 18, panelY + 34 + idx * lineH);
+      });
     }
 
     ctx.fillStyle = "#b0b8c0";

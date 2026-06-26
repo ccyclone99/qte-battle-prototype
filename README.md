@@ -68,6 +68,7 @@ node scripts/verify.js --visual
 - [x] 伤害数字、屏幕震动、命中停顿
 - [x] 关键 QTE 节点数据化姿态标签（武器链 / 咒术链动作差异）
 - [x] 一键本地验收和 GitHub Actions 基础 CI
+- [x] R12 手感标定、演示导演焦点和武器/咒术协同反馈
 
 ## 文件结构
 

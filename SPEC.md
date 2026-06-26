@@ -1152,6 +1152,38 @@ Remaining cleanup after R11:
 - Expand CI to artifact upload if screenshot smoke starts running on hosted checks.
 - Add release/deploy protection only if main-branch pushes start needing manual gates.
 
+### R12 - Handfeel And Demo Direction, Completed
+
+- Added chain-family handfeel profiles through `Utils.getChainHandfeel()`:
+  - Dual Blades stay tight and fast.
+  - Greatsword keeps heavier hold-release forgiveness.
+  - Staff rhythm chains get wider rhythm forgiveness.
+  - Fire charge chains get earlier release windows.
+  - Absorb and overflow chains get stronger hold/rhythm grace.
+- Added `Utils.getDemoPacing()` so demo playback has per-chain time scale, node pause, and result freeze instead of one global slow-motion value.
+- Battle, counter, follow-up, defense, and demo QTE runners now all receive chain-specific handfeel.
+- Tuned slow-feeling core timings:
+  - `staff_s` rhythm chant shortened from 2.0s to 1.6s with earlier beats.
+  - `staff_d` chant shortened from 1.5s to 1.28s.
+  - legacy `fireball_evolution` charge shortened from 1.6s to 1.25s.
+  - `fireball_evolution_v2` charge shortened from 1.55s to 1.35s.
+  - `greatsword_s_v2` hold shortened from 2.0s to 1.82s.
+  - `absorb_siphon` rhythm shortened from 1.55s to 1.42s.
+  - `overflow_burst` compression shortened from 0.65s to 0.58s.
+- Added demo director focus lines for key weapon/spell/defense entries.
+- Demo QTE playback now shows an on-canvas focus panel with current node and viewing priority.
+- Demo result preview now shows a compact on-canvas summary: focus, result lines, and actual timeline rows.
+- Demo inspector now exposes playback pacing and handfeel values.
+- Flame Blade's armor-cut node now lightly amplifies the following burst, making the weapon-plus-fire chain read as a real combo.
+- Battle now surfaces armor-break amplification with floating feedback and explicit weapon/spell synergy logs.
+- Static smoke now protects R12 handfeel, demo focus, and timing changes.
+
+Remaining cleanup after R12:
+
+- Run a longer manual playtest pass on hard/extreme to decide whether tight Dual Blades windows need difficulty-specific relief.
+- Add named encounter rules if manual enemy archetypes are no longer enough.
+- Decide whether the next animation step should remain pose-tag Canvas 2D or move toward a stronger animation layer.
+
 ## 21. Acceptance Criteria
 
 ### General
@@ -1170,6 +1202,8 @@ Remaining cleanup after R11:
 - Perfect is achievable but not automatic.
 - Early/late/fail feedback is visible.
 - Demo playback does not feel stalled by excessive pauses.
+- Staff and fire hold-release chains expose useful release windows before the bar feels full.
+- Chain-specific handfeel values are visible in QTE debug/inspector output.
 
 ### Visual
 
@@ -1196,6 +1230,8 @@ Remaining cleanup after R11:
 - Demo detail panel shows chain input flow, reference damage, projected timeline, actual timeline, and result summary.
 - Demo result preview supports replaying the current item with `R`.
 - Demo includes Showcase entries that play staged Fire, Absorb, Flame Blade, and enemy-turn examples without needing list paging.
+- Demo QTE playback shows the current director focus on the main canvas.
+- Demo result preview shows focus, result summary, and actual timeline without requiring the detail drawer.
 - Enemy-turn demos show attack type, danger level, recommended key, and window countdown in the detail panel and attack bar.
 - Key combat events have distinct audio feedback.
 - Main menu can force enemy archetypes for matchup testing without changing style loadouts.
@@ -1274,11 +1310,11 @@ Manual browser smoke test:
 
 ## 24. Immediate Next Task Recommendation
 
-Move to R12 handfeel and demo direction next:
+Move to R13 encounter depth and content integration next:
 
-1. Run the manual playtest checklist and record per-chain issues.
-2. Tune QTE windows, hold-release pacing, rhythm tolerances, hit stop, and failure recovery by chain family.
-3. Strengthen demo direction with clearer slowdowns, state-change focus, and before/after result framing.
-4. Deepen weapon-chain plus spell-chain synergy only after timing and readability settle.
+1. Convert manual enemy archetype selection into named encounters with terrain, phases, or rule modifiers.
+2. Add deeper armor/shield mechanics beyond HP and attack-pool pressure.
+3. Expand weapon-plus-spell synergy into encounter-facing decisions instead of only chain-local bonuses.
+4. Run the manual playtest checklist on normal/hard/extreme and tune any R12 outliers.
 
-R1-R11 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, data-driven pose specificity, one-command local verification, and core CI. The next bottleneck is handfeel and demo direction rather than delivery infrastructure.
+R1-R12 now provide content, observability, reusable visual primitives, readable character staging, audio feedback, Showcase demos, clearer enemy intent, automated screenshot smoke, mobile landscape layout protection, manual matchup testing, replay regression coverage, data-driven pose specificity, one-command local verification, core CI, chain-specific handfeel, demo director focus, and clearer weapon/spell synergy feedback. The next bottleneck is encounter depth and content integration rather than core QTE feel.
