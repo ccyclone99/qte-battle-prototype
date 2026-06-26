@@ -1919,6 +1919,24 @@ Acceptance criteria:
 - Visual smoke verifies enemy response windows produce telegraph-pose performance values.
 - Static smoke protects helper coverage.
 
+### R28 Model Identity Detail Pass, Completed
+
+Goal: player loadouts and enemy archetypes should be readable from the bodies themselves, not only from labels, HP bars, or QTE text.
+
+Implemented direction:
+
+- `CanvasRenderer.getPlayerModelProfile()` resolves weapon, style color, spell tags, armor class, and gear from the active player config.
+- `drawPlayerLoadoutDetails()` adds body-attached heavy armor, light gear, caster mantles, fire vents, absorb orbits, and staff glyph details.
+- `CanvasRenderer.getEnemyModelProfile()` resolves enemy `model.type`, `build`, `gear`, and `armor` from enemy data instead of relying only on icons.
+- Enemy model rendering now draws material and gear layers for stone, robe, plate, cloak, ward, hammer, focus, greatsword, dual blades, and shield identities.
+- This is render-only and does not change enemy stats, encounter logic, QTE timing, hit confirm, or damage.
+
+Acceptance criteria:
+
+- Renderer exposes player/enemy model profile and detail helper methods.
+- Visual smoke verifies Fire Greatsword player profile, armored enemy gear profile, and caster enemy gear profile.
+- Static smoke protects model helper coverage.
+
 ## 22. Verification Commands
 
 ```powershell

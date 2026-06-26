@@ -606,6 +606,18 @@ async function runVisualSmoke() {
         const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
         return !!(d && d.isFire && d.isGreatsword);
       })()`) },
+      { label: "player model profile reads fire greatsword", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerModelProfile) return false;
+        const p = r.getPlayerModelProfile(battle);
+        return !!(p && p.weaponId === "greatsword" && p.armor === "heavy" && p.hasFire);
+      })()`) },
+      { label: "enemy model profile reads armored gear", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyModelProfile) return false;
+        const p = r.getEnemyModelProfile(battle.enemyConfig);
+        return !!(p && p.modelType === "armored" && p.gear === "greatsword" && p.armor === "plate");
+      })()`) },
       { label: "actor status visuals active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || !r.getActorStatusVisuals) return false;
@@ -703,6 +715,12 @@ async function runVisualSmoke() {
         if (!r || typeof battle === "undefined" || !r.getActorPerformance) return false;
         const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
         return !!(p && p.enemyPose === "cast" && p.poseIntensity > 0.6 && p.armReach > 20);
+      })()`) },
+      { label: "enemy model profile reads caster gear", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyModelProfile) return false;
+        const p = r.getEnemyModelProfile(battle.enemyConfig);
+        return !!(p && p.modelType === "caster" && p.gear === "focus" && p.armor === "robe");
       })()`) },
       { label: "renderer telegraph reads curse burst", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

@@ -412,6 +412,48 @@ class CanvasRenderer {
     })[0];
   }
 
+  getPlayerModelProfile(scene) {
+    const config = scene && scene.playerConfig ? scene.playerConfig : {};
+    const weaponId = config.weapon || "";
+    const style = config.style ? StyleDatabase[config.style] : null;
+    const spells = Array.isArray(config.spells) ? config.spells : [];
+    const weapon = weaponId ? WeaponDatabase[weaponId] : null;
+    const armor = weaponId === "greatsword" ? "heavy"
+      : (weaponId === "dualBlades" ? "light"
+        : (weaponId === "staff" ? "caster" : "standard"));
+
+    return {
+      weaponId,
+      weapon,
+      styleId: config.style || "",
+      styleNumber: style ? style.number : "",
+      styleColor: style ? style.color : (weapon ? weapon.color : "#3498db"),
+      armor,
+      gear: weaponId || "unarmed",
+      hasFire: spells.includes("fire"),
+      hasAbsorb: spells.includes("absorb")
+    };
+  }
+
+  getEnemyModelProfile(config = {}) {
+    const model = config.model || {};
+    const icon = config.icon || "敌";
+    const modelType = model.type || (icon === "术" ? "caster"
+      : (icon === "甲" ? "armored"
+        : (icon === "迅" ? "swift"
+          : (icon === "盾" ? "shielded" : "golem"))));
+
+    return {
+      model,
+      modelType,
+      build: model.build || (modelType === "armored" ? "heavy" : (modelType === "swift" ? "lean" : "medium")),
+      gear: model.gear || (modelType === "caster" ? "focus" : (modelType === "swift" ? "dualBlades" : "hammer")),
+      armor: model.armor || (modelType === "caster" ? "robe" : (modelType === "shielded" ? "ward" : "stone")),
+      icon,
+      color: config.color || EnemyDatabase.base.color
+    };
+  }
+
   resolveCinematicAnchor(anchor) {
     const anchors = {
       playerCore: { x: 220, y: 360 },
@@ -2842,6 +2884,7 @@ class CanvasRenderer {
     const stride = perf.stride || 0;
     const brace = perf.brace || 0;
     const castPower = perf.cast || 0;
+    const playerProfile = this.getPlayerModelProfile(scene);
     let lean = isAttack ? -0.14 + attackEase * 0.22 : (isShield ? -0.10 : (isCast ? -0.06 : 0));
     if (motion === "dualDash") lean = -0.24 + attackEase * 0.15;
     if (motion === "dualRetreat") lean = 0.08 - attackEase * 0.18;
@@ -2850,8 +2893,8 @@ class CanvasRenderer {
     lean += perf.lean || 0;
     const bodyColor = weaponId === "greatsword" ? "#33506f" : (weaponId === "dualBlades" ? "#255f69" : "#2f5b8f");
     const trimColor = styleColor || (weapon ? weapon.color : "#3498db");
-    const hasFire = scene.playerConfig && Array.isArray(scene.playerConfig.spells) && scene.playerConfig.spells.includes("fire");
-    const hasAbsorb = scene.playerConfig && Array.isArray(scene.playerConfig.spells) && scene.playerConfig.spells.includes("absorb");
+    const hasFire = playerProfile.hasFire;
+    const hasAbsorb = playerProfile.hasAbsorb;
 
     ctx.save();
     ctx.translate(x, y);
@@ -2877,6 +2920,7 @@ class CanvasRenderer {
     ctx.stroke();
     ctx.shadowBlur = 0;
     this.drawPlayerArmorAccents(ctx, weaponId, trimColor, hasFire, hasAbsorb, t);
+    this.drawPlayerLoadoutDetails(ctx, playerProfile, trimColor, motion, attackEase, t);
 
     // head
     ctx.fillStyle = "#d7e7ff";
@@ -3063,6 +3107,90 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  drawPlayerLoadoutDetails(ctx, profile, color, motion, progress, t) {
+    const weaponId = profile.weaponId || "";
+    const armor = profile.armor || "standard";
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = this.hexToRgba(color || "#3498db", 0.74);
+    ctx.fillStyle = this.hexToRgba(color || "#3498db", 0.16);
+    ctx.shadowColor = color || "#3498db";
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 2;
+
+    if (armor === "heavy") {
+      ctx.beginPath();
+      ctx.roundRect(-35, -19, 16, 18, 5);
+      ctx.roundRect(19, -19, 16, 18, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = this.hexToRgba(color || "#3498db", 0.20);
+      ctx.fillRect(-20, 28, 40, 5);
+      ctx.fillRect(-17, 36, 34, 4);
+      if (profile.hasFire) {
+        ctx.strokeStyle = "#e67e22";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+          const x = -14 + i * 14;
+          ctx.beginPath();
+          ctx.moveTo(x, 30);
+          ctx.lineTo(x + Math.sin(t * 6 + i) * 2, 42);
+          ctx.stroke();
+        }
+      }
+    } else if (armor === "light") {
+      ctx.strokeStyle = this.hexToRgba(color || "#3498db", 0.62);
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        ctx.beginPath();
+        ctx.moveTo(side * 12, 18);
+        ctx.quadraticCurveTo(side * (28 + progress * 6), 28, side * 18, 42);
+        ctx.stroke();
+      }
+      ctx.fillStyle = this.hexToRgba("#ffffff", 0.12);
+      ctx.beginPath();
+      ctx.moveTo(-20, 24);
+      ctx.lineTo(0, 34);
+      ctx.lineTo(20, 24);
+      ctx.lineTo(0, 30);
+      ctx.closePath();
+      ctx.fill();
+    } else if (armor === "caster") {
+      ctx.strokeStyle = this.hexToRgba(color || "#3498db", 0.68);
+      ctx.beginPath();
+      ctx.arc(0, -16, 26 + Math.sin(t * 4) * 2, Math.PI * 0.1, Math.PI * 0.9);
+      ctx.stroke();
+      ctx.globalAlpha = 0.32;
+      ctx.beginPath();
+      ctx.moveTo(-22, 30);
+      ctx.lineTo(-32, 50);
+      ctx.moveTo(22, 30);
+      ctx.lineTo(32, 50);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    if (profile.hasAbsorb) {
+      ctx.strokeStyle = "#9b59b6";
+      ctx.globalAlpha = 0.54;
+      ctx.beginPath();
+      ctx.ellipse(0, -8, 28, 12, Math.sin(t * 1.7) * 0.18, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 3; i++) {
+        const a = t * 1.8 + i * Math.PI * 2 / 3;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 26, -8 + Math.sin(a) * 10, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (weaponId === "staff") {
+      this.drawStageGlyph(ctx, 0, -3, 15, color, t * 0.8, 0.24);
+    }
+
+    ctx.restore();
+  }
+
   drawPlayerHeadgear(ctx, weaponId, color) {
     ctx.save();
     ctx.strokeStyle = this.hexToRgba(color || "#3498db", 0.85);
@@ -3092,9 +3220,9 @@ class CanvasRenderer {
     const perf = performance || {};
     const scale = reaction.scale || 1;
     const color = scene.enemyStunTimer > 0 ? "#f1c40f" : (config.color || EnemyDatabase.base.color);
-    const icon = config.icon || "敌";
-    const model = config.model || {};
-    const modelType = model.type || (icon === "术" ? "caster" : (icon === "甲" ? "armored" : (icon === "迅" ? "swift" : (icon === "盾" ? "shielded" : "golem"))));
+    const modelProfile = this.getEnemyModelProfile(config);
+    const icon = modelProfile.icon;
+    const modelType = modelProfile.modelType;
     const isCaster = modelType === "caster";
     const isArmored = modelType === "armored";
     const isSwift = modelType === "swift";
@@ -3161,7 +3289,7 @@ class CanvasRenderer {
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
-    this.drawEnemyModelAccents(ctx, modelType, color, icon, t);
+    this.drawEnemyModelAccents(ctx, modelProfile, color, icon, t, perf);
 
     // head
     ctx.fillStyle = isCaster ? "#dec7ff" : (isGolem ? "#b86b57" : "#f3d4d4");
@@ -3172,7 +3300,7 @@ class CanvasRenderer {
       ctx.arc(0, -58, isArmored ? 19 : (isSwift ? 14 : 16), 0, Math.PI * 2);
     }
     ctx.fill();
-    this.drawEnemyHeadgear(ctx, modelType, color, t);
+    this.drawEnemyHeadgear(ctx, modelProfile, color, t);
 
     // arms and archetype gear
     if (isCaster) {
@@ -3214,7 +3342,15 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawEnemyModelAccents(ctx, modelType, color, icon, t) {
+  drawEnemyModelAccents(ctx, modelProfile, color, icon, t, performance = {}) {
+    const profile = typeof modelProfile === "string"
+      ? { modelType: modelProfile, gear: "", armor: "", build: "" }
+      : (modelProfile || {});
+    const modelType = profile.modelType || "golem";
+    const gear = profile.gear || "";
+    const armor = profile.armor || "";
+    const poseIntensity = performance.poseIntensity || 0;
+
     ctx.save();
     ctx.strokeStyle = this.hexToRgba("#ffffff", 0.34);
     ctx.fillStyle = this.hexToRgba("#000000", 0.12);
@@ -3232,6 +3368,9 @@ class CanvasRenderer {
       ctx.beginPath();
       ctx.arc(0, 2, 9, 0, Math.PI * 2);
       ctx.fill();
+      if (armor === "stone") {
+        this.drawEnemyMaterialDetails(ctx, profile, color, t);
+      }
     } else if (modelType === "caster") {
       ctx.strokeStyle = this.hexToRgba(color, 0.78);
       ctx.beginPath();
@@ -3241,6 +3380,7 @@ class CanvasRenderer {
       ctx.moveTo(10, 10);
       ctx.lineTo(-10, -18);
       ctx.stroke();
+      this.drawEnemyMaterialDetails(ctx, profile, color, t);
     } else if (modelType === "armored") {
       ctx.strokeStyle = "rgba(255,255,255,0.38)";
       for (let yy = -18; yy <= 20; yy += 13) {
@@ -3251,6 +3391,7 @@ class CanvasRenderer {
       }
       ctx.fillStyle = this.hexToRgba("#ffffff", 0.18);
       ctx.fillRect(-23, -27, 46, 8);
+      this.drawEnemyMaterialDetails(ctx, profile, color, t);
     } else if (modelType === "swift") {
       ctx.strokeStyle = this.hexToRgba(color, 0.85);
       ctx.beginPath();
@@ -3263,6 +3404,7 @@ class CanvasRenderer {
       ctx.lineTo(0, 48);
       ctx.lineTo(24, 32);
       ctx.fill();
+      this.drawEnemyMaterialDetails(ctx, profile, color, t);
     } else if (modelType === "shielded") {
       ctx.strokeStyle = this.hexToRgba(color, 0.72);
       ctx.beginPath();
@@ -3270,7 +3412,10 @@ class CanvasRenderer {
       ctx.stroke();
       ctx.fillStyle = this.hexToRgba(color, 0.20);
       ctx.fillRect(-17, -2, 34, 6);
+      this.drawEnemyMaterialDetails(ctx, profile, color, t);
     }
+
+    this.drawEnemyGearDetails(ctx, gear, color, t, poseIntensity);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 19px sans-serif";
@@ -3282,7 +3427,124 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawEnemyHeadgear(ctx, modelType, color, t) {
+  drawEnemyMaterialDetails(ctx, profile, color, t) {
+    const armor = profile.armor || "";
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+
+    if (armor === "stone") {
+      ctx.strokeStyle = "rgba(255,255,255,0.28)";
+      for (let i = 0; i < 4; i++) {
+        const x = -22 + i * 14;
+        ctx.beginPath();
+        ctx.moveTo(x, -22 + (i % 2) * 10);
+        ctx.lineTo(x + 8, -8 + i * 6);
+        ctx.lineTo(x + 2, 4 + i * 4);
+        ctx.stroke();
+      }
+    } else if (armor === "robe") {
+      ctx.strokeStyle = this.hexToRgba(color, 0.52);
+      for (let i = 0; i < 3; i++) {
+        const x = -18 + i * 18;
+        ctx.beginPath();
+        ctx.moveTo(x, -20);
+        ctx.quadraticCurveTo(x + Math.sin(t * 2 + i) * 3, 6, x - 6, 40);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = color;
+      ctx.fillRect(-24, 28, 48, 8);
+    } else if (armor === "plate") {
+      ctx.strokeStyle = "rgba(255,255,255,0.42)";
+      ctx.fillStyle = this.hexToRgba("#ffffff", 0.16);
+      ctx.beginPath();
+      ctx.roundRect(-42, -24, 18, 22, 5);
+      ctx.roundRect(24, -24, 18, 22, 5);
+      ctx.fill();
+      ctx.stroke();
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-24, -6 + i * 12);
+        ctx.lineTo(24, -8 + i * 12);
+        ctx.stroke();
+      }
+    } else if (armor === "cloak") {
+      ctx.fillStyle = this.hexToRgba("#000000", 0.20);
+      ctx.beginPath();
+      ctx.moveTo(-30, -18);
+      ctx.quadraticCurveTo(-48, 18, -18, 48);
+      ctx.lineTo(0, 36);
+      ctx.lineTo(18, 48);
+      ctx.quadraticCurveTo(48, 18, 30, -18);
+      ctx.closePath();
+      ctx.fill();
+    } else if (armor === "ward") {
+      ctx.strokeStyle = this.hexToRgba(color, 0.72);
+      this.drawStageShield(ctx, 0, -2, color, 0.22 + Math.sin(t * 5) * 0.04);
+      ctx.beginPath();
+      ctx.arc(0, -2, 27, -0.25, Math.PI * 1.25);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawEnemyGearDetails(ctx, gear, color, t, poseIntensity = 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = this.hexToRgba(color || "#e74c3c", 0.72);
+    ctx.fillStyle = this.hexToRgba(color || "#e74c3c", 0.18);
+    ctx.shadowColor = color || "#e74c3c";
+    ctx.shadowBlur = 9;
+    ctx.lineWidth = 2;
+
+    if (gear === "hammer") {
+      ctx.beginPath();
+      ctx.moveTo(34, 24);
+      ctx.lineTo(52, -24 - poseIntensity * 10);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.roundRect(42, -34 - poseIntensity * 10, 22, 14, 3);
+      ctx.fill();
+      ctx.stroke();
+    } else if (gear === "focus") {
+      for (let i = 0; i < 3; i++) {
+        const a = t * 1.4 + i * Math.PI * 2 / 3;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 32, -8 + Math.sin(a) * 12, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (gear === "greatsword") {
+      ctx.beginPath();
+      ctx.moveTo(28, 30);
+      ctx.lineTo(62, -36 - poseIntensity * 12);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.38)";
+      ctx.beginPath();
+      ctx.moveTo(36, 18);
+      ctx.lineTo(56, -24 - poseIntensity * 12);
+      ctx.stroke();
+    } else if (gear === "dualBlades") {
+      for (let side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(side * 19, 30);
+        ctx.quadraticCurveTo(side * 38, 10, side * 32, -20);
+        ctx.stroke();
+      }
+    } else if (gear === "shield") {
+      this.drawStageShield(ctx, -34 - poseIntensity * 8, 2, color, 0.28);
+    }
+
+    ctx.restore();
+  }
+
+  drawEnemyHeadgear(ctx, modelProfile, color, t) {
+    const profile = typeof modelProfile === "string"
+      ? { modelType: modelProfile, armor: "" }
+      : (modelProfile || {});
+    const modelType = profile.modelType || "golem";
+    const armor = profile.armor || "";
     ctx.save();
     ctx.strokeStyle = this.hexToRgba(color || "#e74c3c", 0.85);
     ctx.fillStyle = this.hexToRgba(color || "#e74c3c", 0.20);
@@ -3322,6 +3584,30 @@ class CanvasRenderer {
       ctx.moveTo(-10, -56);
       ctx.lineTo(10, -56);
       ctx.stroke();
+    }
+
+    if (armor === "ward") {
+      ctx.globalAlpha = 0.72;
+      ctx.beginPath();
+      ctx.arc(0, -61, 27, -0.55, Math.PI + 0.55);
+      ctx.stroke();
+    } else if (armor === "stone") {
+      ctx.strokeStyle = "rgba(255,255,255,0.34)";
+      ctx.beginPath();
+      ctx.moveTo(-14, -72);
+      ctx.lineTo(4, -56);
+      ctx.moveTo(3, -72);
+      ctx.lineTo(17, -60);
+      ctx.stroke();
+    } else if (armor === "cloak") {
+      ctx.fillStyle = this.hexToRgba("#000000", 0.22);
+      ctx.beginPath();
+      ctx.moveTo(-18, -54);
+      ctx.quadraticCurveTo(0, -70, 18, -54);
+      ctx.lineTo(12, -44);
+      ctx.quadraticCurveTo(0, -50, -12, -44);
+      ctx.closePath();
+      ctx.fill();
     }
 
     ctx.restore();
