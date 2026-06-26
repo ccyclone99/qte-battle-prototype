@@ -543,6 +543,12 @@ async function runVisualSmoke() {
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
       battle.activeAttackSystem.clear();
+      battle.resourceSystem.add("heat", 88);
+      battle.statusSystem.apply({ target: "enemy", type: "burn", turns: 2 }, { source: "visual-smoke" });
+      battle.statusSystem.apply({ target: "enemy", type: "armorBreak", turns: 2 }, { source: "visual-smoke" });
+      battle.armorBreakActive = true;
+      battle.armorBreakTurns = 2;
+      battle.enemyStunTimer = 0.9;
       const attack = battle.commitActiveAttack({
         kind: "playerQTE",
         source: "player",
@@ -573,6 +579,13 @@ async function runVisualSmoke() {
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
         const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
         return !!(d && d.isFire && d.isGreatsword);
+      })()`) },
+      { label: "actor status visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || !r.getActorStatusVisuals) return false;
+        const enemy = r.getActorStatusVisuals(battle, "enemy");
+        const player = r.getActorStatusVisuals(battle, "player");
+        return enemy.burn && enemy.armorBreak && enemy.stun && player.heatRatio > 0.7;
       })()`) }
     ]);
 
@@ -584,6 +597,12 @@ async function runVisualSmoke() {
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
       battle.activeAttackSystem.clear();
+      battle.resourceSystem.add("spellEnergy", 140);
+      battle.playerState.absorbReady = true;
+      battle.playerState.shieldEnchanted = true;
+      battle.statusSystem.apply({ target: "player", type: "absorbReady", turns: 1 }, { source: "visual-smoke" });
+      battle.statusSystem.apply({ target: "player", type: "shieldEnchant", turns: 1 }, { source: "visual-smoke" });
+      battle.statusSystem.apply({ target: "player", type: "overload", turns: 1 }, { source: "visual-smoke" });
       const attack = battle.commitActiveAttack({
         kind: "playerQTE",
         source: "player",
@@ -614,6 +633,12 @@ async function runVisualSmoke() {
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
         const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
         return !!(d && d.isAbsorb);
+      })()`) },
+      { label: "player status visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || !r.getActorStatusVisuals) return false;
+        const player = r.getActorStatusVisuals(battle, "player");
+        return player.spellRatio > 0.9 && player.absorbReady && player.shieldEnchant && player.overload;
       })()`) }
     ]);
 

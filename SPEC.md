@@ -1840,6 +1840,25 @@ Changes:
 - Static smoke protects `style-choice-grid`, the button sync logic, and the counterflow option.
 - Visual smoke now asserts the `counterflow` style button is visible in the rendered desktop main menu.
 
+### R24 Actor Status Auras, Completed
+
+Goal: important combat states should attach to the actor models instead of only appearing as side icons or floating text.
+
+Implemented direction:
+
+- `CanvasRenderer.getActorStatusVisuals()` summarizes player/enemy status and resource state for drawing only.
+- Player heat now creates fire rings and flame wisps around the model.
+- Player spell energy now creates orbiting absorb/counterspell particles.
+- `absorbReady`, `shieldEnchant`, and `overload` now add visible body/ward overlays to the player model.
+- Enemy `burn`, `armorBreak`, and stun now draw directly on the enemy model with flames, crack overlays, and star-orbit stun cues.
+- The old enemy stun text above the model is removed in favor of the model-attached cue, while the compact status icon list remains available.
+
+Acceptance criteria:
+
+- Renderer exposes actor status visual helper methods.
+- Visual smoke forces heat, burn, armor break, stun, absorb, shield enchant, and overload states in screenshot scenarios.
+- Static smoke protects the helper surface and screenshot coverage.
+
 ## 22. Verification Commands
 
 ```powershell

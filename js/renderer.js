@@ -1606,6 +1606,8 @@ class CanvasRenderer {
 
     this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42, "rgba(52, 152, 219, 0.3)");
     this.drawActorGroundSigil(ctx, basePx + stanceOffset, basePy + 45, 50, styleColor, "player", t);
+    const playerStatusVisuals = this.getActorStatusVisuals(scene, "player");
+    this.drawPlayerStatusAuras(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
     this.drawActorMotionLines(ctx, px, py, playerReaction, "player", styleColor);
     this.drawPlayerSilhouette(ctx, scene, {
       x: px,
@@ -1619,6 +1621,7 @@ class CanvasRenderer {
       pose,
       t
     });
+    this.drawPlayerStatusOverlays(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
     this.drawActorReactionOverlay(px, py, 35, playerReaction);
 
     // 敌人
@@ -1636,8 +1639,10 @@ class CanvasRenderer {
     ex += enemyForward;
 
     const enemyConfig = scene.enemyConfig || EnemyDatabase.base;
+    const enemyStatusVisuals = this.getActorStatusVisuals(scene, "enemy");
     this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58, "rgba(192, 57, 43, 0.3)");
     this.drawActorGroundSigil(ctx, baseEx + enemyForward, baseEy + 55, 62, enemyConfig.color || "#e74c3c", "enemy", t);
+    this.drawEnemyStatusAuras(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
     this.drawActorMotionLines(ctx, ex, ey, enemyReaction, "enemy", enemyConfig.color || "#e74c3c");
     this.drawEnemySilhouette(ctx, scene, {
       x: ex,
@@ -1646,14 +1651,8 @@ class CanvasRenderer {
       reaction: enemyReaction,
       t
     });
+    this.drawEnemyStatusOverlays(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
     this.drawActorReactionOverlay(ex, ey, 50, enemyReaction);
-
-    // 敌人眩晕提示
-    if (scene.enemyStunTimer > 0) {
-      ctx.fillStyle = "#f1c40f";
-      ctx.font = "bold 18px sans-serif";
-      ctx.fillText(`眩晕 ${scene.enemyStunTimer.toFixed(1)}s`, ex, ey - 70);
-    }
 
     // 敌方攻击意图图标
     if (scene.enemyAttack && scene.enemyAttack.icon) {
@@ -1861,6 +1860,299 @@ class CanvasRenderer {
       }
     }
 
+    ctx.restore();
+  }
+
+  getActorStatusVisuals(scene, target) {
+    const statuses = scene && scene.statusSystem && scene.statusSystem.list
+      ? scene.statusSystem.list(target)
+      : [];
+    const has = (id) => statuses.some(status => status.id === id);
+    const durationOf = (id) => {
+      const status = statuses.find(item => item.id === id);
+      return status ? status.duration || 0 : 0;
+    };
+
+    if (target === "player") {
+      const playerState = scene.playerState || {};
+      const resourceSystem = scene.resourceSystem || null;
+      const heat = resourceSystem ? Number(resourceSystem.heat || 0) : 0;
+      const maxHeat = resourceSystem ? Number(resourceSystem.maxHeat || 100) : 100;
+      const spellEnergy = Number(playerState.spellEnergy || 0);
+      const spellCap = resourceSystem && resourceSystem.getSpellEnergyCap
+        ? Number(resourceSystem.getSpellEnergyCap() || playerState.maxSpellEnergy || 100)
+        : Number(playerState.maxSpellEnergy || 100);
+      return {
+        statuses,
+        heat,
+        heatRatio: maxHeat > 0 ? Utils.clamp(heat / maxHeat, 0, 1.2) : 0,
+        spellEnergy,
+        spellRatio: spellCap > 0 ? Utils.clamp(spellEnergy / spellCap, 0, 1.5) : 0,
+        absorbReady: !!playerState.absorbReady || has("absorbReady"),
+        shieldEnchant: !!playerState.shieldEnchanted || has("shieldEnchant"),
+        overload: has("overload") || spellEnergy > spellCap || (maxHeat > 0 && heat / maxHeat >= 0.85),
+        overloadDuration: durationOf("overload")
+      };
+    }
+
+    return {
+      statuses,
+      burn: has("burn"),
+      burnDuration: durationOf("burn"),
+      armorBreak: !!(scene && scene.armorBreakActive) || has("armorBreak"),
+      armorBreakDuration: scene && scene.armorBreakActive ? scene.armorBreakTurns : durationOf("armorBreak"),
+      stun: !!(scene && scene.enemyStunTimer > 0) || has("stun"),
+      stunDuration: scene && scene.enemyStunTimer > 0 ? scene.enemyStunTimer : durationOf("stun")
+    };
+  }
+
+  drawPlayerStatusAuras(ctx, scene, x, y, color, visuals, t) {
+    if (!visuals) return;
+    const heatAlpha = Utils.clamp(visuals.heatRatio, 0, 1);
+    const spellAlpha = Utils.clamp(visuals.spellRatio, 0, 1);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    if (heatAlpha > 0.04) {
+      const flameColor = visuals.heatRatio >= 0.85 ? "#ff4d2e" : "#e67e22";
+      ctx.strokeStyle = this.hexToRgba(flameColor, 0.18 + heatAlpha * 0.28);
+      ctx.fillStyle = this.hexToRgba(flameColor, 0.08 + heatAlpha * 0.10);
+      ctx.shadowColor = flameColor;
+      ctx.shadowBlur = 14 + heatAlpha * 12;
+      ctx.lineWidth = 2 + heatAlpha * 2;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 45, 48 + heatAlpha * 20, 13 + heatAlpha * 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      for (let i = 0; i < 4; i++) {
+        const phase = t * (5.2 + i * 0.4) + i * 1.7;
+        const fx = x - 34 + i * 22 + Math.sin(phase) * 4;
+        const fy = y + 28 - Math.abs(Math.sin(phase * 0.8)) * 12;
+        this.drawStatusFlame(ctx, fx, fy, 22 + heatAlpha * 16, flameColor, phase, 0.32 + heatAlpha * 0.38);
+      }
+    }
+
+    if (spellAlpha > 0.04) {
+      const spellColor = visuals.overload ? "#f39c12" : "#9b59b6";
+      this.drawStatusOrbit(ctx, x, y - 8, 42 + spellAlpha * 16, spellColor, t, 0.20 + spellAlpha * 0.34, visuals.overload ? 4 : 3);
+      if (visuals.spellEnergy > 0) {
+        for (let i = 0; i < 3; i++) {
+          const phase = t * 1.8 + i * Math.PI * 2 / 3;
+          const ox = x + Math.cos(phase) * (28 + spellAlpha * 18);
+          const oy = y - 12 + Math.sin(phase) * 10;
+          this.drawStatusSpark(ctx, ox, oy, spellColor, 0.36 + spellAlpha * 0.28, 4 + spellAlpha * 4);
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawPlayerStatusOverlays(ctx, scene, x, y, color, visuals, t) {
+    if (!visuals) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    if (visuals.shieldEnchant) {
+      const shieldColor = "#9b59b6";
+      ctx.strokeStyle = this.hexToRgba(shieldColor, 0.78);
+      ctx.fillStyle = this.hexToRgba(shieldColor, 0.08);
+      ctx.shadowColor = shieldColor;
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x + 42, y - 4, 42 + Math.sin(t * 7) * 3, -1.28, 1.18);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + 66, y - 28);
+      ctx.lineTo(x + 82, y - 4);
+      ctx.lineTo(x + 66, y + 22);
+      ctx.stroke();
+    }
+
+    if (visuals.absorbReady) {
+      const absorbColor = "#5dade2";
+      this.drawStatusOrbit(ctx, x, y - 18, 26, absorbColor, -t * 1.3, 0.46, 3);
+      this.drawStatusSpark(ctx, x, y - 20, absorbColor, 0.72, 8);
+    }
+
+    if (visuals.overload) {
+      const overloadColor = "#f39c12";
+      ctx.strokeStyle = this.hexToRgba(overloadColor, 0.58 + Math.sin(t * 11) * 0.12);
+      ctx.shadowColor = overloadColor;
+      ctx.shadowBlur = 22;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 5; i++) {
+        const yy = y - 35 + i * 15;
+        ctx.beginPath();
+        ctx.moveTo(x - 34 + Math.sin(t * 9 + i) * 4, yy);
+        ctx.lineTo(x - 10 + Math.cos(t * 8 + i) * 5, yy + 7);
+        ctx.lineTo(x + 14 + Math.sin(t * 7 + i) * 4, yy + 1);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  drawEnemyStatusAuras(ctx, scene, x, y, color, visuals, t) {
+    if (!visuals) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    if (visuals.burn) {
+      const burnColor = "#e74c3c";
+      ctx.strokeStyle = this.hexToRgba(burnColor, 0.46);
+      ctx.fillStyle = this.hexToRgba("#e67e22", 0.10);
+      ctx.shadowColor = burnColor;
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 52, 62, 17, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      for (let i = 0; i < 5; i++) {
+        const phase = t * (5 + i * 0.35) + i * 1.4;
+        this.drawStatusFlame(ctx, x - 42 + i * 21 + Math.sin(phase) * 3, y + 38 - Math.abs(Math.sin(phase)) * 12, 26, burnColor, phase, 0.55);
+      }
+    }
+
+    if (visuals.armorBreak) {
+      const crackColor = "#ff6b5f";
+      ctx.strokeStyle = this.hexToRgba(crackColor, 0.36 + Math.sin(t * 8) * 0.08);
+      ctx.shadowColor = crackColor;
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 54, 70, 19, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (visuals.stun) {
+      this.drawStatusOrbit(ctx, x, y - 80, 34, "#f1c40f", t * 2.2, 0.62, 5);
+    }
+
+    ctx.restore();
+  }
+
+  drawEnemyStatusOverlays(ctx, scene, x, y, color, visuals, t) {
+    if (!visuals) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    if (visuals.armorBreak) {
+      const crackColor = "#ff786d";
+      ctx.strokeStyle = this.hexToRgba(crackColor, 0.76);
+      ctx.shadowColor = crackColor;
+      ctx.shadowBlur = 14;
+      ctx.lineWidth = 3;
+      const cracks = [
+        [[x - 18, y - 26], [x - 7, y - 8], [x - 15, y + 12]],
+        [[x + 20, y - 18], [x + 6, y - 2], [x + 15, y + 22]],
+        [[x - 5, y - 34], [x + 3, y - 16], [x - 4, y + 4]]
+      ];
+      for (const crack of cracks) {
+        ctx.beginPath();
+        ctx.moveTo(crack[0][0], crack[0][1]);
+        for (let i = 1; i < crack.length; i++) ctx.lineTo(crack[i][0], crack[i][1]);
+        ctx.stroke();
+      }
+    }
+
+    if (visuals.burn) {
+      const burnColor = "#ff6b2f";
+      for (let i = 0; i < 4; i++) {
+        const phase = t * 6 + i * 1.5;
+        this.drawStatusFlame(ctx, x - 24 + i * 16, y + 4 - Math.abs(Math.sin(phase)) * 10, 24, burnColor, phase, 0.48);
+      }
+    }
+
+    if (visuals.stun) {
+      const starColor = "#f1c40f";
+      for (let i = 0; i < 5; i++) {
+        const phase = t * 2.6 + i * Math.PI * 2 / 5;
+        const sx = x + Math.cos(phase) * 36;
+        const sy = y - 82 + Math.sin(phase) * 9;
+        this.drawStatusStar(ctx, sx, sy, 5 + Math.sin(t * 8 + i) * 1.2, starColor, 0.72);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawStatusFlame(ctx, x, y, height, color, phase, alpha = 0.5) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = this.hexToRgba(color || "#e67e22", alpha);
+    ctx.strokeStyle = this.hexToRgba("#ffd27a", alpha * 0.72);
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = color || "#e67e22";
+    ctx.shadowBlur = 12;
+    const sway = Math.sin(phase) * 5;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(-10, -height * 0.34, -5 + sway, -height * 0.72, sway, -height);
+    ctx.bezierCurveTo(8 + sway, -height * 0.62, 12, -height * 0.30, 0, 0);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = this.hexToRgba("#ffd27a", alpha * 0.45);
+    ctx.beginPath();
+    ctx.moveTo(0, -height * 0.1);
+    ctx.bezierCurveTo(-4, -height * 0.35, 0, -height * 0.54, 4 + sway * 0.25, -height * 0.68);
+    ctx.bezierCurveTo(5, -height * 0.42, 6, -height * 0.24, 0, -height * 0.1);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawStatusOrbit(ctx, x, y, radius, color, t, alpha = 0.45, points = 4) {
+    ctx.save();
+    ctx.strokeStyle = this.hexToRgba(color || "#ffffff", alpha);
+    ctx.shadowColor = color || "#ffffff";
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius, radius * 0.32, 0.14, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < points; i++) {
+      const phase = t + i * Math.PI * 2 / points;
+      const px = x + Math.cos(phase) * radius;
+      const py = y + Math.sin(phase) * radius * 0.32;
+      this.drawStatusSpark(ctx, px, py, color, alpha + 0.12, 3.5);
+    }
+    ctx.restore();
+  }
+
+  drawStatusSpark(ctx, x, y, color, alpha = 0.6, radius = 5) {
+    ctx.save();
+    ctx.fillStyle = this.hexToRgba(color || "#ffffff", alpha);
+    ctx.shadowColor = color || "#ffffff";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawStatusStar(ctx, x, y, radius, color, alpha = 0.75) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = this.hexToRgba(color || "#f1c40f", alpha);
+    ctx.shadowColor = color || "#f1c40f";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? radius : radius * 0.45;
+      const a = -Math.PI / 2 + i * Math.PI / 5;
+      const px = Math.cos(a) * r;
+      const py = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
@@ -3450,20 +3742,26 @@ class CanvasRenderer {
   drawStatusIcons(scene) {
     const ctx = this.ctx;
     const icons = [];
+    const seen = new Set();
+    const addIcon = (key, item) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      icons.push(item);
+    };
 
-    if (scene.armorBreakActive) icons.push({ icon: "破", color: "#e74c3c", count: scene.armorBreakTurns });
+    if (scene.armorBreakActive) addIcon("enemy:armorBreak", { icon: "破", color: "#e74c3c", count: scene.armorBreakTurns });
     if (scene.playerState) {
       const ps = scene.playerState;
-      if (ps.consecutiveDodges > 0) icons.push({ icon: "闪", color: "#2ecc71", count: ps.consecutiveDodges });
-      if (ps.shieldEnchanted) icons.push({ icon: "咒", color: "#9b59b6" });
-      if (ps.absorbReady) icons.push({ icon: "吸", color: "#5dade2" });
-      if (ps.spellEnergy > ps.maxSpellEnergy) icons.push({ icon: "溢", color: "#f39c12" });
+      if (ps.consecutiveDodges > 0) addIcon("player:dodgeStreak", { icon: "闪", color: "#2ecc71", count: ps.consecutiveDodges });
+      if (ps.shieldEnchanted) addIcon("player:shieldEnchant", { icon: "咒", color: "#9b59b6" });
+      if (ps.absorbReady) addIcon("player:absorbReady", { icon: "吸", color: "#5dade2" });
+      if (ps.spellEnergy > ps.maxSpellEnergy) addIcon("player:overload", { icon: "溢", color: "#f39c12" });
     }
-    if (scene.enemyStunTimer > 0) icons.push({ icon: "晕", color: "#f1c40f", count: Math.ceil(scene.enemyStunTimer * 10) / 10 });
+    if (scene.enemyStunTimer > 0) addIcon("enemy:stun", { icon: "晕", color: "#f1c40f", count: Math.ceil(scene.enemyStunTimer * 10) / 10 });
     if (scene.statusSystem) {
       for (const status of scene.statusSystem.list().slice(0, 6)) {
         const def = scene.statusSystem.getDefinition(status.id);
-        icons.push({
+        addIcon(`${status.target}:${status.id}`, {
           icon: def.icon || "态",
           color: def.color || "#ffffff",
           count: status.duration
