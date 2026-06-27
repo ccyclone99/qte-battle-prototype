@@ -528,6 +528,12 @@ async function runVisualSmoke() {
         const light = r.getCombatPhaseLighting(battle);
         return !!(light && light.active && light.mode === "qte" && light.playerHot && light.centerHot && light.intensity >= 0.4);
       })()`) },
+      { label: "player qte chain intent active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerQTEChainIntentVisuals) return false;
+        const chain = r.getPlayerQTEChainIntentVisuals(battle);
+        return !!(chain && chain.active && chain.count >= 3 && chain.rows.some(row => row.current) && chain.rows.some(row => row.future) && chain.progress >= 0 && chain.progress <= 1);
+      })()`) },
       { label: "battle qte suppresses stale overlays", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const scene = typeof battle !== "undefined" ? battle : null;

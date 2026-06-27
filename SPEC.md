@@ -2196,6 +2196,28 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke verifies `spellDoubleCut` produces a three-node chain intent layer with current/pending pressure and follow-up nodes.
 
+### R42 Player QTE Chain Intent Pass, Completed
+
+Goal: player QTE chains should read from the character-side stage picture, not only from the bottom timing bar and large key prompt.
+
+Implemented direction:
+
+- `CanvasRenderer.getPlayerQTEChainIntentVisuals()` derives a render-only profile from the active `qteRunner`, current node, result log, input type, branch metadata, and chain family.
+- `drawPlayerQTEChainIntentLayer()` draws a low-text player-side node chain:
+  - completed nodes show success/perfect/fail marks
+  - current node pulses and has a progress ring
+  - future nodes stay dim
+  - branch-capable nodes show a small fork cue
+  - weapon/spell chain badge sits near the player side
+- The layer complements the precise QTE bar without adding a new timing panel.
+- This pass is render-only and does not change QTE timing, judgement windows, chain branching, damage, active attacks, hit confirm, or input handling.
+
+Acceptance criteria:
+
+- Renderer exposes player QTE chain intent helpers.
+- Static smoke protects the helper surface.
+- Visual smoke verifies battle style `6` / `flame_blade` QTE exposes a multi-node player chain layer with current and future nodes.
+
 ## 22. Verification Commands
 
 ```powershell

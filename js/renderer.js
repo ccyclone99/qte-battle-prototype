@@ -2576,6 +2576,229 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  getPlayerQTEChainIntentVisuals(scene) {
+    const runner = scene && scene.qteRunner;
+    const chain = runner && runner.chain;
+    if (!runner || !chain || !Array.isArray(chain.nodes) || chain.nodes.length <= 1 || scene.turnState !== "qte_running") {
+      return { active: false };
+    }
+
+    const resultLog = Array.isArray(runner.resultLog) ? runner.resultLog : [];
+    const resultByNode = new Map(resultLog.map(entry => [entry.nodeId, entry]));
+    const currentNode = runner.currentNode ? runner.currentNode() : null;
+    const currentIndex = Math.max(0, Math.min(chain.nodes.length - 1, runner.nodeIndex || 0));
+    const chainId = runner.context && runner.context.chainId ? runner.context.chainId : (chain.id || chain.name || "qte");
+    const family = chain.family || (runner.context && runner.context.chainFamily) || "";
+    const color = chain.color
+      || (scene.playerConfig && scene.playerConfig.style && StyleDatabase[scene.playerConfig.style] && StyleDatabase[scene.playerConfig.style].color)
+      || "#3498db";
+
+    const rows = chain.nodes.map((node, index) => {
+      const result = resultByNode.get(node.id) || null;
+      const current = currentNode && currentNode.id === node.id;
+      const input = node.input || {};
+      const nextIds = ["onPerfect", "onSuccess", "onEarly", "onLate", "onFail"]
+        .map(key => node[key] && node[key].next)
+        .filter(Boolean);
+      const outcome = result ? result.outcome : null;
+      return {
+        index,
+        id: node.id,
+        name: node.name || node.id,
+        key: input.type === "hold_release" ? input.key : (input.key || ""),
+        inputType: input.type || "press",
+        current,
+        completed: !!result,
+        outcome,
+        failed: outcome === "fail" || outcome === "timeout" || outcome === "early" || outcome === "late",
+        perfect: outcome === "perfect",
+        success: outcome === "success",
+        future: !result && !current,
+        progress: current ? (runner.currentNodeProgress ? runner.currentNodeProgress() : Utils.clamp((runner.nodeTimer || 0) / Math.max(0.001, node.duration || 1), 0, 1)) : 0,
+        hasBranch: nextIds.length > 1 || new Set(nextIds).size > 1,
+        window: node.window || null,
+        duration: node.duration || 1
+      };
+    });
+
+    const completedCount = rows.filter(row => row.completed).length;
+    const current = rows.find(row => row.current) || rows[currentIndex] || rows[0];
+
+    return {
+      active: true,
+      chainId,
+      family,
+      name: chain.name || chainId,
+      color,
+      count: rows.length,
+      currentIndex: current ? current.index : currentIndex,
+      completedCount,
+      progress: current ? current.progress : 0,
+      rows
+    };
+  }
+
+  drawPlayerQTEChainIntentLayer(ctx, visuals, t) {
+    if (!visuals || !visuals.active || !Array.isArray(visuals.rows) || visuals.rows.length <= 1) return;
+
+    const playerX = 220;
+    const playerY = this.height - 190;
+    const baseX = 112;
+    const baseY = playerY - 92;
+    const count = visuals.rows.length;
+    const spacing = count <= 3 ? 38 : 31;
+    const primary = visuals.color || "#3498db";
+    const family = String(visuals.family || "").toLowerCase();
+    const isSpell = family === "fire" || family === "absorb" || family === "staff";
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    ctx.strokeStyle = this.hexToRgba(primary, 0.18);
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 9]);
+    ctx.beginPath();
+    for (const row of visuals.rows) {
+      const x = baseX + row.index * spacing;
+      const y = baseY - Math.sin(row.index * 0.82) * 12;
+      if (row.index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const current = visuals.rows.find(row => row.current) || visuals.rows[visuals.currentIndex] || visuals.rows[0];
+    if (current) {
+      const cx = baseX + current.index * spacing;
+      const cy = baseY - Math.sin(current.index * 0.82) * 12;
+      ctx.save();
+      ctx.globalAlpha = 0.16 + Math.sin(t * 5) * 0.03;
+      ctx.strokeStyle = this.hexToRgba(primary, 0.88);
+      ctx.shadowColor = primary;
+      ctx.shadowBlur = 16;
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(playerX + 18, playerY - 38);
+      ctx.quadraticCurveTo(playerX - 36, playerY - 118, cx, cy);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const row of visuals.rows) {
+      const x = baseX + row.index * spacing;
+      const y = baseY - Math.sin(row.index * 0.82) * 12;
+      const hot = row.current;
+      const done = row.completed;
+      const failed = row.failed;
+      const nodeColor = failed ? "#e74c3c" : (row.perfect ? "#f1c40f" : (done ? "#2ecc71" : primary));
+      const pulse = hot ? 0.82 + Math.sin(t * 9 + row.index) * 0.18 : 0.72;
+      const alpha = hot ? 0.78 * pulse : (done ? 0.42 : 0.22);
+      const radius = hot ? 13 : 9;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.globalAlpha = alpha;
+      ctx.shadowColor = nodeColor;
+      ctx.shadowBlur = hot ? 18 : 9;
+      ctx.strokeStyle = nodeColor;
+      ctx.fillStyle = this.hexToRgba(nodeColor, hot ? 0.24 : 0.10);
+      ctx.lineWidth = hot ? 3 : 2;
+
+      ctx.beginPath();
+      if (row.inputType === "hold_release") {
+        ctx.arc(0, 0, radius + 2, 0, Math.PI * 2);
+      } else if (row.inputType === "rhythm") {
+        ctx.moveTo(0, -radius - 2);
+        ctx.lineTo(radius + 2, 0);
+        ctx.lineTo(0, radius + 2);
+        ctx.lineTo(-radius - 2, 0);
+        ctx.closePath();
+      } else {
+        ctx.roundRect(-radius, -radius, radius * 2, radius * 2, 5);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      if (hot) {
+        const start = -Math.PI / 2;
+        const end = start + Math.PI * 2 * Utils.clamp(row.progress || 0, 0, 1);
+        ctx.globalAlpha = 0.86;
+        ctx.strokeStyle = this.hexToRgba("#ffffff", 0.84);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius + 8, start, end);
+        ctx.stroke();
+        ctx.globalAlpha = 0.28;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius + 12 + Math.sin(t * 7) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (done) {
+        ctx.globalAlpha = failed ? 0.46 : 0.62;
+        ctx.strokeStyle = failed ? "#ffffff" : this.hexToRgba("#ffffff", 0.82);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (failed) {
+          ctx.moveTo(-radius * 0.52, -radius * 0.52);
+          ctx.lineTo(radius * 0.52, radius * 0.52);
+          ctx.moveTo(radius * 0.52, -radius * 0.52);
+          ctx.lineTo(-radius * 0.52, radius * 0.52);
+        } else {
+          ctx.moveTo(-radius * 0.58, 0);
+          ctx.lineTo(-radius * 0.12, radius * 0.45);
+          ctx.lineTo(radius * 0.62, -radius * 0.42);
+        }
+        ctx.stroke();
+      } else if (row.hasBranch) {
+        ctx.globalAlpha = 0.34;
+        ctx.strokeStyle = this.hexToRgba("#ffffff", 0.65);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.35, radius * 0.62);
+        ctx.lineTo(0, radius * 0.18);
+        ctx.lineTo(radius * 0.35, radius * 0.62);
+        ctx.stroke();
+      }
+
+      if (row.key) {
+        ctx.globalAlpha = hot ? 0.86 : 0.48;
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 9px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(row.key).slice(0, 2).toUpperCase(), 0, 0.5);
+      } else if (isSpell) {
+        ctx.globalAlpha = 0.44;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.translate(baseX - 34, baseY - 22);
+    ctx.globalAlpha = 0.30 + Math.sin(t * 4) * 0.05;
+    ctx.strokeStyle = this.hexToRgba(primary, 0.72);
+    ctx.fillStyle = this.hexToRgba(primary, 0.08);
+    ctx.shadowColor = primary;
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 17, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = primary;
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(isSpell ? "術" : "技", 0, 0);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
   drawEnemyGlyph(ctx, x, y, radius, color, t) {
     ctx.save();
     ctx.translate(x, y);
@@ -2764,6 +2987,7 @@ class CanvasRenderer {
     this.drawBattleStage(scene, t);
     this.drawCombatPhaseLighting(ctx, this.getCombatPhaseLighting(scene), t);
     this.drawEnemyChainIntentLayer(ctx, this.getEnemyChainIntentVisuals(scene), t);
+    this.drawPlayerQTEChainIntentLayer(ctx, this.getPlayerQTEChainIntentVisuals(scene), t);
 
     // 玩家
     const basePx = 220;
