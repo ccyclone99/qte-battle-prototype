@@ -6,7 +6,7 @@ const EncounterDatabase = {
       maxHp: 280,
       terrain: "熔炉窄桥",
       intent: "厚甲压迫，适合用火焰、破甲和大剑链打开缺口。",
-      recommendedStyles: ["flameforge", "fire", "eastern", "desolo"],
+      recommendedStyles: ["current"],
       attackPattern: ["shieldBash", "heavySmash", "slash", "shieldBash"],
       phases: [
         {
@@ -40,7 +40,7 @@ const EncounterDatabase = {
       maxHp: 190,
       terrain: "回声法阵",
       intent: "高频法术压迫，适合咒还吸收、镜咒反射和溢流爆发。",
-      recommendedStyles: ["mirrorblade", "absorb"],
+      recommendedStyles: ["current"],
       attackPattern: ["spellCast", "arcaneBolt", "curseBurst", "arcaneBolt"],
       phases: [
         {
@@ -74,7 +74,7 @@ const EncounterDatabase = {
       maxHp: 175,
       terrain: "湿滑巷道",
       intent: "短预警多段快攻，适合双刃、闪避暴击和追加攻击练习。",
-      recommendedStyles: ["desslo", "mirrorblade"],
+      recommendedStyles: ["current"],
       attackPattern: ["quickStab", "slash", "quickStab", "thrust"],
       phases: [
         {
@@ -107,7 +107,7 @@ const EncounterDatabase = {
       maxHp: 235,
       terrain: "仪式圆厅",
       intent: "盾击与秘术混合，适合火盾反伤、格挡和咒还弹反。",
-      recommendedStyles: ["fire", "flameforge", "absorb"],
+      recommendedStyles: ["current"],
       attackPattern: ["shieldBash", "arcaneBolt", "slash", "curseBurst"],
       phases: [
         {
@@ -141,17 +141,17 @@ const EncounterDatabase = {
       enemyId: "caster",
       maxHp: 210,
       terrain: "错拍训练场",
-      intent: "敌人会把法术和近身快攻压在同一回合内，适合测试拼刀覆盖、专属法术反制和双持覆盖。",
-      recommendedStyles: ["counterflow", "desslo"],
-      attackPattern: ["spellDoubleCut", "knifeFlurry", "arcaneBolt", "quickStab"],
+      intent: "敌人会轮换物理连斩、法术起手、盾压、重击和咒爆追击，适合测试拼刀覆盖、施法打断和双持多段覆盖。",
+      recommendedStyles: ["current"],
+      attackPattern: ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"],
       phases: [
         {
           id: "tight_loop",
           name: "贴身错拍",
           hpBelow: 0.5,
-          attackPattern: ["knifeFlurry", "spellDoubleCut", "quickStab", "curseBurst"],
+          attackPattern: ["knifeFlurry", "bladeRushTriple", "spellDoubleCut", "feintCrush", "shieldSpellRush", "curseNeedle"],
           ruleLines: [
-            "半血后进入贴身错拍：双段物理压迫更频繁，反制覆盖价值上升。"
+            "半血后进入贴身错拍：物理连段更频繁，反制覆盖价值上升。"
           ]
         }
       ],
@@ -163,9 +163,9 @@ const EncounterDatabase = {
         swordDamageMul: 1.03
       },
       ruleLines: [
-        "不开局赠送法术能量；法术反制只来自敌方回合的专属反制链。",
-        "敌人同一回合可出现多段攻势；单手覆盖 1 段，双持可覆盖多段。",
-        "逆势双刃的己方回合更短：不手动输入会自动攻击，但没有额外加成。"
+        "不开局赠送法术能量；法术处理来自敌方回合的出刀打断。",
+        "敌人同一回合会轮换多段物理、法术+近身、盾压和重击错拍。",
+        "当前方案使用双持覆盖多段；只有应对成功后的追击窗口可手动触发武器 QTE。"
       ]
     }
   }

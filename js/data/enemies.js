@@ -218,6 +218,17 @@ const EnemyDatabase = {
   },
 
   attackChains: {
+    bladeRushTriple: {
+      name: "压步三连",
+      icon: "三",
+      description: "纯物理三段压迫；用于让开局立即进入拼刀判断，并测试双持连续覆盖多段快攻。",
+      nodes: [
+        { id: "jab", attackId: "quickStab", offset: 0 },
+        { id: "sweep", attackId: "slash", offset: 0.42 },
+        { id: "lunge", attackId: "thrust", offset: 0.84 }
+      ]
+    },
+
     spellDoubleCut: {
       name: "秘术双斩压制",
       icon: "連",
@@ -226,6 +237,38 @@ const EnemyDatabase = {
         { id: "cast", attackId: "arcaneBolt", offset: 0 },
         { id: "firstCut", attackId: "quickStab", offset: 1.02 },
         { id: "secondCut", attackId: "quickStab", offset: 1.38 }
+      ]
+    },
+
+    shieldSpellRush: {
+      name: "盾压咒击",
+      icon: "盾",
+      description: "盾击压近身距离，随后接法术飞弹与横扫；用于测试格挡、拼刀和施法打断的选择差异。",
+      nodes: [
+        { id: "bash", attackId: "shieldBash", offset: 0 },
+        { id: "bolt", attackId: "arcaneBolt", offset: 0.78 },
+        { id: "sweep", attackId: "slash", offset: 1.18 }
+      ]
+    },
+
+    feintCrush: {
+      name: "虚刺重砸",
+      icon: "重",
+      description: "短刺骗反应后接重砸；用于测试不能只按同一节奏处理所有敌方回合。",
+      nodes: [
+        { id: "feint", attackId: "quickStab", offset: 0 },
+        { id: "crush", attackId: "heavySmash", offset: 0.72 }
+      ]
+    },
+
+    curseNeedle: {
+      name: "咒爆追刺",
+      icon: "咒",
+      description: "慢速咒爆接近身追刺，再补一枚飞弹；用于测试法术打断与后续追击覆盖。",
+      nodes: [
+        { id: "curse", attackId: "curseBurst", offset: 0 },
+        { id: "needle", attackId: "quickStab", offset: 1.05 },
+        { id: "bolt", attackId: "arcaneBolt", offset: 1.52 }
       ]
     },
 

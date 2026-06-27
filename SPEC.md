@@ -1492,9 +1492,9 @@ Implemented direction:
 - Game-over rendering now shows a `战斗摘要` panel under the win/loss result.
 - Flow smoke protects phase and accuracy lines in the result summary.
 
-### R20 - Counterflow, Enemy Attack Chains, And Coverage Frames
+### R20 - Enemy-Turn Counter Plan, Enemy Attack Chains, And Coverage Frames
 
-Goal: support counter-focused styles where the meaningful decision often happens inside the enemy turn, while still keeping the current QTE chain system extensible.
+Goal: support a single counter-focused combat plan where the meaningful decision often happens inside the enemy turn. The old public 1-8 style layer is currently removed from the playable surface.
 
 Player-facing model:
 
@@ -1505,11 +1505,11 @@ Player-facing model:
   - Attack during an incoming enemy attack can create a clash.
   - Shield/guard can cover the currently targeted node.
   - Dodge can clear or iframe a node while preserving charge when the style allows it.
-  - Absorb/counterspell can catch an enemy spell, continue through a dodge beat, then release a projectile that deals damage only on impact.
-- Own-turn compression is style-specific.
-  - The counterflow style has a shorter player action bar.
+  - Attack during an incoming enemy spell interrupts casting; it does not enter a style-specific counterspell QTE chain.
+- Own-turn compression is part of the current plan.
+  - The current plan has a shorter player action bar.
   - If the player does nothing, automatic attack happens with no style bonus.
-  - If the player manually starts a QTE chain on own turn, the style can grant its manual-QTE crit bonus.
+  - If the player manually starts a weapon QTE chain on own turn, the plan can grant its manual-QTE crit bonus.
 
 Weapon distinction:
 
@@ -1523,14 +1523,14 @@ Weapon distinction:
 - Staff coverage target:
   - `coverageCount = 1`.
   - Its enemy-turn advantage should come mainly from prepared casting, absorb, and counterspell chains.
-  - Style `8` is not a staff or absorb package; its enemy-turn advantage comes from style-specific counterspell and dual-blade clash coverage.
+  - The current pass does not expose staff/counterspell as a player-facing style package.
 
 Combat art clarification:
 
 - `001 · 德斯洛大陆剑术`
   - Enemy attack incoming: attack into it to clash, reduce/negate damage, and deal counter damage.
   - Own turn: manual weapon QTE can replace automatic attack and crit when the style enables that rule.
-  - Enemy casting: attack or counterspell can interrupt the cast.
+  - Enemy casting: attack can interrupt the cast.
 - `008 · 东方诸国剑术`
   - Shield parry supports directional dodge.
   - Consecutive dodge enables crit.
@@ -1559,20 +1559,27 @@ EnemyDatabase.attackChains = {
 - Runtime expands a chain into multiple active enemy attacks.
 - The current incoming node is the earliest non-canceled enemy active attack by impact time.
 
-Acceptance criteria:
+Current acceptance criteria:
 
-- Style `8` selects `逆势双刃` and enters `逆势试炼`.
+- Starting battle selects the single current plan and enters `逆势试炼`.
+- The main menu does not expose 1-8 style selection.
+- The demo entry is hidden/disabled for this pass and is not part of active verification.
 - `逆势试炼` can start an enemy turn with a multi-node enemy attack chain.
 - Pressing an attack key during the response window can clash and cancel only the covered enemy attack nodes.
 - Dual blades can cover multiple rapid enemy nodes with consecutive hit segments; single heavy sword coverage remains one node by default.
-- Pressing `S` during the opening spell pressure can enter `counterspell_reversal`.
-- Counterspell QTE completion creates an active attack; damage resolves at hit impact, not at final keypress.
+- Pressing an attack key during opening spell pressure interrupts the spell without entering a counterspell QTE.
+- Interrupt/clash completion creates an active attack; damage resolves at hit impact, not at keypress.
 - Automatic attack on the compressed own turn does not receive the manual-QTE crit bonus.
-- Data validation, flow smoke, and static smoke cover the new style, encounter, attack-chain references, and counterflow flow.
+- Data validation, flow smoke, and static smoke cover the current plan, encounter, attack-chain references, clash, and spell-interrupt flow.
 
-### R50 - Counterflow Scope Correction, Completed
+### R50 - Counterflow Scope Correction, Superseded By R51
 
 Goal: restore style `8` to the original counterflow plan instead of letting it behave like a composite of `咒还` and `德斯洛大陆剑术`.
+
+Current status:
+
+- Superseded by R51. The public style layer is removed for now, so style `8` is no longer a playable/menu concept.
+- The previous `counterspell_reversal` style-chain direction is no longer part of the active combat plan.
 
 Correct scope:
 
@@ -1580,7 +1587,7 @@ Correct scope:
 - It does not grant the full `absorb` spell loadout.
 - It does not grant the `desslo` combat art package.
 - Own-turn `S` and `D` stay on the dual-blade base chains, not `absorb_siphon` or `overflow_burst`.
-- Enemy-turn spell response can still enter `counterspell_reversal`, but that chain is owned by the style as a reaction, not inherited from the absorb spell kit.
+- Enemy-turn spell response is now an attack interrupt, not `counterspell_reversal`.
 - Enemy-turn melee response uses `counterCoverage`, so dual blades can cover rapid follow-up nodes without needing generic attack-anytime rules.
 - `逆势试炼` no longer grants opening spell energy or absorb multipliers; it tests timing, coverage, and the style-specific counterspell chain.
 
@@ -1589,7 +1596,38 @@ Acceptance criteria:
 - Flow smoke asserts style `8` has no `spells` and no `combatArts`.
 - Flow smoke asserts style `8` starts `dualblades_s_v2` on own-turn `S`.
 - Static smoke asserts `逆势试炼` has no absorb resource or absorb damage modifiers.
-- Existing enemy-turn clash and counterspell active-attack flows still pass.
+- Existing enemy-turn clash and spell-interrupt active-attack flows still pass.
+
+### R51 - Single Counter Plan And Demo Freeze, Completed
+
+Goal: remove all public combat styles for now and keep only the current enemy-turn counter plan.
+
+Implemented direction:
+
+- `StyleDatabase` now contains only `current`, an internal default plan used to reuse the existing battle configuration path.
+- The main menu no longer exposes the style dropdown or style cards.
+- Starting battle/practice directly applies `current` and starts the enemy turn, so the first playable decision is a counter/defense response rather than a normal player opener.
+- Demo entry is hidden and disabled. Demo code remains in the repository but is frozen and not updated for this pass.
+- Touch controls no longer expose numeric style buttons.
+- The current plan uses Dual Blades, no spells, no combat arts, no style-specific counterspell chain.
+- Enemy-turn attack input now does two things:
+  - melee incoming attack: clash/coverage counter
+  - spell incoming attack: weapon interrupt, canceling covered enemy nodes without entering QTE
+- Manual weapon QTE is no longer available from a free own-turn opener. It only appears inside the follow-up window created by a successful enemy-turn response; automatic attack remains no-bonus if the follow-up window times out.
+
+Acceptance criteria:
+
+- Static smoke asserts only `StyleDatabase.current` remains.
+- Static smoke asserts the menu has no `style-select` or `style-choice-grid`.
+- Static smoke asserts the demo button is hidden/disabled.
+- Flow smoke asserts the default plan enters `counter_dojo`.
+- Flow smoke asserts the default plan opens on enemy turn with the physical `bladeRushTriple` pressure chain.
+- Flow smoke asserts the counter trial rotates `bladeRushTriple`, `spellDoubleCut`, `shieldSpellRush`, `knifeFlurry`, `feintCrush`, and `curseNeedle` instead of relying on a single enemy pattern.
+- The asset cache key is bumped to `r53a` so browser refreshes pick up the follow-up turn gating and expanded enemy pressure data.
+- Flow smoke asserts a normal recovery/player turn blocks manual weapon QTE and that successful counter/interrupt responses open `followup_turn`.
+- Flow smoke asserts enemy spell pressure is interrupted by weapon attack and does not start `counterspell_reversal`.
+- Flow smoke asserts enemy multi-node pressure can be canceled by attack coverage and still resolves damage at active-attack impact.
+- `node scripts\verify.js --skip-visual` passes; visual smoke remains frozen until the demo/browser coverage is re-scoped.
 
 ### R15 - Delayed Settlement Prototype, Superseded By R16
 
@@ -2428,7 +2466,7 @@ Implemented direction:
   - staff: focus sigil, orbiting motes, and cast tether line
 - The layer is drawn inside the player model transform after arms and weapon silhouettes, so it follows lean, hit squash, actor scale, and current QTE motion.
 - This pass is render-only. It does not change QTE timing, enemy AI, active attack travel, hit confirm, damage, resources, or input windows.
-- The asset cache key is bumped to `r50a`.
+- The asset cache key is bumped to `r51a`.
 
 Acceptance criteria:
 

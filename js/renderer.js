@@ -76,11 +76,11 @@ class CanvasRenderer {
       this.drawSpellSelection(scene);
     } else if (scene.turnState === "select_arts") {
       this.drawArtSelection(scene);
-    } else if (scene.turnState === "player_turn") {
+    } else if (scene.turnState === "player_turn" || scene.turnState === "followup_turn") {
       this.drawPlayerState(scene);
       this.drawStatusIcons(scene);
       this.drawActionBar(scene);
-      this.drawChainHints(scene);
+      if (scene.turnState === "followup_turn") this.drawChainHints(scene);
     } else if (scene.turnState === "enemy_turn") {
       this.drawPlayerState(scene);
       this.drawStatusIcons(scene);
@@ -3356,15 +3356,15 @@ class CanvasRenderer {
       laneDirection: 1
     };
 
-    if (scene.turnState === "player_turn") {
+    if (scene.turnState === "player_turn" || scene.turnState === "followup_turn") {
       return {
         ...base,
-        mode: "player",
+        mode: scene.turnState === "followup_turn" ? "followup" : "player",
         color: playerColor,
         secondary: "#f1c40f",
-        intensity: 0.34,
+        intensity: scene.turnState === "followup_turn" ? 0.42 : 0.28,
         progress: 0.18,
-        playerHot: true
+        playerHot: scene.turnState === "followup_turn"
       };
     }
 

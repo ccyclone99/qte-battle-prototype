@@ -19,13 +19,13 @@ class BattleSystem {
     this.enemyAttackCursor = 0;
 
     // 回合/阶段状态
-    this._turnState = "select_weapon"; // select_weapon | player_turn | enemy_turn | qte_running | attack_active | resolving | game_over
+    this._turnState = "select_weapon"; // select_weapon | player_turn | followup_turn | enemy_turn | qte_running | attack_active | resolving | game_over
     this.actionBarMax = 6.8;
     this.actionBar = 0;
 
-    // 玩家配置（开局选择）
+    // 玩家配置（当前固定反制方案）
     this.playerConfig = {
-      style: null,     // 选择的战斗风格（替代旧武器）
+      style: null,
       weapon: null,
       spells: [],
       combatArts: []
@@ -56,6 +56,8 @@ class BattleSystem {
     // QTE
     this.qteRunner = null;
     this.pendingFollowUp = false; // 荒芜之地追加攻击待触发
+    this.pendingFollowupContext = null;
+    this.resolvingToFollowup = false;
     this.compressedPlayerTurn = false;
 
     // 结算
@@ -63,7 +65,7 @@ class BattleSystem {
     this.resolveDuration = 0.68;
 
     // 消息
-    this.message = `按 1-8 选择战斗风格｜遭遇：${this.getEnemySelectionLabel()}`;
+    this.message = `反制方案准备中｜遭遇：${this.getEnemySelectionLabel()}`;
     this.messageTimer = 0;
     this.flashMessage = null;
 
@@ -128,7 +130,7 @@ class BattleSystem {
 
   onTurnEnter(state) {
     // 进入新状态时的统一处理
-    if (state === "player_turn") {
+    if (state === "player_turn" || state === "followup_turn") {
       SFX.sfxStatus();
     } else if (state === "enemy_turn") {
       SFX.sfxAlert();
@@ -204,6 +206,9 @@ class BattleSystem {
         break;
       case "player_turn":
         this.updatePlayerTurn(dt);
+        break;
+      case "followup_turn":
+        this.updateFollowupTurn(dt);
         break;
       case "enemy_turn":
         this.updateEnemyTurn(dt);
@@ -296,7 +301,7 @@ class BattleSystem {
         if (style.key === key) {
           this.input.consume();
           this.applyStyle(id);
-          this.startPlayerTurn();
+          this.startEnemyTurn();
           return;
         }
       }
@@ -317,7 +322,7 @@ class BattleSystem {
     const encounterId = this.encounterOverrideId || (!this.enemyOverrideId ? style.preferredEncounter : null);
     if (encounterId && this.applyEncounter(encounterId)) {
       const encounterMode = this.encounterOverrideId ? "指定遭遇" : "推荐遭遇";
-      this.log(`战斗风格：${style.name}；${encounterMode}：${this.encounterConfig.name}`);
+      this.log(`战斗方案：${style.name}；${encounterMode}：${this.encounterConfig.name}`);
       this.log(`地形：${this.encounterConfig.terrain}；规则：${(this.encounterConfig.ruleLines || [this.encounterConfig.intent])[0]}`);
       return;
     }
@@ -325,7 +330,7 @@ class BattleSystem {
     const enemyId = this.enemyOverrideId || style.preferredEnemy || "base";
     this.applyEnemyArchetype(enemyId);
     const enemyMode = this.enemyOverrideId ? "手动敌人测试" : "推荐敌人";
-    this.log(`战斗风格：${style.name}；${enemyMode}：${this.enemyConfig.name}`);
+    this.log(`战斗方案：${style.name}；${enemyMode}：${this.enemyConfig.name}`);
   }
 
   applyEnemyArchetype(enemyId, options = {}) {
@@ -419,7 +424,7 @@ class BattleSystem {
   getEncounterSummaryLines(limit = 3) {
     const encounter = this.encounterConfig || this.getEncounter(this.encounterOverrideId);
     if (!encounter) {
-      return ["自动推荐会按风格匹配命名遭遇。"];
+      return ["自动推荐会进入当前反制试炼。"];
     }
     const lines = [
       `${encounter.name} / ${encounter.terrain}`,
@@ -474,15 +479,23 @@ class BattleSystem {
   // ========== 玩家回合 ==========
 
   updatePlayerTurn(dt) {
-    // 先读取输入
-    this.consumeCombatInputs();
-    if (this.turnState !== "player_turn") return;
-
-    // 敌人眩晕处理
-    if (this.enemyStunTimer > 0) {
-      this.enemyStunTimer -= dt;
-      if (this.enemyStunTimer < 0) this.enemyStunTimer = 0;
+    this.applyResourceResults(this.resourceSystem.update(dt));
+    if (this.playerHp <= 0) {
+      this.setTurnState("game_over");
+      this.setMessage("法术能量反噬…");
+      return;
     }
+
+    this.actionBar += dt;
+    if (this.actionBar >= this.actionBarMax) {
+      this.actionBar = this.actionBarMax;
+      this.startResolving(() => this.startEnemyTurn());
+    }
+  }
+
+  updateFollowupTurn(dt) {
+    this.consumeCombatInputs();
+    if (this.turnState !== "followup_turn") return;
 
     this.applyResourceResults(this.resourceSystem.update(dt));
     if (this.playerHp <= 0) {
@@ -494,7 +507,6 @@ class BattleSystem {
     this.actionBar += dt;
     if (this.actionBar >= this.actionBarMax) {
       this.actionBar = this.actionBarMax;
-      // 追加窗口超时未响应，自动执行普攻并打断连击
       if (this.pendingFollowUp) {
         this.pendingFollowUp = false;
         this.resetCombo();
@@ -533,7 +545,13 @@ class BattleSystem {
   updateAttackActive(dt) {
     if (this.activeAttackSystem && this.activeAttackSystem.hasActive()) return;
     if (this.turnState === "attack_active") {
-      this.startResolving(() => this.startEnemyTurn());
+      const followupContext = this.pendingFollowupContext;
+      this.pendingFollowupContext = null;
+      if (followupContext) {
+        this.startResolvingToFollowup(followupContext);
+      } else {
+        this.startResolving(() => this.startEnemyTurn());
+      }
     }
   }
 
@@ -771,7 +789,14 @@ class BattleSystem {
       if (this.hasPendingEnemyActiveAttacks(attack)) return;
       if (attack.canceled || (attack.result && attack.result.defended)) return;
       if (attack.result && attack.result.absorbed) return;
-      this.startResolving(() => this.startPlayerTurn());
+      if (this.resolvingToFollowup) return;
+      this.startResolving(() => this.startEnemyTurn());
+      return;
+    }
+    if (attack.intent.followupContext) {
+      const context = this.pendingFollowupContext || attack.intent.followupContext;
+      this.pendingFollowupContext = null;
+      this.startResolvingToFollowup(context);
       return;
     }
     if (typeof attack.intent.onComplete === "function") {
@@ -910,16 +935,15 @@ class BattleSystem {
     if (!incoming || !attack) return false;
 
     const style = this.getCurrentStyle();
-    const counterChainId = style && style.counterChain;
-    const counterChain = counterChainId ? ChainDatabase[counterChainId] : null;
-    if (counterChain && counterChain.key === key && this.isIncomingSpellAttack(attack)) {
-      this.triggerCounterSpellQTE(counterChainId);
-      return true;
-    }
-
     if (!this.hasAttackAnytime() && !(style && style.counterCoverage)) return false;
     const chains = this.getEffectiveChains();
     if (!chains[key]) return false;
+
+    if (this.isIncomingSpellAttack(attack)) {
+      this.triggerSpellInterrupt(key);
+      return true;
+    }
+
     this.triggerClashCounter(key);
     return true;
   }
@@ -1066,15 +1090,20 @@ class BattleSystem {
     this.playerState.currentState = "swordAttack";
     this.input.clear();
     this.cancelEnemyAttacks(targets, "clash");
+    const followupContext = { source: "clash", covered: targets.length };
+    this.pendingFollowupContext = followupContext;
 
     const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
     const coveredSpell = targets.some(attack => this.isIncomingSpellAttack(attack.intent && attack.intent.attack));
     const damage = Math.max(8, Math.floor((weapon.normalAttack || 10) + targets.length * 5 + (coveredSpell ? 4 : 0)));
-    const isCrit = this.hasCombatArt("desslo") || (this.getCurrentStyle() && this.getCurrentStyle().manualQteCrit);
+    const currentStyle = this.getCurrentStyle();
+    const isCrit = this.hasCombatArt("desslo") || !!(currentStyle && currentStyle.counterCrit);
     const label = `clash:${chainKey}:${targets.map(attack => attack.intent.attackId || attack.id).join("+")}`;
     const finishClash = () => {
       if (this.checkEnemyDefeated()) return;
-      this.startResolving(() => this.startPlayerTurn());
+      const context = this.pendingFollowupContext || followupContext;
+      this.pendingFollowupContext = null;
+      this.startResolvingToFollowup(context);
     };
 
     SFX.sfxCounter();
@@ -1094,8 +1123,10 @@ class BattleSystem {
         label,
         weapon,
         isCrit,
+        followupContext,
         finishClash
       });
+      this.pendingFollowupContext = followupContext;
       this.setMessage(`拼刀覆盖 ${targets.length} 段 · 双刃连续反击`);
       return;
     }
@@ -1117,6 +1148,7 @@ class BattleSystem {
       chainFamily: "counter",
       weapon: this.playerConfig.weapon,
       color: weapon.color || "#2ecc71",
+      followupContext,
       onComplete: finishClash,
       damageIntent: {
         source: "player",
@@ -1135,6 +1167,86 @@ class BattleSystem {
       }
     });
     this.setMessage(`拼刀覆盖 ${targets.length} 段 · 反击推进中`);
+  }
+
+  triggerSpellInterrupt(chainKey) {
+    const coverageTargets = this.getCounterCoverageTargets();
+    if (coverageTargets.length === 0) return;
+
+    const activeEnemies = this.getActiveEnemyAttacks();
+    const incomingChainId = coverageTargets[0] && coverageTargets[0].intent ? coverageTargets[0].intent.chainId : null;
+    const targets = activeEnemies.filter(attack => {
+      if (!incomingChainId) return true;
+      return attack.intent && attack.intent.chainId === incomingChainId;
+    });
+    const interruptTargets = targets.length > 0 ? targets : coverageTargets;
+
+    const spellTargets = interruptTargets.filter(attack => this.isIncomingSpellAttack(attack.intent && attack.intent.attack));
+    const canceled = this.cancelEnemyAttacks(interruptTargets, "interrupt");
+    this.defenseTriggered = true;
+    this.playerState.currentState = "swordAttack";
+    this.input.clear();
+    const followupContext = { source: "spellInterrupt", covered: interruptTargets.length };
+    this.pendingFollowupContext = followupContext;
+
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    const damage = Math.max(10, Math.floor((weapon.normalAttack || 10) + 10 + spellTargets.length * 8));
+    const currentStyle = this.getCurrentStyle();
+    const isCrit = !!(currentStyle && currentStyle.counterCrit);
+    const label = `interrupt:${chainKey}:${interruptTargets.map(attack => attack.intent.attackId || attack.id).join("+")}`;
+    const token = `${label}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`;
+    const finishInterrupt = () => {
+      if (this.checkEnemyDefeated()) return;
+      const context = this.pendingFollowupContext || followupContext;
+      this.pendingFollowupContext = null;
+      this.startResolvingToFollowup(context);
+    };
+
+    SFX.sfxCounter();
+    this.triggerActorReaction("player", "attack", 1.12, {
+      color: weapon.color || "#2ecc71",
+      duration: 0.36
+    });
+    this.spawnFloatingText("施法打断", 220, 300, "status");
+    this.log(`出刀打断施法，取消 ${canceled.length} 段敌方动作`);
+
+    this.commitActiveAttack({
+      kind: "defenseCounter",
+      source: "player",
+      target: "enemy",
+      token,
+      attackType: "melee",
+      shape: "arc",
+      fromAnchor: "playerHand",
+      anchor: "playerHand",
+      toAnchor: "enemyCore",
+      damage,
+      label,
+      visualEvent: label,
+      motion: "spellInterrupt",
+      chainFamily: "counter",
+      weapon: this.playerConfig.weapon,
+      color: weapon.color || "#2ecc71",
+      followupContext,
+      onComplete: finishInterrupt,
+      damageIntent: {
+        source: "player",
+        target: "enemy",
+        token,
+        shape: "arc",
+        anchor: "playerHand",
+        toAnchor: "enemyCore",
+        damage,
+        label,
+        visualEvent: label,
+        motion: "spellInterrupt",
+        chainFamily: "counter",
+        weapon: this.playerConfig.weapon,
+        options: { isCrit }
+      }
+    });
+    this.setMessage(`出刀打断施法 · ${canceled.length} 段敌方动作被取消`);
+    this.pendingFollowupContext = followupContext;
   }
 
   getClashCounterHitCount(targets) {
@@ -1172,7 +1284,7 @@ class BattleSystem {
     });
   }
 
-  commitClashCounterSegments({ segments = [], token, label, weapon = {}, isCrit = false, finishClash }) {
+  commitClashCounterSegments({ segments = [], token, label, weapon = {}, isCrit = false, followupContext = null, finishClash }) {
     segments.forEach((segment, index) => {
       const isFinalHit = index === segments.length - 1;
       const segmentToken = `${token}:hit${segment.hitIndex}`;
@@ -1201,6 +1313,7 @@ class BattleSystem {
         label: segmentLabel,
         visualEvent: segmentLabel,
         ...segmentMeta,
+        followupContext: isFinalHit ? followupContext : null,
         timeline: segment.timeline,
         onComplete: isFinalHit ? finishClash : undefined,
         damageIntent: {
@@ -1370,7 +1483,7 @@ class BattleSystem {
     SFX.sfxDodge();
     this.triggerActorReaction("player", "dodge", 1.0, { color: "#2ecc71" });
     this.setMessage("施法中闪避！");
-    this.startResolving(() => this.startPlayerTurn());
+    this.startResolvingToFollowup({ source: "castDodge" });
   }
 
   interruptCastingAndParry() {
@@ -1381,7 +1494,7 @@ class BattleSystem {
       this.triggerDefenseQTE("parry");
     } else {
       this.setMessage("当前攻击无法弹反");
-      this.startResolving(() => this.startPlayerTurn());
+      this.startResolving(() => this.startEnemyTurn());
     }
   }
 
@@ -1393,7 +1506,7 @@ class BattleSystem {
     SFX.sfxDodge();
     this.triggerActorReaction("player", "dodge", 1.0, { color: "#2ecc71" });
     this.setMessage("格挡中闪避！");
-    this.startResolving(() => this.startPlayerTurn());
+    this.startResolvingToFollowup({ source: "guardDodge" });
   }
 
   canEasternGuardNeutralize(key) {
@@ -1417,7 +1530,7 @@ class BattleSystem {
     this.flashScreen("#2ecc71", 0.18);
     this.setMessage("攻击被化解");
     this.log(`东方诸国剑术化解了 ${attackName}`);
-    this.startResolving(() => this.startPlayerTurn());
+    this.startResolvingToFollowup({ source: "guardNeutralize" });
   }
 
   // ========== QTE 完成结算 ==========
@@ -1957,14 +2070,14 @@ class BattleSystem {
     }
 
     if (confirmed && effects.openPlayerTurn) {
-      this.setMessage("破绽打开 · 额外回合");
-      this.startResolving(() => this.startPlayerTurn());
+      this.setMessage("破绽打开 · 追击窗口");
+      this.startResolvingToFollowup({ source: "qteOpen" });
       return;
     }
 
     if (confirmed && effects.stunEnemy > 0) {
-      this.setMessage("敌人眩晕 · 额外回合");
-      this.startResolving(() => this.startPlayerTurn());
+      this.setMessage("敌人眩晕 · 追击窗口");
+      this.startResolvingToFollowup({ source: "qteStun" });
       return;
     }
 
@@ -1972,7 +2085,7 @@ class BattleSystem {
       this.pendingFollowUp = true;
       this.actionBar = 0;
       this.setMessage("按 A 追加");
-      this.setTurnState("player_turn");
+      this.setTurnState("followup_turn");
       this.qteRunner = null;
       return;
     }
@@ -1990,7 +2103,7 @@ class BattleSystem {
       this.setMessage("敌方连段继续");
       return;
     }
-    this.startResolving(() => this.startPlayerTurn());
+    this.startResolvingToFollowup({ source: "enemyResponse" });
   }
 
   resolveDefenseQTE(effects) {
@@ -2135,7 +2248,7 @@ class BattleSystem {
     if (effects.stunEnemy > 0) {
       this.cancelEnemyAttacks(this.getActiveEnemyAttacks(), "stun");
       this.enemyStunTimer = effects.stunEnemy;
-      this.startResolving(() => this.startPlayerTurn());
+      this.startResolvingToFollowup({ source: "defenseStun" });
       return;
     }
 
@@ -2239,9 +2352,9 @@ class BattleSystem {
     if (this.enemyStunTimer > 0) {
       this.enemyStunTimer = 0;
       this.showTurnBanner("敌方眩晕 · 跳过回合", "#9b59b6");
-      this.setMessage("敌人眩晕，额外回合");
+      this.setMessage("敌人眩晕，追击窗口");
       this.input.clear();
-      this.startResolving(() => this.startPlayerTurn());
+      this.startResolvingToFollowup({ source: "enemyStun" });
       return;
     }
 
@@ -2251,6 +2364,7 @@ class BattleSystem {
     this.defenseTriggered = false;
     this.resetCombo();
     this.pendingFollowUp = false;
+    this.pendingFollowupContext = null;
     this.enemyAttackChain = null;
     this.playerState.currentState = "idle";
     this.input.clear();
@@ -2364,8 +2478,9 @@ class BattleSystem {
   }
 
   startPlayerTurn() {
+    this.resolvingToFollowup = false;
     this.setTurnState("player_turn");
-    this.showTurnBanner("玩家回合", "#3498db");
+    this.showTurnBanner("恢复间隙", "#3498db");
     this.tickStatuses("player");
     if (this.playerHp <= 0 || this.turnState === "game_over") return;
 
@@ -2379,12 +2494,37 @@ class BattleSystem {
     this.defenseTriggered = false;
     this.qteRunner = null;
     this.pendingFollowUp = false;
+    this.pendingFollowupContext = null;
     this.playerState.currentState = "idle";
     this.input.clear();
 
-    this.setMessage(this.compressedPlayerTurn
-      ? "压缩己方回合：A/S/D 手动追击，否则自动攻击"
-      : "玩家回合：按 A/S/D 选择攻击链");
+    this.setMessage("恢复间隙：无追击资格，不能手动触发 QTE");
+  }
+
+  startFollowupTurn(context = {}) {
+    this.resolvingToFollowup = false;
+    this.setTurnState("followup_turn");
+    this.showTurnBanner("追击窗口", "#2ecc71");
+    this.tickStatuses("player");
+    if (this.playerHp <= 0 || this.turnState === "game_over") return;
+
+    this.actionBar = 0;
+    const style = this.getCurrentStyle();
+    this.compressedPlayerTurn = !!(style && style.actionBarMax && style.actionBarMax < 6.8);
+    this.enemyAttack = null;
+    this.enemyAttackChain = null;
+    this.enemyAttackPhase = "none";
+    this.defenseTriggered = false;
+    this.qteRunner = null;
+    this.pendingFollowUp = false;
+    this.pendingFollowupContext = null;
+    this.playerState.currentState = "idle";
+    this.input.clear();
+
+    const sourceText = context.source === "spellInterrupt"
+      ? "施法打断成功"
+      : (context.source === "clash" ? "拼刀成功" : "敌方破绽");
+    this.setMessage(`${sourceText} · A/S/D 追击 QTE，否则自动攻击`);
   }
 
   startResolving(callback) {
@@ -2396,6 +2536,14 @@ class BattleSystem {
     this.resolveCallback = callback;
     this.qteRunner = null;
     this.playerState.currentState = "idle";
+  }
+
+  startResolvingToFollowup(context = {}) {
+    this.resolvingToFollowup = true;
+    this.startResolving(() => {
+      this.resolvingToFollowup = false;
+      this.startFollowupTurn(context);
+    });
   }
 
   updateResolving(dt) {
@@ -2461,7 +2609,7 @@ class BattleSystem {
 
     this.setMessage("咒还反射");
     this.log(`咒还吸收法术，获得 ${Math.floor(resourceResult.applied)} 能量`);
-    this.startResolving(() => this.startPlayerTurn());
+    this.startResolvingToFollowup({ source: "absorb" });
     return true;
   }
 

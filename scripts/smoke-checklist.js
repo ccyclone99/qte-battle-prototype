@@ -31,6 +31,7 @@ const resourcesJs = fs.readFileSync(path.join(root, "js/systems/resources.js"), 
 const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
 const readmeMd = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const specMd = fs.readFileSync(path.join(root, "SPEC.md"), "utf8");
+const flowSmokeJs = fs.readFileSync(path.join(root, "scripts/flow-smoke.js"), "utf8");
 const visualSmokePath = path.join(root, "scripts/visual-smoke.js");
 const visualSmokeJs = fs.existsSync(visualSmokePath) ? fs.readFileSync(visualSmokePath, "utf8") : "";
 const verifyPath = path.join(root, "scripts/verify.js");
@@ -74,7 +75,7 @@ check(
     && scriptIndex("js/systems/chain-effects.js") < scriptIndex("js/qte-runner.js")
 );
 
-for (const id of ["greatsword_a_v2", "dualblades_a_v2", "flame_blade", "mirror_guard", "overflow_burst", "counterspell_reversal"]) {
+for (const id of ["greatsword_a_v2", "dualblades_a_v2", "flame_blade", "mirror_guard", "overflow_burst"]) {
   check(`required chain exists: ${id}`, hasChain(id));
 }
 
@@ -84,21 +85,16 @@ check("absorb spell maps staff S to absorb_siphon", SpellDatabase.absorb.chainMa
 check("absorb spell maps staff D to overflow_burst", SpellDatabase.absorb.chainMap.staff.D === "overflow_burst");
 check("absorb spell maps greatsword D to overflow_burst", SpellDatabase.absorb.chainMap.greatsword.D === "overflow_burst");
 
-check("style flameforge exists on key 6", StyleDatabase.flameforge && StyleDatabase.flameforge.key === "6");
-check("style mirrorblade exists on key 7", StyleDatabase.mirrorblade && StyleDatabase.mirrorblade.key === "7");
-check("style counterflow exists on key 8", StyleDatabase.counterflow && StyleDatabase.counterflow.key === "8");
-check("counterflow uses counter dojo", StyleDatabase.counterflow.preferredEncounter === "counter_dojo");
-check("counterflow is not an absorb or desslo bundle", StyleDatabase.counterflow.spells.length === 0 && StyleDatabase.counterflow.combatArts.length === 0 && StyleDatabase.counterflow.counterChain === "counterspell_reversal" && StyleDatabase.counterflow.counterCoverage.dualBlades === 3);
+check("only default combat plan remains", Object.keys(StyleDatabase).length === 1 && !!StyleDatabase.current);
+check("default plan uses counter dojo", StyleDatabase.current.preferredEncounter === "counter_dojo");
+check("default plan is not a spell or style-chain bundle", StyleDatabase.current.spells.length === 0 && StyleDatabase.current.combatArts.length === 0 && !StyleDatabase.current.counterChain && StyleDatabase.current.counterCoverage.dualBlades === 3);
 check("counter dojo is not an absorb resource dojo", !("startSpellEnergy" in EncounterDatabase.encounters.counter_dojo.modifiers) && !("absorbEnergyMul" in EncounterDatabase.encounters.counter_dojo.modifiers) && !("absorbDamageMul" in EncounterDatabase.encounters.counter_dojo.modifiers));
-check("main menu exposes style select", indexHtml.includes('id="style-select"') && indexHtml.includes('value="manual"'));
-check("main menu exposes counterflow option", indexHtml.includes('value="counterflow"') && indexHtml.includes("风格 8 · 023 · 逆势双刃"));
-check("main menu has static counterflow style card", indexHtml.includes('data-style-id="counterflow"') && indexHtml.includes('data-style-key="8"') && indexHtml.includes("逆势双刃") && indexHtml.includes("key-eight"));
-check("main menu style select starts chosen style", mainJs.includes("selectedStyleId") && mainJs.includes("applyMenuStyleSelection") && mainJs.includes("battle.startPlayerTurn()"));
-check("main menu syncs style select from data", mainJs.includes("syncStyleSelectOptions") && mainJs.includes("Object.entries(StyleDatabase)") && mainJs.includes("styleOptionLabel"));
-check("main menu shows visible style choices", indexHtml.includes('id="style-choice-grid"') && mainJs.includes("createStyleChoiceButton") && styleCss.includes(".style-choice-grid"));
-check("main menu visible choices separate style numbers from style keys", mainJs.includes("style-choice-key") && mainJs.includes("style-choice-number") && mainJs.includes("style-choice-role") && mainJs.includes("button.dataset.styleId") && mainJs.includes("button.dataset.styleKey") && mainJs.includes("风格 ${style.key}") && indexHtml.includes("编号 023") && styleCss.includes(".style-choice.key-eight"));
-check("native style select separates style numbers from keys", mainJs.includes("风格 ${style.key} · ${style.number} · ${style.name}") && indexHtml.includes("风格 4 · 008 · 东方诸国剑术") && indexHtml.includes("风格 8 · 023 · 逆势双刃"));
-check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.knifeFlurry);
+check("main menu removes style select", !indexHtml.includes('id="style-select"') && !indexHtml.includes('id="style-choice-grid"'));
+check("main menu disables demo entry", indexHtml.includes('id="btn-demo" hidden disabled'));
+check("main menu starts default combat plan on enemy turn", mainJs.includes("DEFAULT_COMBAT_PLAN_ID = \"current\"") && mainJs.includes("applyDefaultCombatPlan()") && mainJs.includes("battle.applyStyle(DEFAULT_COMBAT_PLAN_ID)") && mainJs.includes("battle.startEnemyTurn()"));
+check("main menu labels current plan", indexHtml.includes("敌方回合反制") && styleCss.includes(".menu-static-value"));
+check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.bladeRushTriple && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.shieldSpellRush && EnemyDatabase.attackChains.feintCrush && EnemyDatabase.attackChains.curseNeedle && EnemyDatabase.attackChains.knifeFlurry);
+check("counter dojo rotates varied pressure chains", ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"].every(id => EncounterDatabase.encounters.counter_dojo.attackPattern.includes(id)));
 check("enemy attacks declare telegraphs", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.telegraph && attack.telegraph.type && attack.telegraph.shape && attack.telegraph.pose && attack.telegraph.width));
 
 for (const id of ["caster", "armored", "swift", "shielded"]) {
@@ -115,7 +111,7 @@ check("knife rain avoids opening double quick stab", EncounterDatabase.encounter
 check("fireBladeBurst has burst renderer data", !!(EffectEventDefinitions.fireBladeBurst && EffectEventDefinitions.fireBladeBurst.bursts));
 check("overflowBurst has burst renderer data", !!(EffectEventDefinitions.overflowBurst && EffectEventDefinitions.overflowBurst.bursts));
 check("greatswordCleavePerfect has burst renderer data", !!(EffectEventDefinitions.greatswordCleavePerfect && EffectEventDefinitions.greatswordCleavePerfect.bursts));
-check("counterflow showcase effects have burst data", !!(EffectEventDefinitions.counterflowCatch && EffectEventDefinitions.counterflowClashFollow && EffectEventDefinitions.counterflowClashFollow.bursts));
+check("counter clash effect data remains available", !!(EffectEventDefinitions.counterflowClashLead && EffectEventDefinitions.counterflowClashFollow && EffectEventDefinitions.counterflowClashFollow.bursts));
 check("renderer has player silhouette helper", rendererJs.includes("drawPlayerSilhouette"));
 check("renderer has enemy silhouette helper", rendererJs.includes("drawEnemySilhouette"));
 check("renderer has stage and nameplate helpers", rendererJs.includes("drawBattleStage") && rendererJs.includes("drawActorGroundSigil") && rendererJs.includes("drawCombatNameplates"));
@@ -153,30 +149,22 @@ check("renderer supports node pose tags", rendererJs.includes("getCurrentPose") 
 check("chains include R10 pose tags", chainsJs.includes('motion: "flameBladeCut"') && chainsJs.includes('motion: "overflowBurst"') && chainsJs.includes('motion: "greatswordEarthsplit"'));
 check("qte debug shows active pose", qteDebugJs.includes("姿态："));
 
-for (const key of ["1", "2", "3", "4", "5", "6", "7", "8"]) {
-  check(`touch controls include numeric key ${key}`, indexHtml.includes(`data-key="${key}"`));
-}
+check("touch controls no longer expose style numbers", !indexHtml.includes("touch-row-numeric") && !indexHtml.includes('data-key="8"'));
 check("touch controls include click fallback", mainJs.includes('addEventListener("click"') && mainJs.includes("suppressTouchClick"));
 check("touch controls include mouse fallback", mainJs.includes('addEventListener("mousedown"') && mainJs.includes("pressVirtualKey"));
 check("touch controls use delegated hit mapping", mainJs.includes("getVirtualKeyFromEvent") && mainJs.includes("nearestDistance"));
 check("touch controls handle virtual ESC", mainJs.includes("handleVirtualSystemKey") && mainJs.includes('appState === "battle"'));
 check("hidden touch controls are inaccessible", indexHtml.includes('aria-hidden="true"') && styleCss.includes("visibility: hidden") && mainJs.includes("setTouchControlsVisible") && mainJs.includes('setAttribute("aria-hidden"'));
-check("demo mode exposes system escape handler", demoModeJs.includes("handleSystemEscape") && mainJs.includes("demo.handleSystemEscape"));
-check("demo detail opens by default", mainJs.includes('demoDetailDrawer.classList.remove("hidden")'));
-check("demo detail uses status lines", mainJs.includes("demo.getStatusLines") && mainJs.includes("demo.getControlHint"));
-check("demo includes showcase category", demoModeJs.includes('key: "showcases"') && demoModeJs.includes("Showcase · 火球三分支对比"));
-check("demo includes counterflow showcase", demoModeJs.includes("Showcase · 逆势双刃三节点反击") && demoModeJs.includes('scheme: "counterflow"') && demoModeJs.includes("counterflowClashFollow"));
-check("demo help advertises showcase", mainJs.includes("亮点演示 Showcase") && mainJs.includes("1-5</b> 选择演示分类"));
+check("demo system is not reachable from menu", indexHtml.includes('id="btn-demo" hidden disabled') && mainJs.includes("function startDemo()") && mainJs.includes("return;"));
 check("enemy readout renderer exists", rendererJs.includes("drawEnemyAttackReadout") && rendererJs.includes("推荐"));
 check("audio has R7 feedback cues", audioJs.includes("sfxWindowOpen") && audioJs.includes("sfxResourceGain") && audioJs.includes("sfxTransition"));
 check("audio has R9 quieter mix baseline", audioJs.includes("masterVolume: 0.30") && audioJs.includes("sfxChargePeak") && audioJs.includes("volume: 0.42"));
-check("keyboard input includes style key 8", inputJs.includes('"8"'));
+check("keyboard input includes combat action keys", inputJs.includes('"A"') && inputJs.includes('"S"') && inputJs.includes('"D"') && inputJs.includes('"SPACE"') && inputJs.includes('"F"'));
 check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check-timing.js")));
 check("visual smoke script exists", !!visualSmokeJs);
 check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captureScreenshot"));
-check("visual smoke covers style 7 and replay", visualSmokeJs.includes("battle-style7-qte") && visualSmokeJs.includes("demo-result-replay-qte"));
-check("visual smoke covers counterflow showcase track", visualSmokeJs.includes("showcase-counterflow-track") && visualSmokeJs.includes("counterflow visual track active"));
-check("visual smoke covers encounter stage themes", visualSmokeJs.includes("style 6 forge stage theme") && visualSmokeJs.includes("style 7 arcane stage theme") && visualSmokeJs.includes("style 8 dojo stage theme"));
+check("visual smoke script exists but demo coverage is frozen", !!visualSmokeJs);
+check("visual smoke still covers combat screenshots", visualSmokeJs.includes("battle-player-active-attack") && visualSmokeJs.includes("battle-enemy-telegraph"));
 check("visual smoke covers encounter phase model visuals", visualSmokeJs.includes("enemy encounter phase visuals active") && visualSmokeJs.includes("enemy phase nameplate uses phase name"));
 check("visual smoke covers combat phase lighting", visualSmokeJs.includes("combat phase lighting qte active") && visualSmokeJs.includes("combat phase lighting enemy response"));
 check("visual smoke covers cinematic focus", visualSmokeJs.includes("player attack cinematic focus") && visualSmokeJs.includes("enemy response cinematic focus"));
@@ -188,7 +176,7 @@ check("visual smoke covers player qte chain intent", visualSmokeJs.includes("pla
 check("visual smoke covers player defense intent", visualSmokeJs.includes("player defense intent visuals active") && visualSmokeJs.includes("getPlayerDefenseIntentVisuals"));
 check("visual smoke covers player active attacks", visualSmokeJs.includes("battle-player-active-attack") && visualSmokeJs.includes("battle-player-spell-active") && visualSmokeJs.includes("getPlayerActiveAttackDescriptor"));
 check("visual smoke covers active attack contact guides", visualSmokeJs.includes("active attack contact guide anchored") && visualSmokeJs.includes("getActiveAttackContactGuide"));
-check("visual smoke covers player rig silhouettes", visualSmokeJs.includes("greatsword player rig silhouette") && visualSmokeJs.includes("dual blades player rig silhouette") && visualSmokeJs.includes("style 8 player counter rig"));
+check("visual smoke covers player rig silhouettes", visualSmokeJs.includes("greatsword player rig silhouette") && visualSmokeJs.includes("dual blades player rig silhouette"));
 check("visual smoke covers player weapon action personalities", visualSmokeJs.includes("player weapon action greatsword") && visualSmokeJs.includes("player weapon action branches") && visualSmokeJs.includes("getPlayerWeaponActionVisuals"));
 check("visual smoke covers enemy rig silhouettes", visualSmokeJs.includes("armored enemy rig silhouette") && visualSmokeJs.includes("caster enemy rig silhouette") && visualSmokeJs.includes("getEnemyRigProfile"));
 check("visual smoke covers enemy action personalities", visualSmokeJs.includes("enemy action personality live caster") && visualSmokeJs.includes("enemy action personality visuals cover archetypes") && visualSmokeJs.includes("getEnemyActionPersonalityVisuals"));
@@ -200,10 +188,9 @@ check("visual smoke covers actor intent badges", visualSmokeJs.includes("player 
 check("visual smoke covers weapon silhouette profiles", visualSmokeJs.includes("weapon silhouette profiles distinct") && visualSmokeJs.includes("getWeaponSilhouetteProfile"));
 check("visual smoke covers resource pulse visuals", visualSmokeJs.includes("resource pulse visuals active") && visualSmokeJs.includes("spell resource pulse active"));
 check("visual smoke covers virtual controls", visualSmokeJs.includes("battle-virtual-controls-qte") && visualSmokeJs.includes("clickVirtualKey"));
-check("visual smoke guards demo stage drawer overlap", visualSmokeJs.includes("demo stage avoids detail drawer") && visualSmokeJs.includes("demo qte bar avoids detail drawer"));
+check("visual smoke keeps combat layout coverage", visualSmokeJs.includes("battle-player-active-attack") && visualSmokeJs.includes("battle-enemy-telegraph"));
 check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
-check("small viewport compact rules exist", styleCss.includes("@media (max-width: 900px), (max-height: 520px)") && styleCss.includes("#demo-detail-drawer"));
-check("mobile demo detail uses bottom sheet layout", styleCss.includes("#demo-detail-drawer .drawer-content") && styleCss.includes("bottom: 8px"));
+check("small viewport compact rules exist", styleCss.includes("@media (max-width: 900px), (max-height: 520px)") && styleCss.includes(".drawer-content"));
 check("main menu includes encounter select", indexHtml.includes('id="enemy-select"') && indexHtml.includes('value="encounter:arcane_conduit"') && indexHtml.includes('value="encounter:counter_dojo"') && indexHtml.includes('value="swift"'));
 check("battle supports encounter selection", battleJs.includes("encounterOverrideId") && battleJs.includes("applyEncounter") && battleJs.includes("pickEnemyAttackId"));
 check("battle supports encounter phases", battleJs.includes("getCurrentEncounterPhase") && battleJs.includes("maybeEnterEncounterPhase") && battleJs.includes("getEncounterAttackPattern"));
@@ -237,17 +224,11 @@ check("main ui labels active attacks", mainJs.includes('battle.turnState === "at
 check("qte debug shows active attacks", qteDebugJs.includes("activeAttackSystem.getDebugLines"));
 check("battle applies chain handfeel", battleJs.includes("Utils.getChainHandfeel(chainConfig") && battleJs.includes("Utils.getChainHandfeel(chain, { chainId, source: \"enemy\" })"));
 check("battle applies qte pacing", battleJs.includes("Utils.getBattleQTEPacing") && battleJs.includes("qteRunner.timeScale") && battleJs.includes("qteRunner.postNodePause"));
-check("demo applies chain pacing", demoModeJs.includes("Utils.getDemoPacing") && demoModeJs.includes("getActiveDirectorLines") && demoModeJs.includes("getPreviewSummaryLines"));
-check("renderer shows demo focus panel", rendererJs.includes("drawDemoFocusPanel") && rendererJs.includes("演示摘要"));
-check("renderer shows counterflow demo track", rendererJs.includes("drawDemoCounterflowTrack") && rendererJs.includes("drawDemoCounterflowLinks") && rendererJs.includes('visual.scheme !== "counterflow"'));
-check("demo layout avoids detail drawer", rendererJs.includes("getDemoStageBounds") && rendererJs.includes("stage.compact") && rendererJs.includes("drawDemoQTEBar(scene, bounds)"));
+check("demo code remains frozen but not menu-driven", demoModeJs.includes("class DemoMode") && indexHtml.includes('id="btn-demo" hidden disabled'));
+check("manual qte is gated behind followup turn", battleJs.includes('case "followup_turn"') && battleJs.includes("updateFollowupTurn") && mainJs.includes("追击窗口") && flowSmokeJs.includes("recovery turn blocks manual qte"));
 check("battle action HUD hides equipment noise", rendererJs.includes("isActionFocusedState") && rendererJs.includes("drawEquipmentChips") && rendererJs.includes('scene.turnState === "attack_active"'));
-check("demo result suppresses residual flash", rendererJs.includes("shouldDrawScreenFlash") && rendererJs.includes('scene.turnState !== "demo_preview"') && visualSmokeJs.includes("demo result suppresses residual flash"));
-check("demo action key prompt uses lower lane", rendererJs.includes("actionKeyPromptY = hasSequenceVisual ? 408 : 365") && rendererJs.includes("drawBigKeyPrompt(scene, keyMatch[1], \"\", actionKeyPromptY"));
-check("demo action suppresses duplicate enemy readout", rendererJs.includes("suppressReadout: true") && rendererJs.includes("!options.suppressReadout"));
-check("demo qte uses compact result feedback", demoModeJs.includes('"qteResult"') && fxJs.includes('t.type === "qteResult"'));
 check("R14 accessible qte timings", chainsJs.includes("beats: [0.38, 0.82, 1.24]") && chainsJs.includes("duration: 1.18") && chainsJs.includes("perfect: 0.72") && chainsJs.includes("chargeMul: 1.08"));
-check("R13 style preferred encounters exist", StyleDatabase.flameforge.preferredEncounter === "ember_bulwark" && StyleDatabase.mirrorblade.preferredEncounter === "arcane_conduit");
+check("single default plan preferred encounter exists", StyleDatabase.current.preferredEncounter === "counter_dojo");
 check("actor reactions include attack windup", fxJs.includes("attack: 0.28") && fxJs.includes("windup: 0.32") && fxJs.includes("rotation"));
 check("renderer draws actor motion lines", rendererJs.includes("drawActorMotionLines") && rendererJs.includes("drawEnemyAttackMotion") && rendererJs.includes("isSpellLikeAttack"));
 check("battle emits attack animation hooks", battleJs.includes('triggerActorReaction("player", "attack"') && battleJs.includes('triggerActorReaction("enemy", "attack"') && battleJs.includes("emitEnemyAttackVisual"));
@@ -271,12 +252,12 @@ for (const item of results) {
 
 console.log("");
 console.log("Manual browser smoke targets:");
-console.log("  1. Demo mode -> spell chains -> flame_blade shows timeline, heat gain, burn FX, and no console errors.");
-console.log("  2. Demo preview -> press R and confirm the same item replays without stale result rows.");
-console.log("  3. Demo mode -> spell chains -> overflow_burst shows spellEnergy cost, overload burst, and no console errors.");
-console.log("  4. Battle style 6 and 7 load their preferred named encounters and keep HUD/resources visible.");
-console.log("  5. Demo mode -> showcase category -> fire/absorb/defense entries show staged captions and no console errors.");
-console.log("  6. Visual smoke -> node scripts\\visual-smoke.js captures desktop and mobile screenshots without browser errors.");
+console.log("  1. Main menu shows one current plan label and no style cards/dropdown.");
+console.log("  2. Start battle and confirm it enters enemy turn without pressing 1-8.");
+console.log("  3. Enemy turn -> spell node can be interrupted by A/S/D without starting counterspell QTE.");
+console.log("  4. Start battle from main menu and confirm it directly enters the default counter plan.");
+console.log("  5. Enemy turn -> press A/S/D inside an attack window and confirm clash/interruption feedback.");
+console.log("  6. Demo button should stay hidden/disabled while this combat-plan pass is active.");
 
 if (failures > 0) {
   console.error(`Smoke checklist failed: ${failures}`);

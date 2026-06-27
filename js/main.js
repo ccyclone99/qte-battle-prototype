@@ -16,8 +16,6 @@ const btnPractice = document.getElementById("btn-practice");
 const btnDemo = document.getElementById("btn-demo");
 const btnMenu = document.getElementById("btn-menu");
 const difficultySelect = document.getElementById("difficulty-select");
-const styleSelect = document.getElementById("style-select");
-const styleChoiceGrid = document.getElementById("style-choice-grid");
 const enemySelect = document.getElementById("enemy-select");
 
 const gameOverOverlay = document.getElementById("game-over");
@@ -39,24 +37,21 @@ const demoDetailContent = document.getElementById("demo-detail-content");
 const qteDebugContent = document.getElementById("qte-debug-content");
 const touchControls = document.getElementById("touch-controls");
 const touchToggle = document.getElementById("touch-toggle");
+const DEFAULT_COMBAT_PLAN_ID = "current";
 
 const battleHelpHtml = `
-  <div><b>开局</b>：按 1-8 选择战斗风格</div>
+  <div><b>方案</b>：当前只保留敌方回合反制战斗方案</div>
   <div><b>遭遇</b>：主菜单可选自动推荐、命名遭遇或敌人测试</div>
-  <div><b>我方回合</b>：按 A/S/D 触发对应 QTE 链（精准按键 / 按住蓄力 / 节奏连击）</div>
-  <div><b>敌方回合</b>：绿色窗口按 SPACE 闪避/弹反，F 格挡；部分战技可按 A/S/D 拼刀或反制</div>
+  <div><b>追击窗口</b>：敌方回合应对成功后，短时间内按 A/S/D 触发武器 QTE；不输入则自动攻击</div>
+  <div><b>敌方回合</b>：敌方攻击窗口内按 A/S/D 出刀拼刀；敌方施法窗口内出刀打断施法</div>
+  <div><b>防御</b>：绿色窗口按 SPACE 闪避/弹反，F 格挡</div>
   <div><b>连击</b>：每次成功命中增加连击，伤害随连击提升，受击会打断</div>
-  <div><b>追加</b>：荒芜之地等战技在剑攻击后按 A 触发追加攻击窗口</div>
   <div><b>通用</b>：H 帮助，L 日志，T 调试，ESC 返回菜单</div>
 `;
 
 const demoHelpMain = `
-  <div><b>1-5</b> 选择演示分类</div>
-  <div><b>1</b> 亮点演示 Showcase</div>
-  <div><b>W</b> 切换战斗风格</div>
-  <div><b>M</b> 切换手动/自动</div>
-  <div><b>6</b> 切换难度</div>
-  <div><b>T</b> QTE 调试</div>
+  <div>演示系统当前冻结</div>
+  <div>本版本只开放敌方回合反制方案</div>
   <div><b>ESC</b> 返回主菜单</div>
 `;
 
@@ -105,92 +100,11 @@ function selectedEnemyId() {
   return enemySelect.value;
 }
 
-function styleOptionLabel(style) {
-  return `风格 ${style.key} · ${style.number} · ${style.name}`;
-}
+function applyDefaultCombatPlan() {
+  if (!battle || !StyleDatabase[DEFAULT_COMBAT_PLAN_ID]) return false;
 
-function createStyleChoiceButton(value, style) {
-  const button = document.createElement("button");
-  const selected = styleSelect && styleSelect.value === value;
-  const keyEight = style && style.key === "8";
-  button.type = "button";
-  button.className = `style-choice${value === "manual" ? " manual" : ""}${keyEight ? " key-eight" : ""}${selected ? " selected" : ""}`;
-  button.dataset.styleId = value;
-  if (style) button.dataset.styleKey = style.key;
-  button.setAttribute("role", "radio");
-  button.setAttribute("aria-checked", selected ? "true" : "false");
-  button.setAttribute("aria-label", style ? `风格 ${style.key}，${style.number} · ${style.name}` : "进战斗后手动选择");
-  if (style && style.color) button.style.setProperty("--style-color", style.color);
-
-  const key = document.createElement("span");
-  key.className = "style-choice-key";
-  key.textContent = style ? `风格 ${style.key}` : "手动";
-
-  const name = document.createElement("span");
-  name.className = "style-choice-name";
-  name.textContent = style ? style.name : "进战斗后选择";
-
-  const number = document.createElement("span");
-  number.className = "style-choice-number";
-  number.textContent = style ? `编号 ${style.number}` : "";
-
-  button.append(key, name, number);
-
-  if (keyEight) {
-    const role = document.createElement("span");
-    role.className = "style-choice-role";
-    role.textContent = "反制流派";
-    button.appendChild(role);
-  }
-  return button;
-}
-
-function syncStyleChoiceGrid() {
-  if (!styleChoiceGrid || !styleSelect || typeof StyleDatabase === "undefined") return;
-  styleChoiceGrid.replaceChildren(createStyleChoiceButton("manual", null));
-
-  for (const [id, style] of Object.entries(StyleDatabase)) {
-    styleChoiceGrid.appendChild(createStyleChoiceButton(id, style));
-  }
-}
-
-function syncStyleSelectOptions() {
-  if (!styleSelect || typeof StyleDatabase === "undefined") return;
-  const selected = styleSelect.value || "manual";
-  const manual = document.createElement("option");
-  manual.value = "manual";
-  manual.textContent = "进战斗后手动选择";
-  manual.selected = selected === "manual";
-  styleSelect.replaceChildren(manual);
-
-  for (const [id, style] of Object.entries(StyleDatabase)) {
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = styleOptionLabel(style);
-    option.selected = id === selected;
-    styleSelect.appendChild(option);
-  }
-
-  if (selected !== "manual" && !StyleDatabase[selected]) {
-    styleSelect.value = "manual";
-  }
-
-  syncStyleChoiceGrid();
-}
-
-function selectedStyleId() {
-  if (!styleSelect || styleSelect.value === "manual") return null;
-  return StyleDatabase[styleSelect.value] ? styleSelect.value : null;
-}
-
-function applyMenuStyleSelection() {
-  const styleId = selectedStyleId();
-  if (!battle || !styleId) return false;
-
-  battle.applyStyle(styleId);
-  battle.startPlayerTurn();
-  const style = StyleDatabase[styleId];
-  addLog(`菜单风格：${style.name} [${style.key}]`);
+  battle.applyStyle(DEFAULT_COMBAT_PLAN_ID);
+  battle.startEnemyTurn();
   return true;
 }
 
@@ -337,7 +251,6 @@ function showMenu() {
   setDemoDetailHtml("<div>当前没有演示详情。</div>");
   setTurnIndicator("主菜单", "prep");
   setDifficultyBadge(Difficulty.get().name);
-  syncStyleSelectOptions();
 }
 
 function startBattle() {
@@ -358,7 +271,7 @@ function startBattle() {
   setTurnIndicator("战前准备", "prep");
   setDifficultyBadge(Difficulty.get().name);
   addLog(`战斗开始 — 难度：${Difficulty.get().name}`);
-  applyMenuStyleSelection();
+  applyDefaultCombatPlan();
   setHelpContent(battleHelpHtml);
   showTutorialIfNeeded();
 }
@@ -381,7 +294,7 @@ function startPractice() {
   setTurnIndicator("战前准备", "prep");
   setDifficultyBadge(`${Difficulty.get().name} · 练习`);
   addLog(`练习模式开始 — 敌人无限血量`);
-  applyMenuStyleSelection();
+  applyDefaultCombatPlan();
   setHelpContent(battleHelpHtml);
   showTutorialIfNeeded();
 }
@@ -427,6 +340,7 @@ function restartCurrentMode() {
 }
 
 function startDemo() {
+  return;
   SFX.enable();
   input.reset();
   setTouchControlsVisible(false);
@@ -441,7 +355,7 @@ function startDemo() {
   resetUICache();
   setTurnIndicator("演示 - 主菜单", "demo");
   setDifficultyBadge(Difficulty.get().name);
-  addLog("进入效果演示模式 — 1 亮点演示，W 切换风格，1-5 选择分类");
+  addLog("演示系统已冻结，当前只开放敌方回合反制方案");
   setHelpContent(demoHelpMain);
   demoDetailDrawer.classList.remove("hidden");
   showTutorialIfNeeded();
@@ -461,13 +375,17 @@ function updateBattleUI() {
     turnClass = "prep";
     helpHtml = battleHelpHtml;
   } else if (battle.turnState === "player_turn") {
-    turnText = "玩家回合";
+    turnText = "恢复间隙";
     turnClass = "player";
-    helpHtml = `<div><b>A/S/D</b> 触发对应 QTE 链</div><div><b>H</b> 帮助 <b>L</b> 日志 <b>T</b> 调试</div>`;
+    helpHtml = `<div>无追击资格，不能手动触发 QTE</div><div><b>H</b> 帮助 <b>L</b> 日志 <b>T</b> 调试</div>`;
+  } else if (battle.turnState === "followup_turn") {
+    turnText = "追击窗口";
+    turnClass = "player";
+    helpHtml = `<div><b>A/S/D</b> 追击武器 QTE；不输入则自动攻击</div><div><b>H</b> 帮助 <b>L</b> 日志 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "enemy_turn") {
     turnText = "敌方回合";
     turnClass = "enemy";
-    helpHtml = `<div><b>SPACE</b> 闪避/弹反</div><div><b>F</b> 格挡</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
+    helpHtml = `<div><b>A/S/D</b> 拼刀/打断施法</div><div><b>SPACE</b> 闪避/弹反 <b>F</b> 格挡</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "qte_running") {
     turnText = "QTE";
     turnClass = "qte";
@@ -674,7 +592,7 @@ function loop(now) {
 
 btnStart.addEventListener("click", startBattle);
 btnPractice.addEventListener("click", startPractice);
-btnDemo.addEventListener("click", startDemo);
+if (btnDemo) btnDemo.addEventListener("click", startDemo);
 btnMenu.addEventListener("click", showMenu);
 btnRestart.addEventListener("click", restartCurrentMode);
 btnBackMenu.addEventListener("click", showMenu);
@@ -684,13 +602,6 @@ tutorialOverlay.addEventListener("click", (e) => {
 });
 difficultySelect.addEventListener("change", () => {
   Difficulty.set(difficultySelect.value);
-});
-styleSelect.addEventListener("change", syncStyleChoiceGrid);
-styleChoiceGrid.addEventListener("click", (e) => {
-  const button = e.target && e.target.closest ? e.target.closest("button[data-style-id]") : null;
-  if (!button || !styleChoiceGrid.contains(button)) return;
-  styleSelect.value = button.dataset.styleId;
-  syncStyleChoiceGrid();
 });
 
 function setTouchControlsVisible(visible) {
@@ -936,5 +847,4 @@ for (const btn of touchControls.querySelectorAll("button[data-key]")) {
   }, true);
 }
 
-syncStyleSelectOptions();
 requestAnimationFrame(loop);

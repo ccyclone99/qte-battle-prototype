@@ -44,13 +44,11 @@ function load(relPath, exportNames = []) {
   ["js/systems/effects.js", ["EffectEventQueue"]],
   ["js/systems/chain-effects.js", ["ChainEffectSystem"]],
   ["js/qte-runner.js", ["QTEChainRunner"]],
-  ["js/demo-mode.js", ["DemoMode"]],
   ["js/battle.js", ["BattleSystem"]]
 ].forEach(([relPath, exportNames]) => load(relPath, exportNames));
 
 const {
   BattleSystem,
-  DemoMode,
   Difficulty,
   InputBuffer,
   ChainDatabase,
@@ -124,46 +122,85 @@ function createBattle(options = {}) {
   return { input, battle, logs };
 }
 
-function verifyBattleStyle(key, expectedStyle, expectedEnemyHp, actionKey, expectedChainId, expectedEncounterId) {
-  const { input, battle, logs } = createBattle();
-  tap(input, battle, key);
-  assert(`style ${key} enters player turn`, battle.turnState === "player_turn", battle.turnState);
-  assert(`style ${key} id`, battle.playerConfig.style === expectedStyle, battle.playerConfig.style);
-  assert(`style ${key} enemy hp`, battle.enemyMaxHp === expectedEnemyHp, String(battle.enemyMaxHp));
-  if (expectedEncounterId) {
-    assert(`style ${key} encounter`, battle.activeEncounterId === expectedEncounterId, battle.activeEncounterId || "none");
-  }
-
-  tap(input, battle, actionKey);
-  assert(`style ${key} starts QTE`, battle.turnState === "qte_running", battle.turnState);
-  assert(`style ${key} QTE chain`, battle.qteRunner && battle.qteRunner.context.chainId === expectedChainId, battle.qteRunner?.context?.chainId || "none");
-  assert(`style ${key} log has style`, logs.some(line => line.includes("战斗风格")), logs.join(" | "));
+function applyDefaultPlan(battle) {
+  battle.applyStyle("current");
+  battle.startEnemyTurn();
 }
 
-function verifyCounterflowStyleScope() {
+function createDefaultBattle(options = {}) {
+  const setup = createBattle(options);
+  applyDefaultPlan(setup.battle);
+  return setup;
+}
+
+function verifyDefaultCombatPlan() {
+  const { input, battle, logs } = createBattle();
+  applyDefaultPlan(battle);
+  assert("default plan enters enemy turn", battle.turnState === "enemy_turn", battle.turnState);
+  assert("default plan id", battle.playerConfig.style === "current", battle.playerConfig.style);
+  assert("default plan enemy hp", battle.enemyMaxHp === 210, String(battle.enemyMaxHp));
+  assert("default plan encounter", battle.activeEncounterId === "counter_dojo", battle.activeEncounterId || "none");
+  assert("default plan opens with physical pressure", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
+
+  battle.startFollowupTurn({ source: "smoke" });
+  tap(input, battle, "S");
+  assert("default plan starts weapon QTE", battle.turnState === "qte_running", battle.turnState);
+  assert("default plan S chain", battle.qteRunner && battle.qteRunner.context.chainId === "dualblades_s_v2", battle.qteRunner?.context?.chainId || "none");
+  assert("default plan log has plan", logs.some(line => line.includes("战斗方案")), logs.join(" | "));
+}
+
+function verifyNoFreePlayerQte() {
   const { input, battle } = createBattle();
-  tap(input, battle, "8");
+  battle.applyStyle("current");
+  battle.startPlayerTurn();
+  tap(input, battle, "A");
+  assert("recovery turn blocks manual qte", battle.turnState === "player_turn" && !battle.qteRunner, battle.turnState);
+  assert("recovery turn has no pending qte", !battle.qteRunner, "runner exists");
+}
+
+function verifyDefaultCounterPressureRotation() {
+  const { battle } = createDefaultBattle();
+  assert("counter pressure first chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
+  assert("counter pressure first has three nodes", battle.enemyAttackChain.nodes.length === 3, String(battle.enemyAttackChain.nodes.length));
+
+  battle.startFollowupTurn({ source: "smoke" });
+  battle.startEnemyTurn();
+  assert("counter pressure second chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "spellDoubleCut", battle.enemyAttackChain?.id || "none");
+
+  battle.startFollowupTurn({ source: "smoke" });
+  battle.startEnemyTurn();
+  assert("counter pressure third chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "shieldSpellRush", battle.enemyAttackChain?.id || "none");
+
+  const pattern = context.EncounterDatabase.encounters.counter_dojo.attackPattern || [];
+  for (const id of ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"]) {
+    assert(`counter pressure pattern includes ${id}`, pattern.includes(id), pattern.join(","));
+  }
+}
+
+function verifyDefaultPlanScope() {
+  const { input, battle } = createBattle();
+  applyDefaultPlan(battle);
   const style = battle.getCurrentStyle();
   const chains = battle.getEffectiveChains();
   const encounter = context.EncounterDatabase.encounters.counter_dojo;
   const modifiers = encounter.modifiers || {};
 
-  assert("counterflow keeps style id", battle.playerConfig.style === "counterflow", battle.playerConfig.style);
-  assert("counterflow has no spell loadout", battle.playerConfig.spells.length === 0, battle.playerConfig.spells.join(","));
-  assert("counterflow has no borrowed combat arts", battle.playerConfig.combatArts.length === 0, battle.playerConfig.combatArts.join(","));
-  assert("counterflow S remains dual blade", chains.S === "dualblades_s_v2", chains.S || "none");
-  assert("counterflow D remains dual blade", chains.D === "dualblades_d_v2", chains.D || "none");
-  assert("counterflow keeps style counterspell", style && style.counterChain === "counterspell_reversal", style?.counterChain || "none");
-  assert("counterflow keeps dual coverage", battle.getCounterCoverageCount() === 3, String(battle.getCounterCoverageCount()));
+  assert("default plan keeps current id", battle.playerConfig.style === "current", battle.playerConfig.style);
+  assert("default plan has no spell loadout", battle.playerConfig.spells.length === 0, battle.playerConfig.spells.join(","));
+  assert("default plan has no borrowed combat arts", battle.playerConfig.combatArts.length === 0, battle.playerConfig.combatArts.join(","));
+  assert("default plan S remains dual blade", chains.S === "dualblades_s_v2", chains.S || "none");
+  assert("default plan D remains dual blade", chains.D === "dualblades_d_v2", chains.D || "none");
+  assert("default plan has no counterspell chain", !style.counterChain, style.counterChain || "none");
+  assert("default plan keeps dual coverage", battle.getCounterCoverageCount() === 3, String(battle.getCounterCoverageCount()));
   assert("counter dojo gives no spell energy", !("startSpellEnergy" in modifiers), String(modifiers.startSpellEnergy));
   assert("counter dojo gives no absorb boost", !("absorbEnergyMul" in modifiers) && !("absorbDamageMul" in modifiers), JSON.stringify(modifiers));
 }
 
 function verifyManualEnemyOverride() {
-  const { input, battle, logs } = createBattle({ enemyId: "swift" });
+  const { battle, logs } = createBattle({ enemyId: "swift" });
   assert("manual enemy label visible", battle.getEnemySelectionLabel().includes("迅捷刺客"), battle.getEnemySelectionLabel());
-  tap(input, battle, "6");
-  assert("manual enemy keeps selected style", battle.playerConfig.style === "flameforge", battle.playerConfig.style);
+  applyDefaultPlan(battle);
+  assert("manual enemy keeps default plan", battle.playerConfig.style === "current", battle.playerConfig.style);
   assert("manual enemy overrides style default", battle.enemyId === "swift", battle.enemyId);
   assert("manual enemy hp applied", battle.enemyMaxHp === 160, String(battle.enemyMaxHp));
   assert("manual enemy does not apply encounter", battle.activeEncounterId === null, battle.activeEncounterId || "none");
@@ -171,14 +208,13 @@ function verifyManualEnemyOverride() {
 }
 
 function verifyEncounterOverride() {
-  const { input, battle, logs } = createBattle({ enemyId: "encounter:arcane_conduit" });
+  const { battle, logs } = createBattle({ enemyId: "encounter:arcane_conduit" });
   assert("encounter label visible", battle.getEnemySelectionLabel().includes("秘术回廊"), battle.getEnemySelectionLabel());
-  tap(input, battle, "7");
+  applyDefaultPlan(battle);
   assert("encounter override active", battle.activeEncounterId === "arcane_conduit", battle.activeEncounterId || "none");
   assert("encounter override enemy applied", battle.enemyId === "caster", battle.enemyId);
   assert("encounter override hp applied", battle.enemyMaxHp === 190, String(battle.enemyMaxHp));
   assert("encounter start spell energy", battle.playerState.spellEnergy >= 36, String(battle.playerState.spellEnergy));
-  battle.startEnemyTurn();
   assert("encounter attack pattern first", battle.enemyAttack && battle.enemyAttack.id === "spellCast", battle.enemyAttack?.id || "none");
   battle.startPlayerTurn();
   battle.startEnemyTurn();
@@ -187,9 +223,7 @@ function verifyEncounterOverride() {
 }
 
 function verifyEncounterEnemyTurnFlow() {
-  const { input, battle } = createBattle({ enemyId: "encounter:arcane_conduit" });
-  tap(input, battle, "7");
-  battle.startEnemyTurn();
+  const { input, battle } = createDefaultBattle({ enemyId: "encounter:arcane_conduit" });
   assert("encounter enemy turn starts", battle.turnState === "enemy_turn", battle.turnState);
   assert("encounter enemy first attack", battle.enemyAttack && battle.enemyAttack.id === "spellCast", battle.enemyAttack?.id || "none");
   assert("encounter response duration adjusted", battle.enemyAttack.responseDuration < Difficulty.responseDuration(), String(battle.enemyAttack.responseDuration));
@@ -201,35 +235,32 @@ function verifyEncounterEnemyTurnFlow() {
   assert("encounter defense qte source", battle.qteRunner && battle.qteRunner.context.source === "enemy", battle.qteRunner?.context?.source || "none");
   input.injectKey("SPACE", "release");
   tick(battle, 0.08);
-  assert("encounter defense qte resolves", runUntil(battle, () => battle.turnState === "player_turn", 6), battle.turnState);
+  assert("encounter defense qte resolves to followup", runUntil(battle, () => battle.turnState === "followup_turn", 6), battle.turnState);
   assert("encounter defense keeps player alive", battle.playerHp > 0, String(battle.playerHp));
 }
 
 function verifyEncounterPhasePatterns() {
-  const { input, battle, logs } = createBattle({ enemyId: "encounter:knife_rain" });
-  tap(input, battle, "3");
+  const { battle, logs } = createDefaultBattle({ enemyId: "encounter:knife_rain" });
   assert("phase test encounter active", battle.activeEncounterId === "knife_rain", battle.activeEncounterId || "none");
 
-  battle.startEnemyTurn();
   assert("knife rain opens with quick stab", battle.enemyAttack && battle.enemyAttack.id === "quickStab", battle.enemyAttack?.id || "none");
-  battle.startPlayerTurn();
+  battle.startFollowupTurn({ source: "smoke" });
   battle.startEnemyTurn();
   assert("knife rain avoids double quick stab", battle.enemyAttack && battle.enemyAttack.id === "slash", battle.enemyAttack?.id || "none");
 
-  battle.startPlayerTurn();
+  battle.startFollowupTurn({ source: "smoke" });
   battle.enemyHp = Math.floor(battle.enemyMaxHp * 0.45);
   battle.startEnemyTurn();
   assert("knife rain phase activates", battle.activeEncounterPhaseId === "close_quarters", battle.activeEncounterPhaseId || "none");
   assert("knife rain phase pattern resets", battle.enemyAttack && battle.enemyAttack.id === "quickStab", battle.enemyAttack?.id || "none");
   assert("knife rain phase logged", logs.some(line => line.includes("贴身追刺")), logs.join(" | "));
-  battle.startPlayerTurn();
+  battle.startFollowupTurn({ source: "smoke" });
   battle.startEnemyTurn();
   assert("knife rain phase second attack", battle.enemyAttack && battle.enemyAttack.id === "thrust", battle.enemyAttack?.id || "none");
 }
 
 function verifyBattleResultSummary() {
-  const { input, battle } = createBattle({ enemyId: "encounter:knife_rain" });
-  tap(input, battle, "3");
+  const { battle } = createDefaultBattle({ enemyId: "encounter:knife_rain" });
   battle.enemyHp = Math.floor(battle.enemyMaxHp * 0.45);
   battle.activeEncounterPhaseId = "close_quarters";
   battle.battleStats.damageDealt = 88;
@@ -245,39 +276,38 @@ function verifyBattleResultSummary() {
 }
 
 function verifyQteStartKeySuppression() {
-  const { input, battle } = createBattle({ enemyId: "encounter:arcane_conduit" });
-  tap(input, battle, "7");
-  battle.playerState.spellEnergy = 80;
+  const { input, battle } = createDefaultBattle({ enemyId: "encounter:arcane_conduit" });
 
-  input.injectKey("D", "press");
+  battle.startFollowupTurn({ source: "smoke" });
+  input.injectKey("A", "press");
   tick(battle, 0.04);
   assert("qte start suppression enters qte", battle.turnState === "qte_running", battle.turnState);
-  assert("qte start suppression chain", battle.qteRunner && battle.qteRunner.context.chainId === "overflow_burst", battle.qteRunner?.context?.chainId || "none");
+  assert("qte start suppression chain", battle.qteRunner && battle.qteRunner.context.chainId === "dualblades_a_v2", battle.qteRunner?.context?.chainId || "none");
 
-  input.injectKey("D", "release");
+  input.injectKey("A", "release");
   tick(battle, 0.12);
   assert("qte start release ignored", battle.qteRunner.resultLog.length === 0, JSON.stringify(battle.qteRunner.resultLog));
-  assert("qte start stays on first node", battle.qteRunner.currentNode().id === "compress", battle.qteRunner.currentNode().id);
+  assert("qte start stays on first node", battle.qteRunner.currentNode().id === "dash", battle.qteRunner.currentNode().id);
 
-  input.injectKey("D", "press");
+  input.injectKey("A", "press");
   tick(battle, 0.18);
-  input.injectKey("D", "release");
+  input.injectKey("A", "release");
   tick(battle, 0.04);
   assert("qte fresh release advances", battle.qteRunner.resultLog.length === 1, JSON.stringify(battle.qteRunner.resultLog));
-  assert("qte fresh release reaches burst", battle.qteRunner.currentNode().id === "burst", battle.qteRunner.currentNode().id);
+  assert("qte fresh press leaves opening node", battle.qteRunner.currentNode().id !== "dash", battle.qteRunner.currentNode().id);
 }
 
 function verifyCombatPacing() {
-  const { input, battle } = createBattle({ enemyId: "encounter:arcane_conduit" });
-  tap(input, battle, "7");
-  assert("combat pacing action bar breathes", battle.actionBarMax >= 6.5, String(battle.actionBarMax));
+  const { input, battle } = createDefaultBattle({ enemyId: "encounter:arcane_conduit" });
+  assert("combat pacing action bar compressed", battle.actionBarMax <= 3.5, String(battle.actionBarMax));
   assert("combat pacing resolve breathes", battle.resolveDuration >= 0.6, String(battle.resolveDuration));
 
+  battle.startFollowupTurn({ source: "smoke" });
   tap(input, battle, "S");
   assert("combat pacing qte starts", battle.turnState === "qte_running" && battle.qteRunner, battle.turnState);
   assert("combat pacing qte time slows instead of widening", battle.qteRunner.timeScale <= 0.82, String(battle.qteRunner.timeScale));
-  assert("combat pacing qte node pause breathes", battle.qteRunner.postNodePause >= 0.14, String(battle.qteRunner.postNodePause));
-  assert("combat pacing qte handfeel unchanged", Utils.getChainHandfeel(ChainDatabase.absorb_siphon, { chainId: "absorb_siphon", source: "player" }).rhythmPad === battle.qteRunner.handfeel.rhythmPad, JSON.stringify(battle.qteRunner.handfeel));
+  assert("combat pacing qte node pause breathes", battle.qteRunner.postNodePause >= 0.10, String(battle.qteRunner.postNodePause));
+  assert("combat pacing qte handfeel unchanged", Utils.getChainHandfeel(ChainDatabase.dualblades_s_v2, { chainId: "dualblades_s_v2", source: "player" }).windowPad === battle.qteRunner.handfeel.windowPad, JSON.stringify(battle.qteRunner.handfeel));
 
   battle.startEnemyTurn();
   assert("combat pacing enemy windup readable", battle.enemyAttack.windup >= 1.8, String(battle.enemyAttack.windup));
@@ -285,10 +315,10 @@ function verifyCombatPacing() {
 }
 
 function verifyActiveAttackQteResolution() {
-  const { input, battle } = createBattle();
-  tap(input, battle, "6");
+  const { input, battle } = createDefaultBattle();
   const enemyStart = battle.enemyHp;
 
+  battle.startFollowupTurn({ source: "smoke" });
   tap(input, battle, "A");
   assert("active attack qte starts qte", battle.turnState === "qte_running" && battle.qteRunner, battle.turnState);
   battle.qteRunner.forceOutcome("success");
@@ -307,9 +337,7 @@ function verifyActiveAttackQteResolution() {
 }
 
 function verifyEnemyActiveAttackTiming() {
-  const { input, battle } = createBattle({ enemyId: "encounter:arcane_conduit" });
-  tap(input, battle, "7");
-  battle.startEnemyTurn();
+  const { battle } = createDefaultBattle({ enemyId: "encounter:arcane_conduit" });
   const playerStart = battle.playerHp;
   assert("enemy active attack starts", battle.activeAttackSystem.active.some(attack => attack.intent.kind === "enemyAttack"), "no enemy active");
   const active = battle.activeAttackSystem.active.find(attack => attack.intent.kind === "enemyAttack");
@@ -320,16 +348,14 @@ function verifyEnemyActiveAttackTiming() {
   assert("enemy active attack reaches reaction", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
 }
 
-function verifyCounterflowEnemyAttackChain() {
-  const { input, battle } = createBattle();
-  tap(input, battle, "8");
-  assert("counterflow style selected", battle.playerConfig.style === "counterflow", battle.playerConfig.style);
-  assert("counterflow encounter active", battle.activeEncounterId === "counter_dojo", battle.activeEncounterId || "none");
+function verifyDefaultEnemyAttackChain() {
+  const { input, battle } = createDefaultBattle();
+  assert("default plan selected", battle.playerConfig.style === "current", battle.playerConfig.style);
+  assert("default encounter active", battle.activeEncounterId === "counter_dojo", battle.activeEncounterId || "none");
 
-  battle.startEnemyTurn();
-  assert("counterflow enemy chain active", battle.enemyAttackChain && battle.enemyAttackChain.id === "spellDoubleCut", battle.enemyAttackChain?.id || "none");
-  assert("counterflow commits multi enemy attacks", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack").length >= 3, String(battle.activeAttackSystem.active.length));
-  assert("counterflow reaches response", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
+  assert("default enemy chain active", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
+  assert("default commits multi enemy attacks", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack").length >= 3, String(battle.activeAttackSystem.active.length));
+  assert("default reaches response", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
 
   const enemyStart = battle.enemyHp;
   input.injectKey("A", "press", { fresh: true });
@@ -337,19 +363,34 @@ function verifyCounterflowEnemyAttackChain() {
   input.injectKey("A", "release");
   tick(battle, 0.08);
   const canceledEnemies = battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled).length;
-  assert("counterflow clash cancels covered nodes", canceledEnemies >= 2, String(canceledEnemies));
-  assert("counterflow clash creates counter attack", battle.activeAttackSystem.active.some(attack => attack.intent.kind === "defenseCounter"), battle.turnState);
+  assert("default interrupt cancels covered nodes", canceledEnemies >= 2, String(canceledEnemies));
+  assert("default interrupt creates counter attack", battle.activeAttackSystem.active.some(attack => attack.intent.kind === "defenseCounter"), battle.turnState);
   const clashCounters = battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "defenseCounter");
-  assert("counterflow dual clash splits counter hits", clashCounters.length >= 2 && clashCounters.some(attack => attack.intent.hitIndex === 1) && clashCounters.some(attack => attack.intent.hitIndex === 2), `${clashCounters.length} hits`);
-  assert("counterflow clash eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
-  assert("counterflow clash returns player turn", runUntil(battle, () => battle.turnState === "player_turn", 8), battle.turnState);
+  assert("default interrupt creates melee counter", clashCounters.length >= 1, `${clashCounters.length} hits`);
+  assert("default interrupt eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
+  assert("default interrupt opens followup turn", runUntil(battle, () => battle.turnState === "followup_turn", 8), battle.turnState);
 }
 
-function verifyCounterspellEnemyTurnQTE() {
-  const { input, battle } = createBattle();
-  tap(input, battle, "8");
+function verifySpellInterruptEnemyTurn() {
+  const { input, battle } = createDefaultBattle();
+  let followupOpened = false;
+  let counterCompleted = false;
+  const originalStartFollowupTurn = battle.startFollowupTurn.bind(battle);
+  const originalOnActiveAttackComplete = battle.onActiveAttackComplete.bind(battle);
+  battle.startFollowupTurn = (context = {}) => {
+    followupOpened = true;
+    return originalStartFollowupTurn(context);
+  };
+  battle.onActiveAttackComplete = (attack) => {
+    if (attack && attack.intent && attack.intent.kind === "defenseCounter") counterCompleted = true;
+    return originalOnActiveAttackComplete(attack);
+  };
+
+  battle.startFollowupTurn({ source: "smoke" });
   battle.startEnemyTurn();
-  assert("counterspell setup reaches spell response", runUntil(battle, () => {
+  followupOpened = false;
+  assert("spell interrupt uses spell chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "spellDoubleCut", battle.enemyAttackChain?.id || "none");
+  assert("spell interrupt setup reaches spell response", runUntil(battle, () => {
     const incoming = battle.getIncomingActiveAttack();
     return incoming
       && incoming.phase === "reaction"
@@ -358,24 +399,24 @@ function verifyCounterspellEnemyTurnQTE() {
   }, 4), battle.enemyAttackPhase);
 
   const enemyStart = battle.enemyHp;
-  input.injectKey("S", "press", { fresh: true });
+  input.injectKey("A", "press", { fresh: true });
   tick(battle, 0.08);
-  input.injectKey("S", "release");
+  input.injectKey("A", "release");
   tick(battle, 0.08);
-  assert("counterspell starts qte", battle.turnState === "qte_running" && battle.qteRunner, battle.turnState);
-  assert("counterspell qte chain", battle.qteRunner.context.chainId === "counterspell_reversal", battle.qteRunner.context.chainId);
-  assert("counterspell cancels enemy chain nodes", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled).length >= 2, String(battle.activeAttackSystem.active.length));
-
-  battle.qteRunner.forceOutcome("success");
-  assert("counterspell creates active attack", runUntil(battle, () => battle.turnState === "attack_active" && battle.activeAttackSystem.active.some(attack => attack.intent.kind === "playerQTE"), 8), battle.turnState);
-  assert("counterspell holds hp before impact", battle.enemyHp === enemyStart, `${battle.enemyHp}/${enemyStart}`);
-  assert("counterspell eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
-  assert("counterspell opens player turn", runUntil(battle, () => battle.turnState === "player_turn", 8), battle.turnState);
+  assert("spell interrupt does not start qte", battle.turnState === "attack_active" && !battle.qteRunner, battle.turnState);
+  assert("spell interrupt cancels enemy chain nodes", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled).length >= 2, String(battle.activeAttackSystem.active.length));
+  const spellInterruptCounter = battle.activeAttackSystem.active.find(attack => attack.intent.kind === "defenseCounter");
+  assert("spell interrupt creates counter attack", !!spellInterruptCounter, battle.turnState);
+  assert("spell interrupt counter carries followup", !!(spellInterruptCounter.intent && spellInterruptCounter.intent.followupContext), JSON.stringify(spellInterruptCounter.intent && spellInterruptCounter.intent.followupContext));
+  assert("spell interrupt holds hp before impact", battle.enemyHp === enemyStart, `${battle.enemyHp}/${enemyStart}`);
+  assert("spell interrupt eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
+  assert("spell interrupt counter completes", counterCompleted || runUntil(battle, () => counterCompleted, 8), battle.turnState);
+  assert("spell interrupt opens followup turn", followupOpened || runUntil(battle, () => battle.turnState === "followup_turn", 8), battle.turnState);
 }
 
 function verifyActiveAttackHitStopFreeze() {
-  const { input, battle } = createBattle();
-  tap(input, battle, "6");
+  const { input, battle } = createDefaultBattle();
+  battle.startFollowupTurn({ source: "smoke" });
   tap(input, battle, "A");
   battle.qteRunner.forceOutcome("success");
   assert("active hitstop setup creates attack", runUntil(battle, () => battle.activeAttackSystem.active.length > 0, 8), battle.turnState);
@@ -468,65 +509,12 @@ function verifyHitConfirmSystem() {
   assert("hit confirm debug visible", battle.hitConfirmSystem.getDebugLines(3).some(line => line.includes("命中确认")), battle.hitConfirmSystem.getDebugLines(3).join(" | "));
 }
 
-function createDemo() {
-  const input = new InputBuffer();
-  const logs = [];
-  Difficulty.set("easy");
-  const demo = new DemoMode(input, msg => logs.unshift(String(msg)));
-  tick(demo);
-  return { input, demo, logs };
-}
-
-function verifyDemoSpellFlows() {
-  const { input, demo, logs } = createDemo();
-  tap(input, demo, "1");
-  assert("demo opens showcase category", demo.state === "list" && demo.category === "showcases", `${demo.state}/${demo.category}`);
-  tap(input, demo, "1");
-  assert("demo showcase selected", demo.currentItem && /Showcase/.test(demo.currentItem.name), demo.currentItem?.name || "none");
-  assert("demo showcase enters sequence", demo.state === "action_sequence", demo.state);
-  assert("demo showcase reaches preview", runUntil(demo, () => demo.state === "preview", 8), demo.state);
-  assert("demo showcase logs fire branch", logs.some(line => line.includes("火球分支")), logs.slice(0, 10).join(" | "));
-  demo.handleSystemEscape();
-  tick(demo, 0.5);
-  demo.handleSystemEscape();
-  tick(demo, 0.2);
-
-  tap(input, demo, "3");
-  assert("demo opens spell category", demo.state === "list" && demo.category === "spells", `${demo.state}/${demo.category}`);
-  assert("demo starts on page 1", demo.listPage === 0, String(demo.listPage));
-
-  tap(input, demo, "6");
-  assert("demo flame blade selected", demo.currentItem && demo.currentItem.chain === ChainDatabase.flame_blade, demo.currentItem?.name || "none");
-  assert("demo flame blade enters QTE", demo.state === "qte", demo.state);
-  assert("demo flame blade reaches preview", runUntil(demo, () => demo.state === "preview", 16), demo.state);
-  assert("demo flame blade gains heat", demo.resourceSystem.heat >= 30, String(demo.resourceSystem.heat));
-  assert("demo flame blade records result", demo.resultLines.some(line => line.includes("热量") || line.includes("破甲")), demo.resultLines.join(" | "));
-
-  demo.handleSystemEscape();
-  tick(demo, 0.5);
-  assert("demo escape returns to spell list", demo.state === "list" && demo.category === "spells", `${demo.state}/${demo.category}`);
-  assert("demo ready for list input", runUntil(demo, () => demo.freezeTimer <= 0 && demo.hitStop <= 0, 4), `freeze=${demo.freezeTimer}, hitStop=${demo.hitStop}`);
-
-  tap(input, demo, "D");
-  assert(
-    "demo advances to spell page 2",
-    demo.listPage === 1,
-    `page=${demo.listPage}, state=${demo.state}, category=${demo.category}, freeze=${demo.freezeTimer}, hitStop=${demo.hitStop}, events=${JSON.stringify(input.events)}, held=${JSON.stringify(Array.from(input.heldKeys))}, totalPages=${demo.getTotalPages()}, items=${demo.getCurrentPageItems().map(item => item.name).join(" / ")}`
-  );
-  tap(input, demo, "3");
-  assert("demo overflow selected", demo.currentItem && demo.currentItem.chain === ChainDatabase.overflow_burst, demo.currentItem?.name || "none");
-  assert("demo overflow starts with spell energy", demo.playerState.spellEnergy >= 100, String(demo.playerState.spellEnergy));
-  assert("demo overflow reaches preview", runUntil(demo, () => demo.state === "preview", 16), demo.state);
-  assert("demo overflow records burst", demo.resultLines.some(line => /溢流|法术能量|伤害/.test(line)), demo.resultLines.join(" | "));
-  assert("demo logs include overflow", logs.some(line => line.includes("溢流")), logs.slice(0, 8).join(" | "));
-}
-
 try {
   verifyInputResetReleasesHeldKeys();
-  verifyBattleStyle("6", "flameforge", 280, "A", "flame_blade", "ember_bulwark");
-  verifyBattleStyle("7", "mirrorblade", 190, "S", "absorb_siphon", "arcane_conduit");
-  verifyBattleStyle("8", "counterflow", 210, "S", "dualblades_s_v2", "counter_dojo");
-  verifyCounterflowStyleScope();
+  verifyDefaultCombatPlan();
+  verifyNoFreePlayerQte();
+  verifyDefaultCounterPressureRotation();
+  verifyDefaultPlanScope();
   verifyManualEnemyOverride();
   verifyEncounterOverride();
   verifyEncounterEnemyTurnFlow();
@@ -536,12 +524,11 @@ try {
   verifyCombatPacing();
   verifyActiveAttackQteResolution();
   verifyEnemyActiveAttackTiming();
-  verifyCounterflowEnemyAttackChain();
-  verifyCounterspellEnemyTurnQTE();
+  verifyDefaultEnemyAttackChain();
+  verifySpellInterruptEnemyTurn();
   verifyActiveAttackHitStopFreeze();
   verifyAllDamageChainsResolveActiveProfiles();
   verifyHitConfirmSystem();
-  verifyDemoSpellFlows();
 } catch (err) {
   console.error(err.message);
   process.exitCode = 1;
