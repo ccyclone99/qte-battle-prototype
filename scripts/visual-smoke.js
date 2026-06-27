@@ -641,6 +641,17 @@ async function runVisualSmoke() {
         const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
         return !!(d && d.isFire && d.isGreatsword);
       })()`) },
+      { label: "active attack contact guide anchored", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const a = typeof battle !== "undefined" ? battle.activeAttackSystem.active.find(item => item.source === "player") : null;
+        if (!r || !a || !r.getActiveAttackContactGuide || !r.getBattleAnchor) return false;
+        const from = r.getBattleAnchor(a.intent.fromAnchor || a.intent.anchor || (a.source === "enemy" ? "enemyCore" : "playerHand"));
+        const to = r.getBattleAnchor(a.intent.toAnchor || (a.target === "player" ? "playerCore" : "enemyCore"));
+        const pos = a.position || { x: from.x + (to.x - from.x) * (a.progress || 0), y: from.y + (to.y - from.y) * (a.progress || 0) };
+        const descriptor = r.getPlayerActiveAttackDescriptor(a);
+        const guide = r.getActiveAttackContactGuide(a, from, to, pos, a.profile.color, a.progress, descriptor);
+        return !!(guide && guide.active && guide.isMelee && guide.source === "player" && guide.target === "enemy" && guide.hand.x < guide.contact.x && guide.contact.x > to.x - 90 && guide.radius >= 44);
+      })()`) },
       { label: "contact impact events active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || typeof battle === "undefined" || !r.getCombatContactEvents) return false;

@@ -2096,6 +2096,25 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke forces `熔心压迫` during an active-attack screenshot and verifies both the phase visual profile and phase nameplate label.
 
+### R37 Active Attack Contact Guide Pass, Completed
+
+Goal: active attacks should read as actor-to-target contact, not detached lane effects. Melee attacks in particular need a visible connection from the attacker's body/weapon hand to the target's hit zone.
+
+Implemented direction:
+
+- `CanvasRenderer.getActiveAttackContactGuide()` derives a render-only contact guide from each active attack, including source, target, phase, attack type, hand anchor, contact point, target bracket, radius, heavy/dual-hit context, and hit count.
+- `drawActiveAttackContactGuide()` draws the guide before the attack-specific projectile, beam, pulse, or melee renderer so the existing spectacle stays on top.
+- `drawActiveAttackTargetBracket()` adds a target-attached bracket and ground contact ellipse during reaction/impact phases.
+- Player melee attacks now show a curved hand-to-contact line and target bracket, making greatsword/fire and dual-blade hits feel attached to the character body rather than like a remote slash.
+- Projectile and beam attacks keep lighter source-to-contact lanes, so spells still show travel direction without becoming noisy.
+- This pass is render-only and does not change damage, collision, active attack timing, hit confirm, QTE judgement, enemy AI, or turn flow.
+
+Acceptance criteria:
+
+- Renderer exposes active attack contact guide helpers.
+- Static smoke protects the helper surface.
+- Visual smoke verifies the existing fire/greatsword active attack produces a player-to-enemy melee contact guide anchored near the enemy body.
+
 ## 22. Verification Commands
 
 ```powershell

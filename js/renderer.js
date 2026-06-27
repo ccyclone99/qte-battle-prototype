@@ -1103,9 +1103,11 @@ class CanvasRenderer {
       };
       const progress = Utils.clamp(attack.progress || 0, 0, 1);
       const pulse = 1 + Math.sin(t * 10) * 0.08;
+      const descriptor = attack.source === "player" ? this.getPlayerActiveAttackDescriptor(attack) : null;
+      const contactGuide = this.getActiveAttackContactGuide(attack, from, to, pos, color, progress, descriptor);
+      this.drawActiveAttackContactGuide(ctx, contactGuide, t);
 
       if (attack.source === "player") {
-        const descriptor = this.getPlayerActiveAttackDescriptor(attack);
         if (profile.type === "projectile") {
           this.drawPlayerProjectileActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t);
         } else if (profile.type === "beam") {
@@ -1228,6 +1230,174 @@ class CanvasRenderer {
       isFinisher: includes(["finisher", "shadow", "perfect"]),
       text
     };
+  }
+
+  getActiveAttackContactGuide(attack, from, to, pos, color, progress, descriptor = null) {
+    if (!attack || !from || !to) return { active: false };
+    const profile = attack.profile || {};
+    const intent = attack.intent || {};
+    const type = profile.type || intent.attackType || "melee";
+    const isMelee = type === "melee";
+    const isBeam = type === "beam";
+    const isProjectile = type === "projectile";
+    const isPulse = type === "pulse";
+    const source = attack.source || "player";
+    const target = attack.target || (source === "enemy" ? "player" : "enemy");
+    const phase = attack.phase || "startup";
+    const hitIndex = Math.max(1, intent.hitIndex || 1);
+    const hitCount = Math.max(1, intent.hitCount || 1);
+    const approach = Math.sign(to.x - from.x) || (source === "enemy" ? -1 : 1);
+    const wind = Utils.clamp(progress || 0, 0, 1);
+    const swing = Math.sin(wind * Math.PI);
+    const alternate = hitIndex % 2 === 0 ? -1 : 1;
+    const heavy = !!(descriptor && (descriptor.isGreatsword || descriptor.isFire))
+      || (profile.radius || 0) > 42
+      || String(intent.weapon || "").includes("greatsword");
+    const alphaByPhase = {
+      startup: 0.24,
+      reaction: 0.48,
+      impact: 0.72,
+      recovery: 0.25,
+      canceled: 0.18
+    };
+    const alpha = alphaByPhase[phase] || 0.56;
+    const handLift = isMelee ? (heavy ? 30 : 24) : (isBeam ? 18 : 10);
+    const hand = {
+      x: from.x + approach * (isMelee ? (12 + swing * 16) : 0),
+      y: from.y - handLift + alternate * (isMelee && hitCount > 1 ? 5 : 0)
+    };
+    const contact = isMelee
+      ? {
+          x: to.x - approach * (heavy ? 34 : 28) + approach * swing * (heavy ? 18 : 12),
+          y: to.y - (heavy ? 14 : 20) + alternate * (hitCount > 1 ? 9 : 0)
+        }
+      : (isPulse ? { x: to.x, y: to.y - 8 } : { x: pos.x, y: pos.y });
+    const targetPoint = {
+      x: to.x,
+      y: to.y - (target === "player" ? 14 : 20)
+    };
+
+    return {
+      active: true,
+      source,
+      target,
+      phase,
+      type,
+      isMelee,
+      isBeam,
+      isProjectile,
+      isPulse,
+      heavy,
+      color,
+      progress: wind,
+      swing,
+      alpha,
+      approach,
+      hitIndex,
+      hitCount,
+      hand,
+      contact,
+      targetPoint,
+      radius: Utils.clamp((profile.radius || 42) + (heavy ? 14 : 0) + hitCount * 2, 30, 86),
+      width: Utils.clamp(profile.width || (heavy ? 58 : 38), 26, 96),
+      counter: !!(descriptor && descriptor.isCounter)
+    };
+  }
+
+  drawActiveAttackContactGuide(ctx, guide, t) {
+    if (!guide || !guide.active) return;
+    const color = guide.color || (guide.source === "enemy" ? "#e74c3c" : "#f1c40f");
+    const alpha = guide.alpha || 0.5;
+    const pulse = 1 + Math.sin(t * 9 + guide.hitIndex) * 0.08;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = guide.phase === "impact" ? 22 : 12;
+
+    ctx.strokeStyle = this.hexToRgba(color, alpha * 0.34);
+    ctx.fillStyle = this.hexToRgba(color, alpha * 0.05);
+    ctx.lineWidth = guide.heavy ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(guide.hand.x, guide.hand.y, (guide.heavy ? 16 : 12) * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    if (guide.isMelee) {
+      const midX = (guide.hand.x + guide.contact.x) / 2 + guide.approach * (guide.heavy ? 20 : 12);
+      const midY = Math.min(guide.hand.y, guide.contact.y) - (guide.heavy ? 42 : 26) * (0.45 + guide.swing * 0.55);
+      ctx.strokeStyle = this.hexToRgba(color, alpha * 0.34);
+      ctx.lineWidth = guide.heavy ? 3.25 : 2.25;
+      if (guide.phase === "startup") ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(guide.hand.x, guide.hand.y);
+      ctx.quadraticCurveTo(midX, midY, guide.contact.x, guide.contact.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = this.hexToRgba("#ffffff", alpha * 0.22);
+      ctx.lineWidth = guide.heavy ? 2 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(guide.hand.x + guide.approach * 8, guide.hand.y + 5);
+      ctx.quadraticCurveTo(midX, midY + 10, guide.contact.x - guide.approach * 6, guide.contact.y + 5);
+      ctx.stroke();
+
+      this.drawActiveAttackTargetBracket(ctx, guide, color, alpha, t);
+    } else {
+      const laneAlpha = guide.isBeam ? alpha * 0.26 : alpha * 0.18;
+      ctx.strokeStyle = this.hexToRgba(color, laneAlpha);
+      ctx.lineWidth = guide.isBeam ? 3 : 2;
+      if (guide.isProjectile) ctx.setLineDash([6, 9]);
+      ctx.beginPath();
+      ctx.moveTo(guide.hand.x, guide.hand.y);
+      ctx.quadraticCurveTo((guide.hand.x + guide.targetPoint.x) / 2, guide.hand.y - (guide.isBeam ? 18 : 46), guide.contact.x, guide.contact.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      this.drawActiveAttackTargetBracket(ctx, guide, color, alpha * 0.78, t);
+    }
+
+    if (guide.hitCount > 1) {
+      ctx.strokeStyle = this.hexToRgba(color, alpha * 0.24);
+      ctx.lineWidth = 2;
+      for (let i = 1; i <= Math.min(3, guide.hitCount - 1); i++) {
+        const offset = i * 13;
+        ctx.beginPath();
+        ctx.arc(guide.contact.x - guide.approach * offset, guide.contact.y + (i % 2 === 0 ? -10 : 10), Math.max(10, guide.radius * 0.22), -0.4, Math.PI * 1.2);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  drawActiveAttackTargetBracket(ctx, guide, color, alpha, t) {
+    const wobble = Math.sin(t * 8 + guide.hitIndex) * 3;
+    const radius = guide.isMelee ? guide.radius * 0.45 : guide.radius * 0.38;
+    const x = guide.targetPoint.x - guide.approach * (guide.isMelee ? 18 : 0);
+    const y = guide.targetPoint.y + wobble * 0.25;
+
+    ctx.save();
+    ctx.strokeStyle = this.hexToRgba(color, alpha * (guide.phase === "impact" ? 0.62 : 0.38));
+    ctx.fillStyle = this.hexToRgba(color, alpha * 0.04);
+    ctx.lineWidth = guide.phase === "impact" ? 3 : 1.6;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = guide.phase === "impact" ? 18 : 8;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, Math.PI * 0.64, Math.PI * 1.36);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 12, -Math.PI * 0.36, Math.PI * 0.36);
+    ctx.stroke();
+
+    if (guide.phase === "reaction" || guide.phase === "impact") {
+      ctx.beginPath();
+      ctx.ellipse(x, y + 48, radius * 0.70, 9 + wobble * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   drawPlayerProjectileActiveAttack(ctx, attack, descriptor, from, to, pos, color, progress, pulse, t) {
