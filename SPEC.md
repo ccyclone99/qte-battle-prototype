@@ -2115,6 +2115,26 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke verifies the existing fire/greatsword active attack produces a player-to-enemy melee contact guide anchored near the enemy body.
 
+### R38 Player Defense Intent Pose Pass, Completed
+
+Goal: enemy-turn defense should read from the player's body and immediate space, not only from the enemy timing bar or large key prompt.
+
+Implemented direction:
+
+- `CanvasRenderer.getPlayerDefenseIntentVisuals()` converts the current enemy attack, response phase, allowed responses, telegraph type, and player absorb/shield state into render-only defense cues.
+- `drawPlayerDefenseIntentOverlay()` attaches those cues to the player model during enemy windup/response/hit phases.
+- Dodge-allowed attacks draw green evasive footwork marks around the player.
+- Parry-allowed attacks draw a forward parry arc and spark points.
+- Guard-allowed attacks draw a shield plane in front of the player.
+- Spell-like threats, absorb readiness, and shield enchant draw a mirror/glyph readiness layer.
+- This pass is render-only and does not change defense input, response windows, hit confirm, damage, enemy timing, enemy AI, or turn flow.
+
+Acceptance criteria:
+
+- Renderer exposes player defense intent visual helpers.
+- Static smoke protects the helper surface.
+- Visual smoke verifies the `curseBurst` enemy response window produces active player defense intent visuals for parry, guard, and spell-like pressure.
+
 ## 22. Verification Commands
 
 ```powershell

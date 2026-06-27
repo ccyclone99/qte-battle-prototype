@@ -810,6 +810,12 @@ async function runVisualSmoke() {
         const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
         return !!(p && p.enemyPose === "cast" && p.poseIntensity > 0.6 && p.armReach > 20);
       })()`) },
+      { label: "player defense intent visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerDefenseIntentVisuals || !r.getActorStatusVisuals) return false;
+        const visuals = r.getPlayerDefenseIntentVisuals(battle, r.getActorStatusVisuals(battle, "player"));
+        return !!(visuals && visuals.active && visuals.inResponse && visuals.parry && visuals.guard && visuals.spellLike && visuals.type === "burst" && visuals.intensity >= 1);
+      })()`) },
       { label: "enemy timing metrics active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || typeof battle === "undefined" || !r.getEnemyTimingMetrics) return false;

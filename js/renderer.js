@@ -2616,6 +2616,7 @@ class CanvasRenderer {
     });
     this.drawActorDamageMarks(ctx, "player", px, py, this.getActorDamageVisuals(scene, "player"), styleColor, t);
     this.drawPlayerStatusOverlays(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
+    this.drawPlayerDefenseIntentOverlay(ctx, scene, px, py, this.getPlayerDefenseIntentVisuals(scene, playerStatusVisuals), t);
     this.drawActorReactionOverlay(px, py, 35, playerReaction);
 
     // 敌人
@@ -3445,6 +3446,177 @@ class CanvasRenderer {
       stun: !!(scene && scene.enemyStunTimer > 0) || has("stun"),
       stunDuration: scene && scene.enemyStunTimer > 0 ? scene.enemyStunTimer : durationOf("stun")
     };
+  }
+
+  getPlayerDefenseIntentVisuals(scene, statusVisuals = null) {
+    if (!scene || scene.turnState !== "enemy_turn" || !scene.enemyAttack) return { active: false };
+    const phase = scene.enemyAttackPhase || "none";
+    if (phase !== "windup" && phase !== "response" && phase !== "hit") return { active: false };
+    const attack = scene.enemyAttack;
+    const allowed = Array.isArray(attack.allowedResponses) ? attack.allowedResponses : [];
+    const hasResponse = id => allowed.includes(id);
+    const telegraph = this.getEnemyTelegraph(attack);
+    const meta = this.getEnemyAttackMeta(attack);
+    const metrics = this.getEnemyTimingMetrics(scene, attack);
+    const inResponse = phase === "response";
+    const spellLike = ["spell", "bolt", "burst"].includes(telegraph.type)
+      || attack.interruptible
+      || /spell|arcane|curse|咒|术/.test(`${attack.id || ""} ${attack.name || ""}`);
+    const playerState = scene.playerState || {};
+    const absorbReady = !!playerState.absorbReady || !!(statusVisuals && statusVisuals.absorbReady);
+    const shieldEnchant = !!playerState.shieldEnchanted || !!(statusVisuals && statusVisuals.shieldEnchant);
+    const baseIntensity = inResponse ? 1 : (phase === "hit" ? 0.82 : 0.46);
+
+    return {
+      active: true,
+      phase,
+      inResponse,
+      spellLike,
+      threat: meta.threat,
+      type: telegraph.type,
+      shape: telegraph.shape,
+      color: attack.color || meta.threatColor || "#2ecc71",
+      dodge: hasResponse("dodge"),
+      parry: hasResponse("parry"),
+      guard: hasResponse("guard"),
+      absorbReady,
+      shieldEnchant,
+      intensity: Utils.clamp(baseIntensity + (metrics && metrics.timeToHit < 0.35 ? 0.12 : 0), 0.25, 1.1),
+      timeRatio: metrics ? Utils.clamp(metrics.progress, 0, 1) : 0
+    };
+  }
+
+  drawPlayerDefenseIntentOverlay(ctx, scene, x, y, visuals, t) {
+    if (!visuals || !visuals.active) return;
+    const alpha = visuals.inResponse ? 0.82 : 0.42;
+    const pulse = 0.78 + Math.sin(t * (visuals.inResponse ? 9 : 5)) * 0.10 + visuals.intensity * 0.18;
+    const incomingColor = visuals.color || "#2ecc71";
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = this.hexToRgba("#2ecc71", alpha * 0.28);
+    ctx.fillStyle = this.hexToRgba("#2ecc71", alpha * 0.035);
+    ctx.shadowColor = "#2ecc71";
+    ctx.shadowBlur = visuals.inResponse ? 16 : 8;
+    ctx.lineWidth = visuals.inResponse ? 2.5 : 1.6;
+    ctx.beginPath();
+    ctx.ellipse(x + 10, y + 45, 58 + pulse * 6, 15 + pulse * 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    if (visuals.dodge) {
+      this.drawDefenseDodgeFootwork(ctx, x, y, alpha, t, visuals.inResponse);
+    }
+    if (visuals.parry) {
+      this.drawDefenseParryArc(ctx, x, y, incomingColor, alpha, t, visuals.spellLike);
+    }
+    if (visuals.guard) {
+      this.drawDefenseGuardPlane(ctx, x, y, visuals.shieldEnchant ? "#9b59b6" : incomingColor, alpha, t, visuals.inResponse);
+    }
+    if (visuals.spellLike || visuals.absorbReady || visuals.shieldEnchant) {
+      this.drawDefenseMirrorReadiness(ctx, x, y, visuals.absorbReady ? "#5dade2" : "#9b59b6", alpha, t, visuals);
+    }
+
+    ctx.restore();
+  }
+
+  drawDefenseDodgeFootwork(ctx, x, y, alpha, t, inResponse) {
+    ctx.save();
+    ctx.strokeStyle = this.hexToRgba("#2ecc71", alpha * (inResponse ? 0.60 : 0.34));
+    ctx.fillStyle = this.hexToRgba("#2ecc71", alpha * 0.09);
+    ctx.shadowColor = "#2ecc71";
+    ctx.shadowBlur = inResponse ? 14 : 7;
+    ctx.lineWidth = inResponse ? 2.4 : 1.6;
+    for (let i = 0; i < 3; i++) {
+      const step = i + 1;
+      const offset = step * 22;
+      const bob = Math.sin(t * 7 + i) * 2;
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(x - 4 - offset, y + 52 + side * (8 + i * 2) + bob);
+        ctx.rotate(-0.45 + side * 0.12);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 8 - i, 4.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  drawDefenseParryArc(ctx, x, y, color, alpha, t, spellLike) {
+    ctx.save();
+    const parryColor = spellLike ? "#f1dcff" : "#f1c40f";
+    ctx.strokeStyle = this.hexToRgba(parryColor, alpha * 0.72);
+    ctx.shadowColor = color || parryColor;
+    ctx.shadowBlur = 16;
+    ctx.lineWidth = 3;
+    const cx = x + 44;
+    const cy = y - 8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 36 + Math.sin(t * 8) * 2, -1.18, 1.10);
+    ctx.stroke();
+    ctx.strokeStyle = this.hexToRgba("#ffffff", alpha * 0.36);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx + 4, cy, 24, -1.05, 0.96);
+    ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      const a = -0.95 + i * 0.74 + Math.sin(t * 5 + i) * 0.04;
+      const r = 40;
+      ctx.fillStyle = this.hexToRgba(parryColor, alpha * 0.62);
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawDefenseGuardPlane(ctx, x, y, color, alpha, t, inResponse) {
+    ctx.save();
+    const guardX = x + 58;
+    const guardY = y - 5;
+    const wobble = Math.sin(t * 7) * 2;
+    ctx.strokeStyle = this.hexToRgba(color || "#5dade2", alpha * 0.70);
+    ctx.fillStyle = this.hexToRgba(color || "#5dade2", alpha * 0.10);
+    ctx.shadowColor = color || "#5dade2";
+    ctx.shadowBlur = inResponse ? 18 : 10;
+    ctx.lineWidth = inResponse ? 3 : 2;
+    ctx.beginPath();
+    ctx.roundRect(guardX - 16, guardY - 38 + wobble, 34, 76, 11);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = this.hexToRgba("#ffffff", alpha * 0.28);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(guardX, guardY - 30 + wobble);
+    ctx.lineTo(guardX, guardY + 30 + wobble);
+    ctx.moveTo(guardX - 11, guardY - 2 + wobble);
+    ctx.lineTo(guardX + 12, guardY - 2 + wobble);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawDefenseMirrorReadiness(ctx, x, y, color, alpha, t, visuals) {
+    ctx.save();
+    const cx = x + 34;
+    const cy = y - 18;
+    const radius = visuals.shieldEnchant ? 48 : 36;
+    ctx.strokeStyle = this.hexToRgba(color || "#9b59b6", alpha * 0.50);
+    ctx.fillStyle = this.hexToRgba(color || "#9b59b6", alpha * 0.045);
+    ctx.shadowColor = color || "#9b59b6";
+    ctx.shadowBlur = visuals.inResponse ? 18 : 10;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radius, radius * 0.48, Math.sin(t * 1.8) * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    this.drawStageGlyph(ctx, cx, cy, 14 + visuals.intensity * 5, color || "#9b59b6", -t * 0.85, alpha * 0.26);
+    ctx.restore();
   }
 
   drawPlayerStatusAuras(ctx, scene, x, y, color, visuals, t) {
