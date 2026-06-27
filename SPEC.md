@@ -2305,6 +2305,31 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke verifies player and enemy footwork visuals inside existing battle screenshots.
 
+### R46 Weapon Silhouette Material Pass, Completed
+
+Goal: weapon identity should read from the weapon silhouette itself, not only from body stance, text labels, or large attack trails.
+
+Implemented direction:
+
+- `CanvasRenderer.getWeaponSilhouetteProfile()` now gives each weapon family explicit visual proportions:
+  - greatsword: heavy blade, broad core, guard, grip, and tip geometry
+  - dual blades: twin curved blades, thinner edges, paired tips, and small grips
+  - staff: long focus staff, shaft highlight, band wraps, focus orb, and ring radius
+- `drawWeaponSilhouette()` now renders material detail for all existing player/enemy weapon calls:
+  - white edge highlights
+  - darker grip cores
+  - colored guard/band accents
+  - staff focus ring
+- `drawWeaponGrip()` centralizes grip rendering so blade weapons do not read as plain colored lines.
+- This pass is render-only. It does not change active attack ranges, hitboxes, damage, QTE timing, animation timing, or enemy behavior.
+- The asset cache key is bumped to `r46a`.
+
+Acceptance criteria:
+
+- Renderer exposes weapon silhouette profile/material helpers.
+- Static smoke protects heavy blade, twin blade, and focus staff profiles.
+- Visual smoke verifies the three profile families are distinct during browser-rendered battle checks.
+
 ## 22. Verification Commands
 
 ```powershell

@@ -6016,52 +6016,210 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  getWeaponSilhouetteProfile(weaponId) {
+    if (weaponId === "greatsword") {
+      return {
+        family: "heavy-blade",
+        bladeLength: 58,
+        bladeWidth: 10,
+        edgeWidth: 4,
+        guardWidth: 18,
+        gripLength: 13,
+        tipLength: 9,
+        glow: 0.34
+      };
+    }
+
+    if (weaponId === "dualBlades") {
+      return {
+        family: "twin-blade",
+        bladeLength: 38,
+        bladeWidth: 4,
+        edgeWidth: 2,
+        guardWidth: 9,
+        gripLength: 8,
+        tipLength: 7,
+        glow: 0.28
+      };
+    }
+
+    if (weaponId === "staff") {
+      return {
+        family: "focus-staff",
+        shaftLength: 82,
+        shaftWidth: 5,
+        focusRadius: 9,
+        ringRadius: 16,
+        bandCount: 3,
+        glow: 0.36
+      };
+    }
+
+    return {
+      family: "simple-blade",
+      bladeLength: 42,
+      bladeWidth: 5,
+      edgeWidth: 2,
+      guardWidth: 10,
+      gripLength: 8,
+      tipLength: 6,
+      glow: 0.22
+    };
+  }
+
   drawWeaponSilhouette(ctx, weaponId, x, y, color, angle, scale = 1) {
+    const profile = this.getWeaponSilhouetteProfile(weaponId);
+    const weaponColor = color || "#f1c40f";
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle || 0);
     ctx.scale(scale, scale);
-    ctx.strokeStyle = color || "#f1c40f";
-    ctx.fillStyle = color || "#f1c40f";
-    ctx.shadowColor = color || "#f1c40f";
+    ctx.strokeStyle = weaponColor;
+    ctx.fillStyle = weaponColor;
+    ctx.shadowColor = weaponColor;
     ctx.shadowBlur = 10;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
-    if (weaponId === "greatsword") {
-      ctx.lineWidth = 8;
+    if (profile.family === "heavy-blade") {
+      const len = profile.bladeLength;
+      ctx.lineWidth = profile.bladeWidth;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(52, 0);
+      ctx.lineTo(len, 0);
       ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.78);
+      ctx.lineWidth = profile.edgeWidth;
+      ctx.beginPath();
+      ctx.moveTo(12, -2);
+      ctx.lineTo(len - profile.tipLength, -2);
+      ctx.stroke();
+
       ctx.fillStyle = "#ffffff";
-      ctx.globalAlpha = 0.75;
-      ctx.fillRect(12, -2, 34, 4);
+      ctx.globalAlpha = 0.62;
+      ctx.beginPath();
+      ctx.moveTo(len - profile.tipLength, -5);
+      ctx.lineTo(len + 2, 0);
+      ctx.lineTo(len - profile.tipLength, 5);
+      ctx.closePath();
+      ctx.fill();
       ctx.globalAlpha = 1;
-    } else if (weaponId === "dualBlades") {
-      ctx.lineWidth = 4;
+
+      ctx.strokeStyle = this.hexToRgba(weaponColor, 0.82);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(5, -profile.guardWidth * 0.45);
+      ctx.lineTo(5, profile.guardWidth * 0.45);
+      ctx.stroke();
+      this.drawWeaponGrip(ctx, -profile.gripLength, 0, profile.gripLength, weaponColor);
+    } else if (profile.family === "twin-blade") {
+      const len = profile.bladeLength;
+      ctx.lineWidth = profile.bladeWidth;
       ctx.beginPath();
       ctx.moveTo(0, -6);
-      ctx.lineTo(34, -14);
+      ctx.quadraticCurveTo(len * 0.52, -16, len, -14);
       ctx.moveTo(0, 6);
-      ctx.lineTo(34, 14);
+      ctx.quadraticCurveTo(len * 0.52, 16, len, 14);
       ctx.stroke();
-    } else if (weaponId === "staff") {
-      ctx.lineWidth = 5;
+
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.62);
+      ctx.lineWidth = profile.edgeWidth;
+      ctx.beginPath();
+      ctx.moveTo(8, -7);
+      ctx.lineTo(len - profile.tipLength, -13);
+      ctx.moveTo(8, 7);
+      ctx.lineTo(len - profile.tipLength, 13);
+      ctx.stroke();
+
+      ctx.fillStyle = this.hexToRgba("#ffffff", 0.52);
+      ctx.beginPath();
+      ctx.moveTo(len - profile.tipLength, -17);
+      ctx.lineTo(len + 4, -14);
+      ctx.lineTo(len - profile.tipLength, -10);
+      ctx.moveTo(len - profile.tipLength, 17);
+      ctx.lineTo(len + 4, 14);
+      ctx.lineTo(len - profile.tipLength, 10);
+      ctx.fill();
+
+      ctx.strokeStyle = this.hexToRgba(weaponColor, 0.74);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(2, -profile.guardWidth);
+      ctx.lineTo(2, -2);
+      ctx.moveTo(2, 2);
+      ctx.lineTo(2, profile.guardWidth);
+      ctx.stroke();
+      this.drawWeaponGrip(ctx, -profile.gripLength, 0, profile.gripLength, weaponColor);
+    } else if (profile.family === "focus-staff") {
+      ctx.lineWidth = profile.shaftWidth;
       ctx.beginPath();
       ctx.moveTo(-8, 34);
       ctx.lineTo(14, -42);
       ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.34);
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(16, -46, 8, 0, Math.PI * 2);
+      ctx.moveTo(-3, 26);
+      ctx.lineTo(10, -33);
+      ctx.stroke();
+
+      for (let i = 0; i < profile.bandCount; i++) {
+        const p = i / Math.max(1, profile.bandCount - 1);
+        const bx = -4 + p * 15;
+        const by = 21 - p * 52;
+        ctx.strokeStyle = this.hexToRgba(weaponColor, 0.72);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(bx - 5, by);
+        ctx.lineTo(bx + 5, by - 2);
+        ctx.stroke();
+      }
+
+      ctx.shadowColor = weaponColor;
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = weaponColor;
+      ctx.beginPath();
+      ctx.arc(16, -46, profile.focusRadius, 0, Math.PI * 2);
       ctx.fill();
+
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.50);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(16, -46, profile.ringRadius, -0.4, Math.PI * 1.3);
+      ctx.stroke();
     } else {
-      ctx.lineWidth = 4;
+      ctx.lineWidth = profile.bladeWidth;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(40, 0);
+      ctx.lineTo(profile.bladeLength, 0);
       ctx.stroke();
+      this.drawWeaponGrip(ctx, -profile.gripLength, 0, profile.gripLength, weaponColor);
     }
 
+    ctx.restore();
+  }
+
+  drawWeaponGrip(ctx, x, y, length, color) {
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = this.hexToRgba("#091018", 0.90);
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + length, y);
+    ctx.stroke();
+
+    ctx.strokeStyle = this.hexToRgba(color || "#f1c40f", 0.72);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y - 2);
+    ctx.lineTo(x + length - 2, y - 2);
+    ctx.stroke();
     ctx.restore();
   }
 

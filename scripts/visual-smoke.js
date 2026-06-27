@@ -642,7 +642,7 @@ async function runVisualSmoke() {
         direction: 1,
         distance: 44,
         lift: 8,
-        duration: 0.80
+        duration: 2.40
       });
       battle.screenShake = 0.8;
       battle.cameraZoom = 1.06;
@@ -707,6 +707,21 @@ async function runVisualSmoke() {
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
         const d = r && a ? r.getPlayerActiveAttackDescriptor(a) : null;
         return !!(d && d.isFire && d.isGreatsword);
+      })()`) },
+      { label: "weapon silhouette profiles distinct", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || !r.getWeaponSilhouetteProfile) return false;
+        const great = r.getWeaponSilhouetteProfile("greatsword");
+        const dual = r.getWeaponSilhouetteProfile("dualBlades");
+        const staff = r.getWeaponSilhouetteProfile("staff");
+        return !!(
+          great.family === "heavy-blade"
+          && dual.family === "twin-blade"
+          && staff.family === "focus-staff"
+          && great.bladeWidth > dual.bladeWidth
+          && staff.focusRadius >= 8
+          && staff.bandCount >= 3
+        );
       })()`) },
       { label: "active attack contact guide anchored", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
