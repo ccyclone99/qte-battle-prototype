@@ -2388,6 +2388,32 @@ Acceptance criteria:
 - Static smoke protects all five action personality kinds.
 - Visual smoke verifies the live caster response layer and all five archetype personality branches.
 
+### R49 Player Weapon Action Personality Pass, Completed
+
+Goal: player weapon styles should remain readable from the player model during startup, release, and active-attack playback, not only from weapon trails or HUD labels.
+
+Implemented direction:
+
+- `CanvasRenderer.getPlayerWeaponActionVisuals()` derives a model-attached weapon action layer from:
+  - current player weapon and style key
+  - player motion tags
+  - actor performance values
+  - active attack descriptor data
+  - fire / absorb / counter style flags
+- `drawPlayerWeaponActionLayer()` draws foreground body-following cues:
+  - greatsword: heavy blade pressure arc, ground cracks, and fire embers
+  - dual blades: crossing lane arcs, blade afterimages, and counter guard cross
+  - staff: focus sigil, orbiting motes, and cast tether line
+- The layer is drawn inside the player model transform after arms and weapon silhouettes, so it follows lean, hit squash, actor scale, and current QTE motion.
+- This pass is render-only. It does not change QTE timing, enemy AI, active attack travel, hit confirm, damage, resources, or input windows.
+- The asset cache key is bumped to `r49a`.
+
+Acceptance criteria:
+
+- Renderer exposes player weapon action helper methods.
+- Static smoke protects greatsword, dual-blade, counter-blade, and staff action kinds.
+- Visual smoke verifies the live greatsword attack branch and synthetic dual-blade / staff branches.
+
 ## 22. Verification Commands
 
 ```powershell

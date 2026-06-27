@@ -726,6 +726,66 @@ async function runVisualSmoke() {
         const badge = r.getActorIntentBadgeVisuals(battle, "player", p, { color: "#e67e22" });
         return !!(badge && badge.active && badge.kind === "attack" && badge.label === "weapon-release" && badge.progress >= 0 && badge.radius >= 15);
       })()`) },
+      { label: "player weapon action greatsword", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerWeaponActionVisuals || !r.getActorPerformance || !r.getPlayerModelProfile) return false;
+        const p = r.getActorPerformance(battle, "player", battle.actorReactions.get("player"), r.getCurrentPose(battle));
+        const profile = r.getPlayerModelProfile(battle);
+        const visuals = r.getPlayerWeaponActionVisuals(battle, profile, p, {
+          weaponId: "greatsword",
+          motion: "flameBladeBurst",
+          state: "swordAttack",
+          color: "#e67e22",
+          progress: 0.72,
+          isAttack: true
+        });
+        return !!(visuals && visuals.active && visuals.kind === "heavy-blade-pressure" && visuals.heavy && visuals.fire && visuals.groundCracks && visuals.radius > 85 && visuals.emberCount >= 5);
+      })()`) },
+      { label: "player weapon action branches", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getPlayerWeaponActionVisuals) return false;
+        const dual = r.getPlayerWeaponActionVisuals(battle, {
+          weaponId: "dualBlades",
+          styleKey: "8",
+          hasAbsorb: true,
+          styleColor: "#16a085"
+        }, {
+          attack: 0.78,
+          actionProgress: 0.64,
+          armReach: 22,
+          motion: "dualClashLead"
+        }, {
+          weaponId: "dualBlades",
+          motion: "dualClashLead",
+          state: "swordAttack",
+          color: "#16a085",
+          progress: 0.64,
+          isAttack: true
+        });
+        const staff = r.getPlayerWeaponActionVisuals({
+          activeAttackSystem: { active: [] },
+          playerConfig: { weapon: "staff", spells: ["fire"] }
+        }, {
+          weaponId: "staff",
+          hasFire: true,
+          styleColor: "#e67e22"
+        }, {
+          cast: 0.86,
+          actionProgress: 0.58,
+          armReach: 16,
+          motion: "fireRelease"
+        }, {
+          weaponId: "staff",
+          motion: "fireRelease",
+          state: "casting",
+          color: "#e67e22",
+          progress: 0.58,
+          isCast: true
+        });
+        return !!(dual && staff
+          && dual.active && dual.kind === "counter-blade-flow" && dual.counter && dual.crossGuard && dual.laneCount >= 2 && dual.afterimageCount >= 3
+          && staff.active && staff.kind === "focus-staff-channel" && staff.fire && staff.releaseLike && staff.orbitCount >= 4 && staff.focusRadius > 26);
+      })()`) },
       { label: "player fire attack descriptor", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");

@@ -5309,6 +5309,243 @@ class CanvasRenderer {
       this.drawWeaponSilhouette(ctx, weaponId, 38, 10, trimColor, 0.25, 0.78);
     }
 
+    this.drawPlayerWeaponActionLayer(ctx, this.getPlayerWeaponActionVisuals(scene, playerProfile, perf, {
+      weaponId,
+      motion,
+      state,
+      color: trimColor,
+      progress: attackEase,
+      isAttack,
+      isCast,
+      isShield
+    }), t);
+
+    ctx.restore();
+  }
+
+  getPlayerWeaponActionVisuals(scene, playerProfile = {}, performance = {}, context = {}) {
+    const weaponId = context.weaponId || playerProfile.weaponId || playerProfile.weapon || "";
+    if (!weaponId) return { active: false };
+    const motion = context.motion || performance.motion || "";
+    const activeAttack = this.getActorActiveAttack(scene, "player", "source");
+    const descriptor = activeAttack ? this.getPlayerActiveAttackDescriptor(activeAttack) : null;
+    const progress = Utils.clamp(
+      Number.isFinite(context.progress) ? context.progress
+        : (Number.isFinite(performance.actionProgress) ? performance.actionProgress
+          : (activeAttack && Number.isFinite(activeAttack.progress) ? activeAttack.progress : 0)),
+      0,
+      1
+    );
+    const attack = Math.max(performance.attack || 0, context.isAttack ? 0.55 : 0, activeAttack ? 0.58 : 0);
+    const cast = Math.max(performance.cast || 0, context.isCast ? 0.50 : 0);
+    const brace = Math.max(performance.brace || 0, context.isShield ? 0.42 : 0);
+    const release = activeAttack && (activeAttack.phase === "impact" || activeAttack.phase === "reaction") ? 1 : progress;
+    const styleKey = playerProfile.styleKey || "";
+    const fire = !!(playerProfile.hasFire || (descriptor && descriptor.isFire) || /flame|fire|burn/i.test(motion));
+    const absorb = !!(playerProfile.hasAbsorb || (descriptor && descriptor.isAbsorb) || /absorb|overflow|mirror|counterspell/i.test(motion));
+    const counter = styleKey === "8" || !!(descriptor && descriptor.isCounter) || /counter|clash/i.test(motion);
+    const color = context.color || playerProfile.styleColor || "#3498db";
+    const actionPower = Utils.clamp(Math.max(attack, cast, brace, progress * 0.82, activeAttack ? 0.68 : 0), 0, 1.2);
+    if (actionPower <= 0.06) return { active: false };
+
+    if (weaponId === "greatsword") {
+      const earthsplit = /earthsplit|burst|overcharge|flame/i.test(motion);
+      return {
+        active: true,
+        kind: "heavy-blade-pressure",
+        weaponId,
+        motion,
+        color,
+        progress,
+        intensity: actionPower,
+        release,
+        fire,
+        absorb,
+        counter,
+        heavy: true,
+        radius: 58 + actionPower * 36 + (earthsplit ? 18 : 0),
+        arcWidth: 7 + actionPower * 5,
+        groundCracks: earthsplit || release > 0.62,
+        emberCount: fire ? 5 : 0,
+        anchor: { x: 46 + performance.armReach * 0.18, y: -24 + release * 18 }
+      };
+    }
+
+    if (weaponId === "dualBlades") {
+      const hitCount = descriptor ? descriptor.hitCount : (counter ? 3 : 2);
+      const finisher = !!(descriptor && descriptor.isFinisher) || /finisher|burst/i.test(motion);
+      return {
+        active: true,
+        kind: counter ? "counter-blade-flow" : "twin-blade-flow",
+        weaponId,
+        motion,
+        color,
+        progress,
+        intensity: actionPower,
+        release,
+        fire,
+        absorb,
+        counter,
+        finisher,
+        laneCount: Math.max(2, Math.min(5, hitCount + (finisher ? 1 : 0))),
+        afterimageCount: Math.max(2, Math.min(4, Math.ceil(2 + actionPower * 2))),
+        crossGuard: counter || /guard|mirror|clash/i.test(motion),
+        radius: 46 + actionPower * 28 + (finisher ? 16 : 0)
+      };
+    }
+
+    if (weaponId === "staff") {
+      const releaseLike = /release|burst|fire|overflow/i.test(motion) || !!activeAttack;
+      return {
+        active: true,
+        kind: "focus-staff-channel",
+        weaponId,
+        motion,
+        color,
+        progress,
+        intensity: actionPower,
+        release,
+        fire,
+        absorb,
+        counter,
+        releaseLike,
+        orbitCount: releaseLike ? 5 : 4,
+        focusRadius: 18 + actionPower * 14,
+        laneWidth: 2 + actionPower * 3,
+        anchor: { x: 48 + performance.armReach * 0.12, y: -34 - cast * 7 }
+      };
+    }
+
+    return {
+      active: true,
+      kind: "simple-weapon-flow",
+      weaponId,
+      motion,
+      color,
+      progress,
+      intensity: actionPower,
+      release,
+      fire,
+      absorb,
+      counter,
+      radius: 38 + actionPower * 20
+    };
+  }
+
+  drawPlayerWeaponActionLayer(ctx, visuals, t) {
+    if (!visuals || !visuals.active) return;
+    const color = visuals.color || "#3498db";
+    const intensity = Utils.clamp(visuals.intensity || 0.2, 0, 1.2);
+    const progress = Utils.clamp(visuals.progress || 0, 0, 1);
+    const release = Utils.clamp(visuals.release || progress, 0, 1);
+    const pulse = 0.5 + Math.sin(t * 8 + progress * Math.PI) * 0.5;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 + intensity * 16;
+
+    if (visuals.kind === "heavy-blade-pressure") {
+      const anchor = visuals.anchor || { x: 48, y: -18 };
+      ctx.strokeStyle = this.hexToRgba(visuals.fire ? "#ffb347" : color, 0.26 + intensity * 0.34);
+      ctx.lineWidth = visuals.arcWidth || 8;
+      ctx.beginPath();
+      ctx.arc(anchor.x - 16, anchor.y + 22, visuals.radius || 84, -Math.PI * 0.70, Math.PI * (0.18 + release * 0.28));
+      ctx.stroke();
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.18 + intensity * 0.20);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(anchor.x - 16, anchor.y + 22, (visuals.radius || 84) - 13, -Math.PI * 0.62, Math.PI * (0.12 + release * 0.22));
+      ctx.stroke();
+      if (visuals.groundCracks) {
+        ctx.strokeStyle = this.hexToRgba(visuals.fire ? "#f39c12" : color, 0.20 + intensity * 0.22);
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 4; i++) {
+          const x = 16 + i * 18;
+          ctx.beginPath();
+          ctx.moveTo(x, 61 + i % 2 * 4);
+          ctx.lineTo(x + 16 + release * 10, 52 - i * 3);
+          ctx.lineTo(x + 23 + release * 14, 58 + i * 2);
+          ctx.stroke();
+        }
+      }
+      for (let i = 0; i < (visuals.emberCount || 0); i++) {
+        const a = -0.8 + i * 0.28 + pulse * 0.12;
+        ctx.fillStyle = this.hexToRgba(i % 2 === 0 ? "#ffd27a" : "#ff7a2d", 0.34 + intensity * 0.20);
+        ctx.beginPath();
+        ctx.arc(anchor.x + Math.cos(a) * (34 + i * 5), anchor.y + Math.sin(a) * 28 + i * 7, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (visuals.kind === "twin-blade-flow" || visuals.kind === "counter-blade-flow") {
+      const laneCount = visuals.laneCount || 2;
+      ctx.strokeStyle = this.hexToRgba(visuals.counter ? "#2fffd1" : color, 0.22 + intensity * 0.30);
+      ctx.lineWidth = visuals.finisher ? 4 : 3;
+      for (let i = 0; i < laneCount; i++) {
+        const side = i % 2 === 0 ? 1 : -1;
+        const y = -14 + side * (12 + i * 3);
+        const radius = (visuals.radius || 58) + i * 8;
+        ctx.globalAlpha = Math.max(0.16, 0.54 - i * 0.07);
+        ctx.beginPath();
+        ctx.arc(20 + release * 18, y, radius, side > 0 ? -0.88 : 0.18, side > 0 ? 0.32 + release * 0.36 : 1.30 + release * 0.28);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      if (visuals.crossGuard) {
+        ctx.strokeStyle = this.hexToRgba("#ffffff", 0.22 + intensity * 0.22);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-38, -28);
+        ctx.lineTo(42 + release * 16, 18);
+        ctx.moveTo(-34, 20);
+        ctx.lineTo(40 + release * 14, -24);
+        ctx.stroke();
+      }
+      for (let i = 0; i < (visuals.afterimageCount || 0); i++) {
+        const ox = -20 - i * 13 - release * 10;
+        ctx.strokeStyle = this.hexToRgba(color, 0.14 + intensity * 0.08);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(ox, -34 + i * 5);
+        ctx.quadraticCurveTo(12 - i * 4, -8, 46 + release * 16, 22 - i * 6);
+        ctx.stroke();
+      }
+    } else if (visuals.kind === "focus-staff-channel") {
+      const anchor = visuals.anchor || { x: 52, y: -36 };
+      const radius = visuals.focusRadius || 24;
+      this.drawPlayerCastSigil(ctx, anchor.x, anchor.y, radius, color, t);
+      ctx.strokeStyle = this.hexToRgba(visuals.absorb ? "#e8c7ff" : (visuals.fire ? "#ffd27a" : "#ffffff"), 0.20 + intensity * 0.24);
+      ctx.lineWidth = visuals.laneWidth || 3;
+      ctx.beginPath();
+      ctx.moveTo(-18, -12);
+      ctx.quadraticCurveTo(10 + release * 14, -54 - pulse * 10, anchor.x, anchor.y);
+      ctx.stroke();
+      ctx.fillStyle = this.hexToRgba(color, 0.30 + intensity * 0.18);
+      const count = visuals.orbitCount || 4;
+      for (let i = 0; i < count; i++) {
+        const a = t * (visuals.absorb ? -1.7 : 1.8) + i * Math.PI * 2 / count;
+        const ox = anchor.x + Math.cos(a) * (radius + 12 + release * 7);
+        const oy = anchor.y + Math.sin(a) * (radius * 0.56 + 5);
+        ctx.beginPath();
+        ctx.arc(ox, oy, 3.5 + intensity * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (visuals.releaseLike) {
+        ctx.strokeStyle = this.hexToRgba(color, 0.24 + intensity * 0.24);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(anchor.x, anchor.y, radius + 23 + pulse * 4, -0.4, Math.PI * 1.35);
+        ctx.stroke();
+      }
+    } else {
+      ctx.strokeStyle = this.hexToRgba(color, 0.22 + intensity * 0.22);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(28, -6, visuals.radius || 44, -0.7, 0.9);
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
