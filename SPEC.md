@@ -2135,6 +2135,26 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke verifies the `curseBurst` enemy response window produces active player defense intent visuals for parry, guard, and spell-like pressure.
 
+### R39 Combat Phase Lighting Pass, Completed
+
+Goal: current combat phase should read from the stage lighting, not only from the top turn pill, QTE bar, or key prompt.
+
+Implemented direction:
+
+- `CanvasRenderer.getCombatPhaseLighting()` derives a render-only lighting profile from turn state, active attacks, QTE progress, enemy response windows, style color, and enemy attack color.
+- `drawCombatPhaseLighting()` draws low-noise ground glows, lane streaks, moving floor ticks, and response-window emphasis after the stage and before actors.
+- Player turn highlights the player side and forward lane.
+- QTE highlights the player and center timing lane without touching judgement windows.
+- Active attacks use the active attack source, progress, color, and direction.
+- Enemy response windows highlight both enemy pressure and the player's response space.
+- This pass is render-only and does not change QTE timing, action bars, active attacks, hit confirm, damage, enemy AI, or UI layout.
+
+Acceptance criteria:
+
+- Renderer exposes combat phase lighting helpers.
+- Static smoke protects the helper surface.
+- Visual smoke verifies QTE phase lighting and enemy-response phase lighting through existing battle screenshots.
+
 ## 22. Verification Commands
 
 ```powershell

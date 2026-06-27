@@ -522,6 +522,12 @@ async function runVisualSmoke() {
         const m = r.getQTEReadabilityMetrics(battle);
         return !!(m && m.stageTitle && m.chainName && m.windowEndRatio > m.windowStartRatio && m.timeLeft >= 0 && m.stateLabel);
       })()`) },
+      { label: "combat phase lighting qte active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getCombatPhaseLighting) return false;
+        const light = r.getCombatPhaseLighting(battle);
+        return !!(light && light.active && light.mode === "qte" && light.playerHot && light.centerHot && light.intensity >= 0.4);
+      })()`) },
       { label: "battle qte suppresses stale overlays", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const scene = typeof battle !== "undefined" ? battle : null;
@@ -815,6 +821,12 @@ async function runVisualSmoke() {
         if (!r || typeof battle === "undefined" || !r.getPlayerDefenseIntentVisuals || !r.getActorStatusVisuals) return false;
         const visuals = r.getPlayerDefenseIntentVisuals(battle, r.getActorStatusVisuals(battle, "player"));
         return !!(visuals && visuals.active && visuals.inResponse && visuals.parry && visuals.guard && visuals.spellLike && visuals.type === "burst" && visuals.intensity >= 1);
+      })()`) },
+      { label: "combat phase lighting enemy response", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getCombatPhaseLighting) return false;
+        const light = r.getCombatPhaseLighting(battle);
+        return !!(light && light.active && light.mode === "enemy" && light.response && light.enemyHot && light.playerHot && light.laneDirection === -1);
       })()`) },
       { label: "enemy timing metrics active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

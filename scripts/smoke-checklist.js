@@ -116,6 +116,7 @@ check("renderer has enemy silhouette helper", rendererJs.includes("drawEnemySilh
 check("renderer has stage and nameplate helpers", rendererJs.includes("drawBattleStage") && rendererJs.includes("drawActorGroundSigil") && rendererJs.includes("drawCombatNameplates"));
 check("renderer has encounter stage theme helpers", rendererJs.includes("getEncounterStageTheme") && rendererJs.includes("drawEncounterBackdrop") && rendererJs.includes("drawEncounterFloorDetails") && rendererJs.includes("drawStageGlyph"));
 check("renderer has encounter phase model helpers", rendererJs.includes("getEncounterPhaseInfo") && rendererJs.includes("getEncounterPhaseLabel") && rendererJs.includes("getEnemyEncounterPhaseVisuals") && rendererJs.includes("drawEnemyEncounterPhaseOverlay"));
+check("renderer has combat phase lighting helpers", rendererJs.includes("getCombatPhaseLighting") && rendererJs.includes("drawCombatPhaseLighting") && rendererJs.includes("playerHot") && rendererJs.includes("enemyHot"));
 check("renderer has cinematic focus helpers", rendererJs.includes("getCinematicFocus") && rendererJs.includes("drawCinematicFocus") && rendererJs.includes("drawCinematicLane") && rendererJs.includes("drawCinematicReticle"));
 check("renderer has stage-only camera helpers", rendererJs.includes("getRenderCamera") && rendererJs.includes("applyWorldCamera") && rendererJs.includes("drawWorldScene") && rendererJs.includes("uiStable: true"));
 check("renderer has actor performance helpers", rendererJs.includes("getActorPerformance") && rendererJs.includes("getActorActiveAttack") && rendererJs.includes("drawActorPerformanceAfterimage"));
@@ -161,6 +162,7 @@ check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captu
 check("visual smoke covers style 7 and replay", visualSmokeJs.includes("battle-style7-qte") && visualSmokeJs.includes("demo-result-replay-qte"));
 check("visual smoke covers encounter stage themes", visualSmokeJs.includes("style 6 forge stage theme") && visualSmokeJs.includes("style 7 arcane stage theme") && visualSmokeJs.includes("style 8 dojo stage theme"));
 check("visual smoke covers encounter phase model visuals", visualSmokeJs.includes("enemy encounter phase visuals active") && visualSmokeJs.includes("enemy phase nameplate uses phase name"));
+check("visual smoke covers combat phase lighting", visualSmokeJs.includes("combat phase lighting qte active") && visualSmokeJs.includes("combat phase lighting enemy response"));
 check("visual smoke covers cinematic focus", visualSmokeJs.includes("player attack cinematic focus") && visualSmokeJs.includes("enemy response cinematic focus"));
 check("visual smoke covers stage-only camera impulse", visualSmokeJs.includes("stage-only camera impulse active") && visualSmokeJs.includes("getRenderCamera"));
 check("visual smoke covers battle result summary", visualSmokeJs.includes("battle-result-summary") && visualSmokeJs.includes("getBattleResultLines"));

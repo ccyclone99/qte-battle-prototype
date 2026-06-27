@@ -2556,6 +2556,7 @@ class CanvasRenderer {
     const ctx = this.ctx;
 
     this.drawBattleStage(scene, t);
+    this.drawCombatPhaseLighting(ctx, this.getCombatPhaseLighting(scene), t);
 
     // 玩家
     const basePx = 220;
@@ -2734,6 +2735,199 @@ class CanvasRenderer {
       ctx.fillStyle = this.hexToRgba("#2ecc71", 0.08 + Math.sin(t * 12) * 0.03);
       ctx.fillRect(0, floorY - 5, this.width, 8);
     }
+    ctx.restore();
+  }
+
+  getCombatPhaseLighting(scene) {
+    if (!scene || !scene.turnState || scene.turnState.startsWith("select_") || scene.turnState.startsWith("demo_") || scene.turnState === "game_over") {
+      return { active: false };
+    }
+
+    const style = scene.playerConfig && scene.playerConfig.style ? StyleDatabase[scene.playerConfig.style] : null;
+    const weapon = scene.playerConfig && scene.playerConfig.weapon ? WeaponDatabase[scene.playerConfig.weapon] : null;
+    const enemy = scene.enemyConfig || EnemyDatabase.base;
+    const playerColor = style ? style.color : (weapon ? weapon.color : "#3498db");
+    const enemyColor = scene.enemyAttack && scene.enemyAttack.color ? scene.enemyAttack.color : (enemy.color || "#e74c3c");
+    const focus = this.getCinematicFocus(scene);
+    const floorY = this.height - 150;
+    const base = {
+      active: true,
+      mode: scene.turnState,
+      floorY,
+      playerX: 220,
+      enemyX: this.width - 220,
+      playerColor,
+      enemyColor,
+      color: playerColor,
+      secondary: enemyColor,
+      intensity: 0.28,
+      progress: 0.35,
+      playerHot: false,
+      enemyHot: false,
+      centerHot: false,
+      response: false,
+      laneDirection: 1
+    };
+
+    if (scene.turnState === "player_turn") {
+      return {
+        ...base,
+        mode: "player",
+        color: playerColor,
+        secondary: "#f1c40f",
+        intensity: 0.34,
+        progress: 0.18,
+        playerHot: true
+      };
+    }
+
+    if (scene.turnState === "qte_running") {
+      const runnerProgress = scene.qteRunner && scene.qteRunner.currentNodeProgress ? scene.qteRunner.currentNodeProgress() : 0.5;
+      return {
+        ...base,
+        mode: "qte",
+        color: playerColor,
+        secondary: "#f1c40f",
+        intensity: 0.42,
+        progress: Utils.clamp(runnerProgress, 0, 1),
+        playerHot: true,
+        centerHot: true
+      };
+    }
+
+    if (scene.turnState === "attack_active" && focus && focus.kind === "activeAttack") {
+      return {
+        ...base,
+        mode: "attack",
+        color: focus.color || playerColor,
+        secondary: focus.source === "enemy" ? playerColor : enemyColor,
+        intensity: Utils.clamp(focus.intensity || 0.54, 0.32, 0.92),
+        progress: Utils.clamp(focus.progress || 0, 0, 1),
+        playerHot: focus.source === "player",
+        enemyHot: focus.source === "enemy",
+        centerHot: true,
+        laneDirection: focus.source === "enemy" ? -1 : 1
+      };
+    }
+
+    if (scene.turnState === "enemy_turn") {
+      const metrics = scene.enemyAttack ? this.getEnemyTimingMetrics(scene, scene.enemyAttack) : null;
+      const response = !!(metrics && metrics.inResponse);
+      return {
+        ...base,
+        mode: "enemy",
+        color: enemyColor,
+        secondary: response ? "#2ecc71" : "#e74c3c",
+        intensity: response ? 0.56 : 0.34,
+        progress: metrics ? Utils.clamp(metrics.progress, 0, 1) : 0.28,
+        enemyHot: true,
+        playerHot: response,
+        response,
+        laneDirection: -1
+      };
+    }
+
+    if (scene.turnState === "resolving") {
+      return {
+        ...base,
+        mode: "resolve",
+        color: "#f1c40f",
+        secondary: playerColor,
+        intensity: 0.24,
+        centerHot: true
+      };
+    }
+
+    return base;
+  }
+
+  drawCombatPhaseLighting(ctx, lighting, t) {
+    if (!lighting || !lighting.active) return;
+    const floorY = lighting.floorY || this.height - 150;
+    const intensity = Utils.clamp(lighting.intensity || 0.28, 0, 1);
+    const color = lighting.color || "#3498db";
+    const secondary = lighting.secondary || color;
+    const pulse = 0.75 + Math.sin(t * (lighting.response ? 9.5 : 4.2)) * 0.10 + intensity * 0.18;
+    const y = floorY + 16;
+    const playerX = lighting.playerX || 220;
+    const enemyX = lighting.enemyX || this.width - 220;
+    const progress = Utils.clamp(lighting.progress || 0.35, 0, 1);
+    const laneHead = lighting.laneDirection < 0
+      ? enemyX + (playerX - enemyX) * progress
+      : playerX + (enemyX - playerX) * progress;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    const drawFloorGlow = (x, glowColor, alpha, rx, ry) => {
+      const grad = ctx.createRadialGradient(x, y + 12, 4, x, y + 12, rx);
+      grad.addColorStop(0, this.hexToRgba(glowColor, alpha));
+      grad.addColorStop(0.48, this.hexToRgba(glowColor, alpha * 0.26));
+      grad.addColorStop(1, this.hexToRgba(glowColor, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 12, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    if (lighting.playerHot) {
+      drawFloorGlow(playerX, lighting.mode === "enemy" ? secondary : color, 0.12 + intensity * 0.16, 125 + intensity * 45, 42 + intensity * 14);
+    }
+    if (lighting.enemyHot) {
+      drawFloorGlow(enemyX, color, 0.12 + intensity * 0.16, 135 + intensity * 52, 45 + intensity * 16);
+    }
+    if (lighting.centerHot) {
+      drawFloorGlow(this.width / 2, secondary, 0.06 + intensity * 0.08, 170 + intensity * 70, 38 + intensity * 10);
+    }
+
+    ctx.strokeStyle = this.hexToRgba(color, 0.13 + intensity * 0.24);
+    ctx.lineWidth = 10 + intensity * 12;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 18 + intensity * 16;
+    ctx.beginPath();
+    ctx.moveTo(playerX, floorY + 8);
+    ctx.quadraticCurveTo(this.width / 2, floorY + 34 + Math.sin(t * 2.1) * 4, enemyX, floorY + 8);
+    ctx.stroke();
+
+    ctx.strokeStyle = this.hexToRgba(secondary, 0.18 + intensity * 0.26);
+    ctx.lineWidth = 3 + intensity * 3;
+    ctx.shadowBlur = 10 + intensity * 12;
+    ctx.beginPath();
+    if (lighting.laneDirection < 0) {
+      ctx.moveTo(enemyX, floorY + 8);
+      ctx.quadraticCurveTo(this.width / 2, floorY + 32, laneHead, floorY + 18);
+    } else {
+      ctx.moveTo(playerX, floorY + 8);
+      ctx.quadraticCurveTo(this.width / 2, floorY + 32, laneHead, floorY + 18);
+    }
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = this.hexToRgba(secondary, 0.16 + intensity * 0.24);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      const offset = i * 54 + (t * (lighting.laneDirection < 0 ? -46 : 46)) % 54;
+      const p = ((offset / Math.max(1, enemyX - playerX)) + 1) % 1;
+      const x = playerX + (enemyX - playerX) * p;
+      const yy = floorY + 14 + Math.sin(t * 2 + i) * 5;
+      ctx.beginPath();
+      ctx.moveTo(x - 10, yy);
+      ctx.lineTo(x + 10, yy - 3);
+      ctx.stroke();
+    }
+
+    if (lighting.response) {
+      ctx.strokeStyle = this.hexToRgba("#2ecc71", 0.30 + intensity * 0.22);
+      ctx.fillStyle = this.hexToRgba("#2ecc71", 0.035 + intensity * 0.04);
+      ctx.shadowColor = "#2ecc71";
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(playerX + 18, floorY + 4, 92 * pulse, 18 * pulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
