@@ -2480,6 +2480,7 @@ class CanvasRenderer {
       performance: enemyPerformance,
       t
     });
+    this.drawEnemyEncounterPhaseOverlay(ctx, scene, ex, ey, this.getEnemyEncounterPhaseVisuals(scene), t);
     this.drawActorDamageMarks(ctx, "enemy", ex, ey, this.getActorDamageVisuals(scene, "enemy"), enemyConfig.color || "#e74c3c", t);
     this.drawEnemyStatusOverlays(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
     this.drawActorReactionOverlay(ex, ey, 50, enemyReaction);
@@ -2880,7 +2881,7 @@ class CanvasRenderer {
       subtitle: weapon ? weapon.name : "战斗准备"
     });
 
-    const phase = scene.activeEncounterPhaseId && scene.activeEncounterPhaseId !== "base" ? `阶段 ${scene.activeEncounterPhaseId}` : (enemy.model && enemy.model.type ? enemy.model.type : "enemy");
+    const phase = this.getEncounterPhaseLabel(scene, enemy);
     this.drawActorNameplate(ctx, {
       x: anchors.enemy.x,
       y: anchors.enemy.y + 66,
@@ -2888,6 +2889,137 @@ class CanvasRenderer {
       title: enemy.name || "敌人",
       subtitle: phase
     });
+  }
+
+  getEncounterPhaseInfo(scene) {
+    if (!scene || !scene.encounterConfig || !Array.isArray(scene.encounterConfig.phases)) return null;
+    if (typeof scene.getCurrentEncounterPhase === "function") {
+      const current = scene.getCurrentEncounterPhase();
+      if (current) return current;
+    }
+    const activeId = scene.activeEncounterPhaseId;
+    if (!activeId || activeId === "base") return null;
+    return scene.encounterConfig.phases.find(phase => phase && phase.id === activeId) || {
+      id: activeId,
+      name: activeId
+    };
+  }
+
+  getEncounterPhaseLabel(scene, enemy = null) {
+    const phase = this.getEncounterPhaseInfo(scene);
+    if (phase && phase.name) return phase.name;
+    return enemy && enemy.model && enemy.model.type ? enemy.model.type : "enemy";
+  }
+
+  getEnemyEncounterPhaseVisuals(scene) {
+    const phase = this.getEncounterPhaseInfo(scene);
+    if (!phase) return { active: false };
+    const theme = this.getEncounterStageTheme(scene);
+    const hpRatio = scene && scene.enemyMaxHp > 0 ? Utils.clamp(scene.enemyHp / scene.enemyMaxHp, 0, 1) : 1;
+    return {
+      active: true,
+      key: theme.key || "neutral",
+      phaseId: phase.id || "",
+      phaseName: phase.name || phase.id || "",
+      color: theme.accent || "#e74c3c",
+      secondary: theme.secondary || theme.accent || "#ffffff",
+      intensity: Utils.clamp(0.46 + (1 - hpRatio) * 0.74, 0.52, 1.0)
+    };
+  }
+
+  drawEnemyEncounterPhaseOverlay(ctx, scene, x, y, visuals, t) {
+    if (!visuals || !visuals.active) return;
+    const color = visuals.color || "#e74c3c";
+    const secondary = visuals.secondary || color;
+    const intensity = Utils.clamp(visuals.intensity || 0.65, 0, 1);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 + intensity * 18;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (visuals.key === "forge") {
+      ctx.strokeStyle = this.hexToRgba("#ff6b35", 0.28 + intensity * 0.34);
+      ctx.fillStyle = this.hexToRgba("#e74c3c", 0.03 + intensity * 0.06);
+      ctx.lineWidth = 2 + intensity * 2;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 54, 78 + intensity * 10, 18 + intensity * 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      for (let i = 0; i < 5; i++) {
+        const ox = -38 + i * 19;
+        const phase = t * 5 + i * 1.7;
+        ctx.beginPath();
+        ctx.moveTo(x + ox, y + 38);
+        ctx.lineTo(x + ox + Math.sin(phase) * 6, y + 12 - Math.abs(Math.sin(phase)) * 18);
+        ctx.stroke();
+      }
+    } else if (visuals.key === "arcane") {
+      ctx.strokeStyle = this.hexToRgba(color, 0.24 + intensity * 0.32);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const r = 42 + i * 16 + Math.sin(t * 2.4 + i) * 3;
+        ctx.beginPath();
+        ctx.ellipse(x, y - 12, r, r * 0.34, t * 0.3 + i * 0.4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      this.drawStageGlyph(ctx, x, y - 10, 22 + intensity * 8, secondary, t * 0.9, 0.28 + intensity * 0.20);
+    } else if (visuals.key === "rain") {
+      ctx.strokeStyle = this.hexToRgba("#5dade2", 0.22 + intensity * 0.30);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 7; i++) {
+        const ox = -58 + i * 18 + Math.sin(t * 3 + i) * 4;
+        const top = y - 70 + (i % 3) * 8;
+        ctx.beginPath();
+        ctx.moveTo(x + ox, top);
+        ctx.lineTo(x + ox - 18, top + 72);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = this.hexToRgba(color, 0.28 + intensity * 0.28);
+      ctx.beginPath();
+      ctx.arc(x - 10, y - 6, 58 + Math.sin(t * 5) * 4, -0.35, Math.PI * 0.86);
+      ctx.stroke();
+    } else if (visuals.key === "rite") {
+      ctx.strokeStyle = this.hexToRgba("#f1c40f", 0.24 + intensity * 0.34);
+      ctx.fillStyle = this.hexToRgba(color, 0.04 + intensity * 0.05);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x - 54, y - 66, 108, 124, 14);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = this.hexToRgba(secondary, 0.24 + intensity * 0.28);
+      ctx.beginPath();
+      ctx.moveTo(x - 42, y - 18);
+      ctx.lineTo(x + 42, y - 18);
+      ctx.moveTo(x, y - 56);
+      ctx.lineTo(x, y + 44);
+      ctx.stroke();
+    } else if (visuals.key === "dojo") {
+      ctx.strokeStyle = this.hexToRgba("#2fffd1", 0.24 + intensity * 0.36);
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.arc(x, y + 6, 56 + i * 17 + Math.sin(t * 4 + i) * 3, -0.86, Math.PI * 1.06);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = this.hexToRgba(secondary, 0.20 + intensity * 0.24);
+      ctx.beginPath();
+      ctx.moveTo(x - 56, y + 50);
+      ctx.lineTo(x + 56, y + 50);
+      ctx.moveTo(x - 36, y + 64);
+      ctx.lineTo(x + 36, y + 36);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = this.hexToRgba(color, 0.22 + intensity * 0.26);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y - 8, 62, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
   drawActorNameplate(ctx, options) {

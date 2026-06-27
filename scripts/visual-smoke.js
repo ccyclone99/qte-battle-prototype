@@ -572,6 +572,7 @@ async function runVisualSmoke() {
       battle.activeAttackSystem.clear();
       battle.playerHp = 38;
       battle.enemyHp = Math.max(1, Math.floor(battle.enemyMaxHp * 0.30));
+      battle.activeEncounterPhaseId = "molten_core";
       battle.resourceSystem.add("heat", 88);
       battle.statusSystem.apply({ target: "enemy", type: "burn", turns: 2 }, { source: "visual-smoke" });
       battle.statusSystem.apply({ target: "enemy", type: "armorBreak", turns: 2 }, { source: "visual-smoke" });
@@ -664,6 +665,17 @@ async function runVisualSmoke() {
         if (!r || typeof battle === "undefined" || !r.getPlayerRigProfile) return false;
         const rig = r.getPlayerRigProfile(r.getPlayerModelProfile(battle));
         return !!(rig && rig.silhouette === "vanguard-plate" && rig.torsoW >= 50 && rig.shadowScale > 1.05 && rig.legWidth >= 10);
+      })()`) },
+      { label: "enemy encounter phase visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyEncounterPhaseVisuals) return false;
+        const phase = r.getEnemyEncounterPhaseVisuals(battle);
+        return !!(phase && phase.active && phase.key === "forge" && phase.phaseName === "熔心压迫" && phase.intensity > 0.6);
+      })()`) },
+      { label: "enemy phase nameplate uses phase name", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEncounterPhaseLabel) return false;
+        return r.getEncounterPhaseLabel(battle, battle.enemyConfig) === "熔心压迫";
       })()`) },
       { label: "enemy model profile reads armored gear", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

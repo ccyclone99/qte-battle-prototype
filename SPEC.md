@@ -2073,6 +2073,29 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke forces wounded player and critical enemy states during an existing active-attack screenshot and verifies the derived damage visuals.
 
+### R36 Encounter Phase Model Pass, Completed
+
+Goal: named encounter phases should change the enemy's on-body presentation, not only the attack pattern, log, or result summary.
+
+Implemented direction:
+
+- `CanvasRenderer.getEncounterPhaseInfo()` resolves the current phase from `getCurrentEncounterPhase()` or the active phase id.
+- `getEncounterPhaseLabel()` now feeds actor nameplates with the phase name, so the enemy label shows `熔心压迫` instead of an internal id such as `molten_core`.
+- `getEnemyEncounterPhaseVisuals()` maps the active encounter phase into a render-only visual profile based on the encounter stage theme.
+- `drawEnemyEncounterPhaseOverlay()` adds phase-specific enemy-model overlays:
+  - forge: molten vent lines and heat ring
+  - arcane: orbiting matrix rings and glyph
+  - rain: rain-slice pressure lines and fast arc
+  - rite: ward/shield sigil frame
+  - dojo: counter-footwork arcs and stance lines
+- This pass is render-only and does not change phase activation, HP thresholds, attack patterns, damage, QTE timing, hit confirm, or enemy AI.
+
+Acceptance criteria:
+
+- Renderer exposes encounter phase model helpers.
+- Static smoke protects the helper surface.
+- Visual smoke forces `熔心压迫` during an active-attack screenshot and verifies both the phase visual profile and phase nameplate label.
+
 ## 22. Verification Commands
 
 ```powershell
