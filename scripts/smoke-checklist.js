@@ -27,6 +27,7 @@ const chainsJs = fs.readFileSync(path.join(root, "js/data/chains.js"), "utf8");
 const qteDebugJs = fs.readFileSync(path.join(root, "js/systems/qte-debug.js"), "utf8");
 const hitConfirmJs = fs.readFileSync(path.join(root, "js/systems/hit-confirm.js"), "utf8");
 const activeAttacksJs = fs.readFileSync(path.join(root, "js/systems/active-attacks.js"), "utf8");
+const resourcesJs = fs.readFileSync(path.join(root, "js/systems/resources.js"), "utf8");
 const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
 const readmeMd = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const specMd = fs.readFileSync(path.join(root, "SPEC.md"), "utf8");
@@ -89,6 +90,7 @@ check("style counterflow exists on key 8", StyleDatabase.counterflow && StyleDat
 check("counterflow uses counter dojo", StyleDatabase.counterflow.preferredEncounter === "counter_dojo");
 check("main menu exposes style select", indexHtml.includes('id="style-select"') && indexHtml.includes('value="manual"'));
 check("main menu exposes counterflow option", indexHtml.includes('value="counterflow"') && indexHtml.includes("风格 8 · 023 · 逆势双刃"));
+check("main menu has static counterflow style card", indexHtml.includes('data-style-id="counterflow"') && indexHtml.includes('data-style-key="8"') && indexHtml.includes("逆势双刃") && indexHtml.includes("key-eight"));
 check("main menu style select starts chosen style", mainJs.includes("selectedStyleId") && mainJs.includes("applyMenuStyleSelection") && mainJs.includes("battle.startPlayerTurn()"));
 check("main menu syncs style select from data", mainJs.includes("syncStyleSelectOptions") && mainJs.includes("Object.entries(StyleDatabase)") && mainJs.includes("styleOptionLabel"));
 check("main menu shows visible style choices", indexHtml.includes('id="style-choice-grid"') && mainJs.includes("createStyleChoiceButton") && styleCss.includes(".style-choice-grid"));
@@ -137,6 +139,7 @@ check("renderer has player qte chain intent helpers", rendererJs.includes("getPl
 check("renderer suppresses enemy attack floating message", rendererJs.includes('scene.turnState === "enemy_turn"') && rendererJs.includes("scene.enemyAttackPhase !== \"none\""));
 check("renderer has player active attack helpers", rendererJs.includes("getPlayerActiveAttackDescriptor") && rendererJs.includes("drawPlayerMeleeActiveAttack") && rendererJs.includes("drawPlayerProjectileActiveAttack") && rendererJs.includes("drawPlayerSpellActiveAttack") && rendererJs.includes("drawPlayerPulseActiveAttack"));
 check("renderer has actor status visual helpers", rendererJs.includes("getActorStatusVisuals") && rendererJs.includes("drawPlayerStatusAuras") && rendererJs.includes("drawEnemyStatusOverlays") && rendererJs.includes("drawStatusFlame"));
+check("renderer has resource pulse helpers", rendererJs.includes("getResourcePulseVisuals") && rendererJs.includes("drawResourcePulseLayer") && rendererJs.includes("quadraticPoint"));
 check("renderer dedupes status icons", rendererJs.includes("const seen = new Set()") && rendererJs.includes("addIcon(`${status.target}:${status.id}`"));
 check("renderer has node-timed action helper", rendererJs.includes("getActionTiming"));
 check("renderer supports node pose tags", rendererJs.includes("getCurrentPose") && rendererJs.includes("node.pose"));
@@ -183,6 +186,7 @@ check("visual smoke covers enemy rig silhouettes", visualSmokeJs.includes("armor
 check("visual smoke covers actor damage visuals", visualSmokeJs.includes("actor damage visuals active") && visualSmokeJs.includes("getActorDamageVisuals"));
 check("visual smoke covers actor impact reactions", visualSmokeJs.includes("actor impact reaction visuals active") && visualSmokeJs.includes("getActorImpactReactionVisuals"));
 check("visual smoke covers actor status visuals", visualSmokeJs.includes("actor status visuals active") && visualSmokeJs.includes("player status visuals active"));
+check("visual smoke covers resource pulse visuals", visualSmokeJs.includes("resource pulse visuals active") && visualSmokeJs.includes("spell resource pulse active"));
 check("visual smoke covers virtual controls", visualSmokeJs.includes("battle-virtual-controls-qte") && visualSmokeJs.includes("clickVirtualKey"));
 check("visual smoke guards demo stage drawer overlap", visualSmokeJs.includes("demo stage avoids detail drawer") && visualSmokeJs.includes("demo qte bar avoids detail drawer"));
 check("game container uses responsive 16:9 scaling", styleCss.includes("calc(100vh * 16 / 9)") && styleCss.includes("calc(100vw * 9 / 16)"));
@@ -207,6 +211,7 @@ check("R14 battle qte pacing exists", utilsJs.includes("getBattleQTEPacing") && 
 check("qte impact legacy path removed", !battleJs.includes("qteImpact") && !rendererJs.includes("drawQTEImpactPrompt") && !qteDebugJs.includes("动画结算"));
 check("enemy legacy hit resolver removed", !battleJs.includes("resolveEnemyHit"));
 check("active attack system exists", activeAttacksJs.includes("class ActiveAttackSystem") && activeAttacksJs.includes("resolveProfile") && activeAttacksJs.includes("reactionStart"));
+check("resource system tracks visual pulses", resourcesJs.includes("getVisualPulses") && resourcesJs.includes("recordVisualPulse"));
 check("active attack emits reaction and impact visuals", activeAttacksJs.includes("emitReactionVisual") && activeAttacksJs.includes("emitImpactVisual"));
 check("battle commits qte active attacks", battleJs.includes('kind: "playerQTE"') && battleJs.includes("resolvePlayerQTEImpact") && battleJs.includes("finishPlayerQTEFlow"));
 check("battle commits enemy active attacks", battleJs.includes("commitEnemyActiveAttack") && battleJs.includes('kind: "enemyAttack"') && battleJs.includes("onActiveAttackReactionWindow"));

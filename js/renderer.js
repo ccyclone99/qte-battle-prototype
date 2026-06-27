@@ -104,6 +104,8 @@ class CanvasRenderer {
       this.drawGameOver(scene);
     }
 
+    this.drawResourcePulseLayer(ctx, this.getResourcePulseVisuals(scene), t);
+
     // 通用浮层提示（选择/演示/结束界面各自处理）
     if (this.shouldDrawFloatingMessage(scene)) {
       this.drawFloatingMessage(scene);
@@ -965,6 +967,135 @@ class CanvasRenderer {
     }
     ctx.restore();
     return y + 25;
+  }
+
+  getResourcePulseVisuals(scene) {
+    if (!scene || !scene.resourceSystem || !scene.resourceSystem.getVisualPulses) return { active: false, pulses: [] };
+    const pulses = scene.resourceSystem.getVisualPulses();
+    if (!Array.isArray(pulses) || pulses.length === 0) return { active: false, pulses: [] };
+
+    const hasAbsorb = scene.hasSpell && scene.hasSpell("absorb");
+    const hasFire = scene.hasSpell && scene.hasSpell("fire");
+    const spellEnergy = scene.playerState ? scene.playerState.spellEnergy || 0 : 0;
+    const heat = scene.resourceSystem.heat || 0;
+    const spellVisible = hasAbsorb || spellEnergy > 0;
+    const heatVisible = hasFire || heat > 0;
+    const baseY = 72;
+    const meterY = {
+      spellEnergy: spellVisible ? baseY : baseY,
+      heat: spellVisible && heatVisible ? baseY + 33 : baseY
+    };
+
+    return {
+      active: true,
+      pulses: pulses.map(pulse => ({
+        ...pulse,
+        meter: {
+          x: 20,
+          y: meterY[pulse.type] || baseY,
+          w: 138
+        },
+        source: {
+          x: 220,
+          y: this.height - 205
+        }
+      }))
+    };
+  }
+
+  drawResourcePulseLayer(ctx, visuals, t) {
+    if (!visuals || !visuals.active || !Array.isArray(visuals.pulses)) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    for (const pulse of visuals.pulses) {
+      const progress = Utils.clamp(pulse.progress || 0, 0, 1);
+      const alpha = Utils.clamp(pulse.alpha || 0, 0, 1);
+      if (alpha <= 0.02) continue;
+
+      const gain = pulse.direction !== "spend";
+      const color = pulse.color || (pulse.type === "heat" ? "#e67e22" : "#9b59b6");
+      const meter = pulse.meter || { x: 20, y: 72, w: 138 };
+      const source = pulse.source || { x: 220, y: this.height - 205 };
+      const meterPoint = {
+        x: meter.x + meter.w - 6,
+        y: meter.y + 20
+      };
+      const from = gain ? source : meterPoint;
+      const to = gain ? meterPoint : source;
+      const control = {
+        x: (from.x + to.x) / 2,
+        y: Math.min(from.y, to.y) - 42 - (pulse.intensity || 1) * 16
+      };
+      const laneAlpha = alpha * 0.18;
+
+      ctx.strokeStyle = this.hexToRgba(color, laneAlpha);
+      ctx.lineWidth = 2 + (pulse.intensity || 1);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12 + (pulse.intensity || 1) * 8;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.quadraticCurveTo(control.x, control.y, to.x, to.y);
+      ctx.stroke();
+
+      for (let i = 0; i < 4; i++) {
+        const u = Utils.clamp(progress - i * 0.11, 0, 1);
+        const point = this.quadraticPoint(from, control, to, u);
+        const dotAlpha = alpha * Math.max(0, 1 - i * 0.18) * (0.45 + Math.sin((u + t) * Math.PI) * 0.12);
+        ctx.globalAlpha = dotAlpha;
+        ctx.fillStyle = i === 0 ? "#ffffff" : color;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, Math.max(2.5, 5.5 - i * 0.65) * (pulse.intensity || 1), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      const halo = 1 + Math.sin(t * 12 + pulse.id) * 0.05;
+      const haloAlpha = alpha * (gain ? 0.38 : 0.30);
+      ctx.strokeStyle = this.hexToRgba(color, haloAlpha);
+      ctx.fillStyle = this.hexToRgba(color, haloAlpha * 0.16);
+      ctx.lineWidth = 2;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.roundRect(meter.x - 8, meter.y + 10, meter.w + 18, 20, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      const amountText = `${gain ? "+" : "-"}${Math.abs(Math.floor(pulse.amount || 0))}`;
+      const tagX = meter.x + meter.w + 20;
+      const tagY = meter.y + 20 - progress * 10;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(tagX, tagY);
+      ctx.scale(halo, halo);
+      ctx.fillStyle = this.hexToRgba("#071018", 0.72);
+      ctx.strokeStyle = this.hexToRgba(color, 0.74);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-18, -9, 36, 18, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = gain ? "#ffffff" : "#d9f1ff";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(amountText, 0, 0);
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  quadraticPoint(from, control, to, t) {
+    const inv = 1 - t;
+    return {
+      x: inv * inv * from.x + 2 * inv * t * control.x + t * t * to.x,
+      y: inv * inv * from.y + 2 * inv * t * control.y + t * t * to.y
+    };
   }
 
   drawEquipmentChips(ctx, battle, x, y, maxWidth = 176) {

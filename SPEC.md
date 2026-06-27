@@ -2247,6 +2247,37 @@ Acceptance criteria:
 - Static smoke protects the new showcase, renderer helper, and effect events.
 - Visual smoke opens demo showcase item `5` and verifies the counterflow track is active in-browser.
 
+### R44 Resource Pulse Feedback Pass, Completed
+
+Goal: resource gains and spends should be visible as immediate combat feedback, not only as static HUD number changes, logs, or floating text.
+
+Style 8 online-entry hardening:
+
+- The main menu now ships with static style-choice cards in `index.html`, including `风格 8 · 023 · 逆势双刃`.
+- `main.js` still replaces/syncs those cards from `StyleDatabase` after scripts load, so data remains the source of truth.
+- This protects the live first screen if a browser sees HTML before JS has finished initializing or has stale script cache.
+- The asset cache key is bumped to `r44b`.
+
+Implemented direction:
+
+- `ResourceSystem` now records short-lived visual pulses whenever `spellEnergy` or `heat` changes.
+- `CanvasRenderer.getResourcePulseVisuals()` reads those pulses and maps them to the current HUD resource lane.
+- `drawResourcePulseLayer()` draws low-noise feedback:
+  - a short curved trail between the player and the resource meter
+  - a brief meter halo
+  - a compact `+/- amount` tag near the meter
+- Gain pulses move from the player model toward the HUD resource lane; spend pulses can travel the reverse direction.
+- The pulse layer is UI-stable and does not follow stage camera shake, so resource feedback remains readable during impact frames.
+- This pass does not alter resource totals, caps, cost checks, QTE results, damage, status, or timing.
+
+Acceptance criteria:
+
+- ResourceSystem exposes visual pulse records for resource changes.
+- Renderer exposes resource pulse helpers.
+- Static smoke protects the helper surface.
+- Static smoke protects the static style `8` menu card.
+- Visual smoke verifies heat and spell-energy pulse visuals in browser-rendered battle scenes.
+
 ## 22. Verification Commands
 
 ```powershell

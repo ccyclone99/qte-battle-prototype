@@ -652,9 +652,31 @@ async function runVisualSmoke() {
       battle.messageTimer = 0;
     })()`);
     await wait(220);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined" || !battle.resourceSystem || !battle.resourceSystem.recordVisualPulse) return;
+      battle.resourceSystem.recordVisualPulse({
+        type: "heat",
+        applied: 32,
+        total: battle.resourceSystem.heat || 88,
+        max: battle.resourceSystem.maxHeat || 100,
+        cap: battle.resourceSystem.maxHeat || 100
+      });
+      const pulse = battle.resourceSystem.visualPulses && battle.resourceSystem.visualPulses[0];
+      if (pulse) {
+        pulse.createdAt = performance.now();
+        pulse.duration = 2600;
+      }
+    })()`);
+    await wait(80);
+    const activeResourcePulseVisible = await evaluate(cdp, `(() => {
+      const r = typeof renderer !== "undefined" ? renderer : null;
+      const visuals = r && typeof battle !== "undefined" && r.getResourcePulseVisuals ? r.getResourcePulseVisuals(battle) : null;
+      return !!(visuals && visuals.active && visuals.pulses.some(pulse => pulse.type === "heat" && pulse.amount > 0 && pulse.progress >= 0 && pulse.progress < 1 && pulse.meter && pulse.meter.w >= 120));
+    })()`);
     await captureScenario(cdp, "battle-player-active-attack", [
       { label: "active attack turn label visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("攻击演出")`) },
       { label: "player active attack exists", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.activeAttackSystem.active.some(a => a.source === "player")`) },
+      { label: "resource pulse visuals active", ok: activeResourcePulseVisible },
       { label: "player attack cinematic focus", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const f = r && typeof battle !== "undefined" ? r.getCinematicFocus(battle) : null;
@@ -789,9 +811,33 @@ async function runVisualSmoke() {
       battle.messageTimer = 0;
     })()`);
     await wait(220);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined" || !battle.resourceSystem || !battle.resourceSystem.recordVisualPulse) return;
+      const state = battle.playerState || {};
+      battle.resourceSystem.recordVisualPulse({
+        type: "spellEnergy",
+        applied: 44,
+        total: state.spellEnergy || 120,
+        max: state.maxSpellEnergy || 100,
+        cap: battle.resourceSystem.getSpellEnergyCap ? battle.resourceSystem.getSpellEnergyCap() : (state.maxSpellEnergy || 100),
+        overcap: (state.spellEnergy || 0) > (state.maxSpellEnergy || 100)
+      });
+      const pulse = battle.resourceSystem.visualPulses && battle.resourceSystem.visualPulses[0];
+      if (pulse) {
+        pulse.createdAt = performance.now();
+        pulse.duration = 2600;
+      }
+    })()`);
+    await wait(80);
     await captureScenario(cdp, "battle-player-spell-active", [
       { label: "spell active attack turn label visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("攻击演出")`) },
       { label: "player spell active attack exists", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.activeAttackSystem.active.some(a => a.source === "player" && a.profile.type === "beam")`) },
+      { label: "spell resource pulse active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getResourcePulseVisuals) return false;
+        const visuals = r.getResourcePulseVisuals(battle);
+        return !!(visuals && visuals.active && visuals.pulses.some(pulse => pulse.type === "spellEnergy" && pulse.amount > 0 && pulse.color && pulse.source && pulse.source.x === 220));
+      })()`) },
       { label: "player absorb descriptor", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
