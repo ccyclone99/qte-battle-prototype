@@ -408,7 +408,9 @@ class ActorReactionSystem {
       ringAlpha: 0,
       progress: 0,
       type: null,
-      color: "#ffffff"
+      color: "#ffffff",
+      direction: target === "enemy" ? 1 : -1,
+      intensity: 0
     };
 
     const progress = Math.min(1, reaction.time / reaction.duration);
@@ -468,7 +470,9 @@ class ActorReactionSystem {
       ringAlpha,
       progress,
       type: reaction.type,
-      color: reaction.color
+      color: reaction.color,
+      direction: away,
+      intensity
     };
   }
 

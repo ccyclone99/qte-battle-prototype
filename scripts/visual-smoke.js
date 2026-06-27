@@ -613,6 +613,13 @@ async function runVisualSmoke() {
         color: "#f1c40f",
         debugLife: 1.4
       });
+      battle.triggerActorReaction("enemy", "crit", 1.25, {
+        color: "#f1c40f",
+        direction: 1,
+        distance: 44,
+        lift: 8,
+        duration: 0.80
+      });
       battle.screenShake = 0.8;
       battle.cameraZoom = 1.06;
       battle.cameraZoomTimer = 1.2;
@@ -670,6 +677,13 @@ async function runVisualSmoke() {
         const player = r.getActorDamageVisuals(battle, "player");
         const enemy = r.getActorDamageVisuals(battle, "enemy");
         return !!(player && enemy && player.wounded > 0.5 && !player.defeated && enemy.critical && enemy.tier >= 3);
+      })()`) },
+      { label: "actor impact reaction visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorImpactReactionVisuals || !r.getActorPerformance) return false;
+        const reaction = battle.actorReactions.get("enemy");
+        const impact = r.getActorImpactReactionVisuals(battle, "enemy", reaction, r.getActorPerformance(battle, "enemy", reaction));
+        return !!(impact && impact.active && impact.type === "crit" && impact.critical && impact.direction === 1 && impact.radius >= 50 && impact.alpha > 0.2);
       })()`) },
       { label: "player model profile reads fire greatsword", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

@@ -2155,6 +2155,25 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke verifies QTE phase lighting and enemy-response phase lighting through existing battle screenshots.
 
+### R40 Actor Impact Reaction Pass, Completed
+
+Goal: a confirmed hit should read from the struck character's body, not only from floating damage text, screen shake, or a detached impact effect.
+
+Implemented direction:
+
+- `CanvasRenderer.getActorImpactReactionVisuals()` derives a short-lived impact profile from the actor reaction, current performance squash, and incoming active-attack profile.
+- `drawActorImpactReactionLayer()` attaches the impact flash, directional shard burst, critical break lines, and ground skid to the player or enemy model.
+- The layer draws after the actor silhouette and before persistent damage/status overlays, so it reads as body contact without hiding UI or long-term status cues.
+- Critical hits receive a stronger gold break line; ordinary hits stay lower noise.
+- `ActorReactionSystem.get()` now exposes reaction direction and intensity to renderers as metadata.
+- This pass is render-only and does not change QTE timing, active attack timing, hit confirm overlap, damage, AI, or input windows.
+
+Acceptance criteria:
+
+- Renderer exposes actor impact reaction helpers.
+- Static smoke protects the helper surface.
+- Visual smoke verifies a critical enemy impact reaction profile in an active-attack battle screenshot.
+
 ## 22. Verification Commands
 
 ```powershell

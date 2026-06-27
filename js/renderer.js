@@ -2571,6 +2571,7 @@ class CanvasRenderer {
     const playerPerformance = this.getActorPerformance(scene, "player", playerReaction, pose);
     const playerProfile = this.getPlayerModelProfile(scene);
     const playerRig = this.getPlayerRigProfile(playerProfile);
+    const playerImpactVisuals = this.getActorImpactReactionVisuals(scene, "player", playerReaction, playerPerformance);
 
     // 待机呼吸
     let bob = Math.sin(t * 2) * 2;
@@ -2615,6 +2616,7 @@ class CanvasRenderer {
       playerRig,
       t
     });
+    this.drawActorImpactReactionLayer(ctx, "player", px, py, playerImpactVisuals, styleColor, t);
     this.drawActorDamageMarks(ctx, "player", px, py, this.getActorDamageVisuals(scene, "player"), styleColor, t);
     this.drawPlayerStatusOverlays(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
     this.drawPlayerDefenseIntentOverlay(ctx, scene, px, py, this.getPlayerDefenseIntentVisuals(scene, playerStatusVisuals), t);
@@ -2626,6 +2628,7 @@ class CanvasRenderer {
     const eBob = Math.sin(t * 2 + 1) * 2;
     const enemyReaction = this.getActorReaction(scene, "enemy");
     const enemyPerformance = this.getActorPerformance(scene, "enemy", enemyReaction, null);
+    const enemyImpactVisuals = this.getActorImpactReactionVisuals(scene, "enemy", enemyReaction, enemyPerformance);
     let ex = baseEx + enemyReaction.offsetX;
     let ey = baseEy + eBob + enemyReaction.offsetY + enemyPerformance.offsetY;
 
@@ -2653,6 +2656,7 @@ class CanvasRenderer {
       t
     });
     this.drawEnemyEncounterPhaseOverlay(ctx, scene, ex, ey, this.getEnemyEncounterPhaseVisuals(scene), t);
+    this.drawActorImpactReactionLayer(ctx, "enemy", ex, ey, enemyImpactVisuals, enemyConfig.color || "#e74c3c", t);
     this.drawActorDamageMarks(ctx, "enemy", ex, ey, this.getActorDamageVisuals(scene, "enemy"), enemyConfig.color || "#e74c3c", t);
     this.drawEnemyStatusOverlays(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
     this.drawActorReactionOverlay(ex, ey, 50, enemyReaction);
@@ -3488,6 +3492,152 @@ class CanvasRenderer {
       ctx.arc(x + ox, y + oy - height / 2 - 14, actor === "enemy" ? 14 : 12, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  getActorImpactReactionVisuals(scene, target, reaction = null, performance = null) {
+    const currentReaction = reaction || this.getActorReaction(scene, target);
+    const type = currentReaction && currentReaction.type;
+    const isHit = type === "hit" || type === "crit" || type === "stagger";
+    if (!isHit) return { active: false };
+
+    const progress = Utils.clamp(currentReaction.progress || 0, 0, 1);
+    const pulse = Math.sin(progress * Math.PI);
+    const fade = Math.max(0, 1 - progress);
+    const incoming = this.getActorActiveAttack(scene, target, "target");
+    const incomingProfile = incoming && incoming.profile ? incoming.profile : {};
+    const fallbackDirection = target === "enemy" ? 1 : -1;
+    const direction = currentReaction.direction
+      || (Math.abs(currentReaction.offsetX || 0) > 0.01 ? Math.sign(currentReaction.offsetX) : fallbackDirection);
+    const perf = performance || {};
+    const force = Utils.clamp(
+      (currentReaction.intensity || 1)
+      + Math.max(0, (currentReaction.scale || 1) - 1) * 3.2
+      + (perf.hitSquash || 0) * 1.8
+      + ((incomingProfile.radius || 0) > 40 ? 0.22 : 0),
+      0.55,
+      2.05
+    );
+    const critical = type === "crit";
+    const heavy = critical || type === "stagger" || force > 1.22 || (incomingProfile.radius || 0) >= 42;
+    const kind = incomingProfile.type || (incoming && incoming.intent && incoming.intent.shape) || "melee";
+    const color = currentReaction.color || incomingProfile.color || (critical ? "#f1c40f" : "#ffffff");
+    const radius = Utils.clamp((target === "enemy" ? 34 : 28) + force * 16 + (heavy ? 10 : 0), 30, target === "enemy" ? 82 : 66);
+
+    return {
+      active: fade > 0.02 && pulse > 0.03,
+      target,
+      type,
+      kind,
+      color,
+      progress,
+      pulse,
+      fade,
+      alpha: Utils.clamp((critical ? 0.80 : 0.58) * fade + pulse * 0.14, 0, critical ? 0.92 : 0.72),
+      direction: direction || fallbackDirection,
+      force,
+      radius,
+      heavy,
+      critical,
+      slashLike: kind === "melee" || kind === "arc" || kind === "slash",
+      spellLike: kind === "beam" || kind === "projectile" || kind === "pulse" || kind === "circle"
+    };
+  }
+
+  drawActorImpactReactionLayer(ctx, target, x, y, visuals, color, t) {
+    if (!visuals || !visuals.active) return;
+
+    const enemy = target === "enemy";
+    const direction = visuals.direction || (enemy ? 1 : -1);
+    const alpha = visuals.alpha || 0;
+    if (alpha <= 0.02) return;
+
+    const p = this.easeOutCubic(visuals.progress || 0);
+    const pulse = visuals.pulse || Math.sin((visuals.progress || 0) * Math.PI);
+    const impactX = x - direction * (enemy ? 34 : 26);
+    const impactY = y - (enemy ? 24 : 20);
+    const groundY = y + (enemy ? 56 : 48);
+    const radius = visuals.radius || (enemy ? 50 : 42);
+    const impactColor = visuals.color || color || "#ffffff";
+    const shockAngle = direction > 0 ? -0.22 : Math.PI + 0.22;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    ctx.save();
+    ctx.translate(impactX, impactY);
+    ctx.rotate(shockAngle);
+    ctx.globalAlpha = alpha * 0.88;
+    ctx.shadowColor = impactColor;
+    ctx.shadowBlur = visuals.critical ? 28 : 18;
+    const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius);
+    grad.addColorStop(0, this.hexToRgba("#ffffff", visuals.critical ? 0.92 : 0.78));
+    grad.addColorStop(0.35, this.hexToRgba(impactColor, visuals.spellLike ? 0.54 : 0.42));
+    grad.addColorStop(1, this.hexToRgba(impactColor, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radius * (1.0 + p * 0.22), radius * (0.58 + pulse * 0.12), 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.62 + (visuals.critical ? 0.16 : 0));
+    ctx.lineWidth = visuals.heavy ? 5 : 3;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.62, -7);
+    ctx.lineTo(radius * (0.55 + p * 0.18), 9);
+    ctx.stroke();
+
+    ctx.strokeStyle = this.hexToRgba(impactColor, visuals.critical ? 0.86 : 0.66);
+    ctx.lineWidth = visuals.heavy ? 3 : 2;
+    const shardCount = visuals.critical ? 9 : (visuals.heavy ? 7 : 5);
+    for (let i = 0; i < shardCount; i++) {
+      const side = i - (shardCount - 1) / 2;
+      const spread = side * 0.23;
+      const len = radius * (0.34 + (i % 3) * 0.08 + visuals.force * 0.08);
+      const start = radius * 0.18;
+      const a = spread + Math.sin(t * 3 + i) * 0.025;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * start, Math.sin(a) * start);
+      ctx.lineTo(Math.cos(a) * (start + len), Math.sin(a) * (start + len));
+      ctx.stroke();
+    }
+
+    if (visuals.critical) {
+      ctx.strokeStyle = this.hexToRgba("#f1c40f", 0.72);
+      ctx.lineWidth = 2;
+      ctx.rotate(-shockAngle + t * 0.5);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        ctx.moveTo(Math.cos(a) * radius * 0.34, Math.sin(a) * radius * 0.34);
+        ctx.lineTo(Math.cos(a) * radius * 0.62, Math.sin(a) * radius * 0.62);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(x + direction * 8, groundY);
+    ctx.globalAlpha = alpha * (visuals.heavy ? 0.42 : 0.28);
+    ctx.fillStyle = this.hexToRgba(impactColor, 0.18);
+    ctx.strokeStyle = this.hexToRgba(impactColor, 0.46);
+    ctx.shadowColor = impactColor;
+    ctx.shadowBlur = visuals.heavy ? 16 : 10;
+    ctx.lineWidth = visuals.heavy ? 3 : 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radius * (0.75 + p * 0.48), Math.max(5, radius * 0.12), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.lineCap = "round";
+    for (let i = 0; i < 3; i++) {
+      const yy = -2 + i * 5;
+      ctx.beginPath();
+      ctx.moveTo(-direction * (radius * 0.08 + i * 4), yy);
+      ctx.lineTo(direction * (radius * (0.42 + i * 0.12) + p * 14), yy + 5 + i * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
     ctx.restore();
   }
 

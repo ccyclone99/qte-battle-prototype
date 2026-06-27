@@ -121,6 +121,7 @@ check("renderer has cinematic focus helpers", rendererJs.includes("getCinematicF
 check("renderer has stage-only camera helpers", rendererJs.includes("getRenderCamera") && rendererJs.includes("applyWorldCamera") && rendererJs.includes("drawWorldScene") && rendererJs.includes("uiStable: true"));
 check("renderer has actor performance helpers", rendererJs.includes("getActorPerformance") && rendererJs.includes("getActorActiveAttack") && rendererJs.includes("drawActorPerformanceAfterimage"));
 check("renderer has actor damage visual helpers", rendererJs.includes("getActorDamageVisuals") && rendererJs.includes("drawActorDamageMarks") && rendererJs.includes("critical") && rendererJs.includes("defeated"));
+check("renderer has actor impact reaction helpers", rendererJs.includes("getActorImpactReactionVisuals") && rendererJs.includes("drawActorImpactReactionLayer") && rendererJs.includes("slashLike") && rendererJs.includes("spellLike"));
 check("renderer has timing readability helpers", rendererJs.includes("getQTEReadabilityMetrics") && rendererJs.includes("drawQTEReadabilityPanel") && rendererJs.includes("getEnemyTimingMetrics") && rendererJs.includes("drawEnemyTimingPanel"));
 check("renderer has combat contact performance helpers", rendererJs.includes("getCombatContactEvents") && rendererJs.includes("drawCombatContactLayer") && rendererJs.includes("drawContactBodyImpact") && rendererJs.includes("drawContactGroundImpulse"));
 check("renderer has active attack contact guide helpers", rendererJs.includes("getActiveAttackContactGuide") && rendererJs.includes("drawActiveAttackContactGuide") && rendererJs.includes("drawActiveAttackTargetBracket"));
@@ -173,6 +174,7 @@ check("visual smoke covers active attack contact guides", visualSmokeJs.includes
 check("visual smoke covers player rig silhouettes", visualSmokeJs.includes("greatsword player rig silhouette") && visualSmokeJs.includes("dual blades player rig silhouette") && visualSmokeJs.includes("style 8 player counter rig"));
 check("visual smoke covers enemy rig silhouettes", visualSmokeJs.includes("armored enemy rig silhouette") && visualSmokeJs.includes("caster enemy rig silhouette") && visualSmokeJs.includes("getEnemyRigProfile"));
 check("visual smoke covers actor damage visuals", visualSmokeJs.includes("actor damage visuals active") && visualSmokeJs.includes("getActorDamageVisuals"));
+check("visual smoke covers actor impact reactions", visualSmokeJs.includes("actor impact reaction visuals active") && visualSmokeJs.includes("getActorImpactReactionVisuals"));
 check("visual smoke covers actor status visuals", visualSmokeJs.includes("actor status visuals active") && visualSmokeJs.includes("player status visuals active"));
 check("visual smoke covers virtual controls", visualSmokeJs.includes("battle-virtual-controls-qte") && visualSmokeJs.includes("clickVirtualKey"));
 check("visual smoke guards demo stage drawer overlap", visualSmokeJs.includes("demo stage avoids detail drawer") && visualSmokeJs.includes("demo qte bar avoids detail drawer"));
