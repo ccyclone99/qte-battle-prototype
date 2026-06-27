@@ -3160,6 +3160,13 @@ class CanvasRenderer {
     this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42 * playerPerformance.shadowScale * playerRig.shadowScale, "rgba(52, 152, 219, 0.3)");
     this.drawActorGroundSigil(ctx, basePx + stanceOffset, basePy + 45, 50, styleColor, "player", t);
     const playerStatusVisuals = this.getActorStatusVisuals(scene, "player");
+    this.drawActorFootworkLayer(ctx, this.getActorFootworkVisuals("player", px, basePy + 45, styleColor, playerPerformance, playerRig, {
+      reaction: playerReaction,
+      state: pState,
+      motion,
+      stanceOffset,
+      t
+    }));
     this.drawActorPerformanceAfterimage(ctx, "player", px, py, styleColor, playerPerformance, t);
     this.drawPlayerStatusAuras(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
     this.drawActorMotionLines(ctx, px, py, playerReaction, "player", styleColor);
@@ -3207,6 +3214,13 @@ class CanvasRenderer {
     this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58 * enemyPerformance.shadowScale * enemyRig.shadowScale, "rgba(192, 57, 43, 0.3)");
     this.drawActorGroundSigil(ctx, baseEx + enemyForward, baseEy + 55, 62, enemyConfig.color || "#e74c3c", "enemy", t);
     this.drawEnemyStatusAuras(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
+    this.drawActorFootworkLayer(ctx, this.getActorFootworkVisuals("enemy", ex, baseEy + 55, enemyConfig.color || "#e74c3c", enemyPerformance, enemyRig, {
+      reaction: enemyReaction,
+      enemyPose: enemyPerformance.enemyPose,
+      poseIntensity: enemyPerformance.poseIntensity,
+      stanceOffset: enemyForward,
+      t
+    }));
     this.drawActorPerformanceAfterimage(ctx, "enemy", ex, ey, enemyConfig.color || "#e74c3c", enemyPerformance, t);
     this.drawActorMotionLines(ctx, ex, ey, enemyReaction, "enemy", enemyConfig.color || "#e74c3c");
     this.drawEnemySilhouette(ctx, scene, {
@@ -4054,6 +4068,162 @@ class CanvasRenderer {
       ctx.arc(x + ox, y + oy - height / 2 - 14, actor === "enemy" ? 14 : 12, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  getActorFootworkVisuals(actor, x, groundY, color, performance = {}, rig = {}, context = {}) {
+    const forward = actor === "enemy" ? -1 : 1;
+    const t = context.t || 0;
+    const stance = Math.max(0.72, rig.stance || 1);
+    const torsoW = rig.torsoW || (actor === "enemy" ? 56 : 44);
+    const stride = Math.max(0, performance.stride || 0);
+    const attack = Math.max(0, performance.attack || 0);
+    const windup = Math.max(0, performance.windup || 0);
+    const brace = Math.max(0, performance.brace || 0);
+    const cast = Math.max(0, performance.cast || 0);
+    const hit = Math.max(0, performance.hitSquash || 0);
+    const poseIntensity = Math.max(0, context.poseIntensity || performance.poseIntensity || 0);
+    const state = context.state || "";
+    const motion = context.motion || performance.motion || context.enemyPose || "";
+    const action = Math.max(attack, windup * 0.82, brace * 0.72, cast * 0.68, hit * 0.95, poseIntensity * 0.78);
+    const idleBreath = 0.08 + Math.abs(Math.sin(t * 2.3 + (actor === "enemy" ? 0.8 : 0))) * 0.035;
+    const active = action > 0.05 || stride > 1 || state === "shield" || state === "casting" || state === "charge";
+    const baseAlpha = active ? Utils.clamp(0.18 + action * 0.38, 0.18, 0.66) : idleBreath;
+    const stanceWidth = (actor === "enemy" ? 42 : 34) * stance + Math.max(0, torsoW - 44) * 0.18;
+    const stepDrive = stride * 0.42 + attack * 18 + poseIntensity * 14;
+    const bracePull = brace * 12 + windup * 7 + hit * 10;
+    const castLift = cast * 4;
+    const jitter = Math.sin(t * 8 + (actor === "enemy" ? 1.4 : 0.2)) * Math.min(2.5, action * 2.8);
+    const frontIndex = forward > 0 ? 1 : 0;
+    const rearIndex = forward > 0 ? 0 : 1;
+    const feet = [
+      {
+        x: x - stanceWidth * 0.52 + jitter * 0.35,
+        y: groundY + 2 + castLift,
+        w: actor === "enemy" ? 25 : 20,
+        h: 8,
+        angle: -0.12,
+        alpha: baseAlpha * 0.78
+      },
+      {
+        x: x + stanceWidth * 0.50 - jitter * 0.25,
+        y: groundY + 1 - Math.min(5, stride * 0.08),
+        w: actor === "enemy" ? 27 : 22,
+        h: 8,
+        angle: 0.10,
+        alpha: baseAlpha
+      }
+    ];
+
+    feet[frontIndex].x += forward * stepDrive;
+    feet[frontIndex].w += Math.min(12, stepDrive * 0.22);
+    feet[frontIndex].alpha = Math.min(0.82, feet[frontIndex].alpha + action * 0.18);
+    feet[rearIndex].x -= forward * bracePull;
+    feet[rearIndex].w += Math.min(9, bracePull * 0.20);
+    feet[rearIndex].alpha = Math.min(0.78, feet[rearIndex].alpha + (brace + windup + hit) * 0.15);
+
+    if (motion === "dualRetreat") {
+      feet[frontIndex].x -= forward * 20;
+      feet[rearIndex].x -= forward * 12;
+    } else if (motion === "dualDash" || motion === "flameBladeBurst" || motion === "greatswordEarthsplit") {
+      feet[frontIndex].x += forward * 14;
+      feet[frontIndex].y -= 2;
+    } else if (motion === "overflowCompress" || motion === "cast") {
+      feet[0].x -= 3;
+      feet[1].x += 3;
+      feet[0].alpha += 0.08;
+      feet[1].alpha += 0.08;
+    }
+
+    const trailCount = Utils.clamp(Math.ceil((stride + action * 22) / 12), 0, 3);
+    const trails = [];
+    for (let i = 1; i <= trailCount; i++) {
+      const ratio = i / Math.max(1, trailCount);
+      trails.push({
+        x: feet[frontIndex].x - forward * (10 + i * 10 + stride * 0.16),
+        y: feet[frontIndex].y + i * 1.5,
+        w: feet[frontIndex].w * (1.05 - ratio * 0.20),
+        h: Math.max(4, feet[frontIndex].h * (0.82 - ratio * 0.10)),
+        alpha: baseAlpha * (0.30 - ratio * 0.08),
+        angle: feet[frontIndex].angle
+      });
+    }
+
+    return {
+      active: baseAlpha > 0.05,
+      actor,
+      color,
+      forward,
+      pressure: Utils.clamp(baseAlpha + action * 0.22, 0.08, 0.88),
+      action,
+      feet,
+      trails,
+      center: {
+        x: (feet[0].x + feet[1].x) / 2 + forward * (attack * 10 - brace * 5),
+        y: groundY + 8,
+        w: Math.abs(feet[1].x - feet[0].x) + 26,
+        h: 13
+      }
+    };
+  }
+
+  drawActorFootworkLayer(ctx, visuals) {
+    if (!visuals || !visuals.active || !Array.isArray(visuals.feet)) return;
+    const color = visuals.color || "#ffffff";
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const center = visuals.center || { x: 0, y: 0, w: 50, h: 12 };
+    ctx.fillStyle = this.hexToRgba(color, 0.055 + (visuals.pressure || 0) * 0.10);
+    ctx.strokeStyle = this.hexToRgba(color, 0.08 + (visuals.pressure || 0) * 0.18);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(center.x, center.y, center.w * 0.5, center.h, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    for (const trail of visuals.trails || []) {
+      ctx.save();
+      ctx.globalAlpha = Utils.clamp(trail.alpha || 0, 0, 0.45);
+      ctx.translate(trail.x, trail.y);
+      ctx.rotate(trail.angle || 0);
+      ctx.fillStyle = this.hexToRgba(color, 0.36);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, trail.w * 0.5, trail.h * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    for (const foot of visuals.feet) {
+      ctx.save();
+      ctx.globalAlpha = Utils.clamp(foot.alpha || 0, 0, 0.85);
+      ctx.translate(foot.x, foot.y);
+      ctx.rotate(foot.angle || 0);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8 + (visuals.action || 0) * 10;
+      ctx.fillStyle = this.hexToRgba(color, 0.34);
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.18);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, foot.w * 0.5, foot.h * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if ((visuals.action || 0) > 0.32) {
+      const edge = visuals.forward || 1;
+      ctx.strokeStyle = this.hexToRgba(color, Utils.clamp((visuals.action || 0) * 0.26, 0.05, 0.30));
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(center.x - edge * center.w * 0.18, center.y - 2);
+      ctx.lineTo(center.x + edge * center.w * 0.48, center.y - 7);
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 

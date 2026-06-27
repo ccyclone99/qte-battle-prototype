@@ -694,6 +694,14 @@ async function runVisualSmoke() {
         const p = r.getActorPerformance(battle, "player", battle.actorReactions.get("player"), r.getCurrentPose(battle));
         return !!(p && p.attack > 0.45 && p.armReach > 16 && p.afterimageAlpha > 0.08);
       })()`) },
+      { label: "player footwork visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorPerformance || !r.getActorFootworkVisuals || !r.getPlayerRigProfile) return false;
+        const p = r.getActorPerformance(battle, "player", battle.actorReactions.get("player"), r.getCurrentPose(battle));
+        const rig = r.getPlayerRigProfile(r.getPlayerModelProfile(battle));
+        const visuals = r.getActorFootworkVisuals("player", 220, r.height - 145, "#e67e22", p, rig, { state: "swordAttack", motion: "flameBladeBurst", t: 1.3 });
+        return !!(visuals && visuals.active && visuals.action > 0.3 && visuals.feet.length === 2 && visuals.trails.length >= 1 && visuals.center.w > 55);
+      })()`) },
       { label: "player fire attack descriptor", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
@@ -899,6 +907,14 @@ async function runVisualSmoke() {
         if (!r || typeof battle === "undefined" || !r.getActorPerformance) return false;
         const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
         return !!(p && p.enemyPose === "cast" && p.poseIntensity > 0.6 && p.armReach > 20);
+      })()`) },
+      { label: "enemy footwork visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorPerformance || !r.getActorFootworkVisuals || !r.getEnemyRigProfile) return false;
+        const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
+        const rig = r.getEnemyRigProfile(r.getEnemyModelProfile(battle.enemyConfig));
+        const visuals = r.getActorFootworkVisuals("enemy", r.width - 245, r.height - 135, battle.enemyConfig.color || "#e74c3c", p, rig, { enemyPose: p.enemyPose, poseIntensity: p.poseIntensity, t: 1.7 });
+        return !!(visuals && visuals.active && visuals.forward === -1 && visuals.feet.length === 2 && visuals.trails.length >= 1 && visuals.pressure > 0.35);
       })()`) },
       { label: "player defense intent visuals active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

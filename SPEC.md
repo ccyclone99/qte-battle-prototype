@@ -2278,6 +2278,33 @@ Acceptance criteria:
 - Static smoke protects the static style `8` menu card.
 - Visual smoke verifies heat and spell-energy pulse visuals in browser-rendered battle scenes.
 
+### R45 Actor Footwork Weight Pass, Completed
+
+Goal: player and enemy actions should read from the body and ground contact, not only from weapon trails, floating labels, or HUD state.
+
+Implemented direction:
+
+- `CanvasRenderer.getActorFootworkVisuals()` derives actor foot placement from:
+  - attack / windup / brace / cast / hit squash
+  - stride and action progress
+  - player stance/motion or enemy pose intensity
+  - rig stance and torso width
+- `drawActorFootworkLayer()` draws low-layer ground-contact feedback:
+  - two foot pressure pads
+  - short front-foot drag echoes during lunges/dashes
+  - a faint center-of-weight ellipse
+  - a forward pressure stroke during committed actions
+- The layer renders after shadow/sigil and before the actor model, so it supports animation readability without becoming HUD noise.
+- Player and enemy calls use their existing rig/profile/performance data, so greatsword, dual-blade, counter, caster, armored, swift, and shielded silhouettes inherit different footing naturally.
+- This pass is render-only. It does not change hitboxes, damage, QTE timing, AI, active attack travel, resources, or status behavior.
+- The asset cache key is bumped to `r45a`.
+
+Acceptance criteria:
+
+- Renderer exposes actor footwork visual helpers.
+- Static smoke protects the helper surface.
+- Visual smoke verifies player and enemy footwork visuals inside existing battle screenshots.
+
 ## 22. Verification Commands
 
 ```powershell
