@@ -5735,6 +5735,10 @@ class CanvasRenderer {
     }
 
     this.drawEnemyAttackPoseOverlay(ctx, modelType, scene.enemyAttack, scene.enemyAttackPhase, color, t, reactionPulse);
+    this.drawEnemyActionPersonalityLayer(ctx, this.getEnemyActionPersonalityVisuals(scene, modelProfile, perf, {
+      color,
+      reactionPulse
+    }), t);
 
     ctx.restore();
   }
@@ -6197,6 +6201,182 @@ class CanvasRenderer {
       ctx.moveTo(-78 - reach, -22);
       ctx.lineTo(-98 - reach, -26);
       ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  getEnemyActionPersonalityVisuals(scene, modelProfile = {}, performance = {}, context = {}) {
+    const profile = typeof modelProfile === "string"
+      ? { modelType: modelProfile, gear: "", armor: "" }
+      : (modelProfile || {});
+    const modelType = profile.modelType || "golem";
+    const attack = scene && scene.enemyAttack ? scene.enemyAttack : null;
+    const phase = scene && scene.enemyAttackPhase ? scene.enemyAttackPhase : "none";
+    const telegraph = attack ? this.getEnemyTelegraph(attack) : {};
+    const pose = telegraph.pose || performance.enemyPose || "idle";
+    const telegraphType = telegraph.type || (attack && attack.type) || "";
+    const response = phase === "response";
+    const hit = phase === "hit";
+    const windup = phase === "windup";
+    const spellLike = pose === "cast" || ["spell", "bolt", "burst"].includes(telegraphType) || !!(attack && attack.interruptible);
+    const color = context.color || profile.color || (attack && attack.color) || "#e74c3c";
+    const actionPower = Math.max(
+      performance.poseIntensity || 0,
+      performance.attack || 0,
+      performance.windup || 0,
+      performance.brace || 0,
+      performance.cast || 0,
+      performance.stride ? Math.min(1, performance.stride / 34) : 0,
+      response ? 0.72 : 0,
+      hit ? 1 : 0,
+      windup ? 0.42 : 0
+    );
+    const baseIdle = modelType === "caster" || modelType === "shielded" ? 0.18 : 0.10;
+    const intensity = Utils.clamp(Math.max(actionPower, baseIdle), 0, 1.15);
+    const reach = hit ? 34 : (response ? 24 : (windup ? 12 : 5));
+    const reactionPulse = context.reactionPulse || 0;
+
+    const kind = modelType === "caster" ? "ritual-focus"
+      : (modelType === "armored" ? "plate-breaker"
+        : (modelType === "swift" ? "knife-speed"
+          : (modelType === "shielded" ? "ward-brace" : "stone-breaker")));
+
+    return {
+      active: intensity > 0.08,
+      kind,
+      modelType,
+      phase,
+      pose,
+      telegraphType,
+      spellLike,
+      color,
+      intensity,
+      response,
+      hit,
+      windup,
+      reach,
+      pulse: Utils.clamp(Math.sin((scene && scene.enemyAttackTimer || 0) * 5.2) * 0.5 + 0.5 + reactionPulse * 0.2, 0, 1),
+      anchor: {
+        x: spellLike ? -68 - reach * 0.35 : -42 - reach * 0.5,
+        y: spellLike ? -34 : (pose === "overhead" ? -78 : -10)
+      },
+      bladeCount: modelType === "swift" ? 2 : (pose === "sweep" ? 1 : 0),
+      guardPower: modelType === "shielded" ? Utils.clamp(0.42 + intensity * 0.48, 0.42, 1) : 0,
+      weightPower: modelType === "armored" || modelType === "golem" ? Utils.clamp(0.30 + intensity * 0.62, 0.30, 1) : 0,
+      orbitCount: modelType === "caster" ? (spellLike ? 4 : 3) : 0,
+      afterimageCount: modelType === "swift" ? Math.max(2, Math.ceil(2 + intensity * 2)) : 0
+    };
+  }
+
+  drawEnemyActionPersonalityLayer(ctx, visuals, t) {
+    if (!visuals || !visuals.active) return;
+    const color = visuals.color || "#e74c3c";
+    const intensity = Utils.clamp(visuals.intensity || 0.2, 0, 1.15);
+    const pulse = visuals.pulse || 0;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 + intensity * 14;
+
+    if (visuals.kind === "ritual-focus") {
+      const anchor = visuals.anchor || { x: -68, y: -34 };
+      const radius = 20 + intensity * 11 + pulse * 3;
+      this.drawEnemyGlyph(ctx, anchor.x, anchor.y, radius, color, t);
+      ctx.strokeStyle = this.hexToRgba(color, 0.24 + intensity * 0.34);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-18, -16);
+      ctx.quadraticCurveTo(-38, -42 - pulse * 10, anchor.x, anchor.y);
+      ctx.stroke();
+      ctx.fillStyle = this.hexToRgba("#ffffff", 0.56 + intensity * 0.16);
+      for (let i = 0; i < (visuals.orbitCount || 3); i++) {
+        const a = t * (1.7 + intensity * 0.6) + i * Math.PI * 2 / Math.max(1, visuals.orbitCount || 3);
+        const ox = anchor.x + Math.cos(a) * (radius + 9);
+        const oy = anchor.y + Math.sin(a) * (radius * 0.58);
+        ctx.beginPath();
+        ctx.arc(ox, oy, 3.5 + intensity * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (visuals.kind === "knife-speed") {
+      const count = visuals.afterimageCount || 3;
+      ctx.strokeStyle = this.hexToRgba(color, 0.18 + intensity * 0.28);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < count; i++) {
+        const shift = i * 13 + intensity * 10;
+        ctx.globalAlpha = 0.40 - i * 0.07;
+        ctx.beginPath();
+        ctx.moveTo(18 + shift * 0.2, -36 + i * 8);
+        ctx.quadraticCurveTo(-18 - shift, -12 + i * 6, -72 - shift * 0.35, 18 + i * 3);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.72;
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.42 + intensity * 0.26);
+      ctx.lineWidth = 2.5;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.arc(-44 - visuals.reach * 0.45, -4 + i * 18, 38 + i * 12, Math.PI * 0.72, Math.PI * 1.42);
+        ctx.stroke();
+      }
+    } else if (visuals.kind === "ward-brace") {
+      const guard = visuals.guardPower || intensity;
+      const x = -60 - visuals.reach * 0.45;
+      ctx.fillStyle = this.hexToRgba(color, 0.06 + guard * 0.13);
+      ctx.strokeStyle = this.hexToRgba(color, 0.34 + guard * 0.34);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x - 26, -42, 45, 88, 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.18 + guard * 0.22);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 18, -14);
+      ctx.lineTo(x + 11, -14);
+      ctx.moveTo(x - 4, -34);
+      ctx.lineTo(x - 4, 32);
+      ctx.stroke();
+      if (visuals.pose === "bash") {
+        ctx.strokeStyle = this.hexToRgba(color, 0.32 + guard * 0.32);
+        ctx.beginPath();
+        ctx.moveTo(x - 30, -24);
+        ctx.lineTo(x - 58, 0);
+        ctx.lineTo(x - 30, 24);
+        ctx.stroke();
+      }
+    } else if (visuals.kind === "plate-breaker" || visuals.kind === "stone-breaker") {
+      const weight = visuals.weightPower || intensity;
+      ctx.strokeStyle = this.hexToRgba(color, 0.22 + weight * 0.30);
+      ctx.lineWidth = visuals.kind === "plate-breaker" ? 4 : 3;
+      if (visuals.pose === "overhead") {
+        ctx.beginPath();
+        ctx.moveTo(-18, -44);
+        ctx.lineTo(-28 - visuals.reach * 0.2, -106);
+        ctx.stroke();
+        ctx.strokeStyle = this.hexToRgba("#ffffff", 0.20 + weight * 0.22);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-42, -96);
+        ctx.lineTo(-28, -112);
+        ctx.lineTo(-12, -96);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(-44 - visuals.reach * 0.35, 6, 42 + visuals.reach * 0.16, Math.PI * 0.76, Math.PI * 1.28);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = this.hexToRgba(color, 0.16 + weight * 0.20);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const y = 62 + i * 5;
+        ctx.beginPath();
+        ctx.moveTo(-50 + i * 18, y);
+        ctx.lineTo(-28 + i * 24 + weight * 10, y - 6 - pulse * 4);
+        ctx.stroke();
+      }
     }
 
     ctx.restore();

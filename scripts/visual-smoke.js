@@ -962,6 +962,54 @@ async function runVisualSmoke() {
         const badge = r.getActorIntentBadgeVisuals(battle, "enemy", p, { color: battle.enemyConfig.color || "#e74c3c" });
         return !!(badge && badge.active && badge.kind === "cast" && badge.label === "enemy-window" && badge.phase === "response" && badge.side === -1);
       })()`) },
+      { label: "enemy action personality live caster", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyActionPersonalityVisuals || !r.getActorPerformance || !r.getEnemyModelProfile) return false;
+        const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
+        const visuals = r.getEnemyActionPersonalityVisuals(battle, r.getEnemyModelProfile(battle.enemyConfig), p, { color: battle.enemyConfig.color || "#e74c3c" });
+        return !!(visuals && visuals.active && visuals.kind === "ritual-focus" && visuals.modelType === "caster" && visuals.spellLike && visuals.orbitCount >= 4 && visuals.anchor.x < -60 && visuals.intensity > 0.6);
+      })()`) },
+      { label: "enemy action personality visuals cover archetypes", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyActionPersonalityVisuals || !r.getEnemyModelProfile || typeof EnemyDatabase === "undefined") return false;
+        const expected = {
+          base: "stone-breaker",
+          caster: "ritual-focus",
+          armored: "plate-breaker",
+          swift: "knife-speed",
+          shielded: "ward-brace"
+        };
+        const attackByType = {
+          base: "heavySmash",
+          caster: "curseBurst",
+          armored: "heavySmash",
+          swift: "quickStab",
+          shielded: "shieldBash"
+        };
+        return Object.keys(expected).every(id => {
+          const config = EnemyDatabase.archetypes[id];
+          const attack = battle.buildEnemyAttack(attackByType[id]);
+          const profile = r.getEnemyModelProfile(config);
+          const perf = {
+            poseIntensity: 0.84,
+            cast: id === "caster" ? 0.86 : 0,
+            brace: id === "shielded" ? 0.78 : 0,
+            stride: id === "swift" ? 30 : 0,
+            attack: id === "swift" ? 0.78 : 0,
+            windup: id === "armored" || id === "base" ? 0.68 : 0
+          };
+          const visuals = r.getEnemyActionPersonalityVisuals({
+            enemyAttack: attack,
+            enemyAttackPhase: "response",
+            enemyAttackTimer: attack.windup * 0.72
+          }, profile, perf, { color: config.color });
+          return !!(visuals && visuals.active && visuals.kind === expected[id] && visuals.intensity > 0.6
+            && (id !== "caster" || (visuals.spellLike && visuals.orbitCount >= 4))
+            && (id !== "swift" || visuals.afterimageCount >= 3)
+            && (id !== "shielded" || visuals.guardPower > 0.6)
+            && ((id !== "armored" && id !== "base") || visuals.weightPower > 0.6));
+        });
+      })()`) },
       { label: "player defense intent badge active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || typeof battle === "undefined" || !r.getActorIntentBadgeVisuals || !r.getActorPerformance) return false;

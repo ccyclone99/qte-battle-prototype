@@ -2361,6 +2361,33 @@ Acceptance criteria:
 - Visual smoke verifies player attack, enemy response, and player defense badges in browser-rendered battle scenes.
 - Visual smoke verifies the style 8 card has `风格 8` as its primary label and is inside the desktop first viewport.
 
+### R48 Enemy Action Personality Pass, Completed
+
+Goal: enemy type should remain readable while the enemy is attacking, casting, guarding, or bracing, instead of relying on the nameplate or QTE text.
+
+Implemented direction:
+
+- `CanvasRenderer.getEnemyActionPersonalityVisuals()` derives a render-only action personality layer from:
+  - enemy model type
+  - current enemy attack telegraph
+  - enemy attack phase
+  - actor performance values such as cast, brace, stride, and pose intensity
+- `drawEnemyActionPersonalityLayer()` draws foreground model-following cues:
+  - caster: orbiting ritual focus and tethered glyph
+  - armored: heavy plate breaker arc and overhead weight cue
+  - swift: knife-speed afterimages and slash lanes
+  - shielded: forward ward plane and bash wedge
+  - golem/base: stone breaker weight cracks and heavy swing cue
+- The layer is drawn inside the enemy model transform after the generic attack-pose overlay, so it follows lean, squash, scale, and attack staging.
+- This pass is render-only. It does not change enemy AI, attack timing, QTE windows, collision, damage, resources, or encounter selection.
+- The asset cache key is bumped to `r48a`.
+
+Acceptance criteria:
+
+- Renderer exposes enemy action personality helper methods.
+- Static smoke protects all five action personality kinds.
+- Visual smoke verifies the live caster response layer and all five archetype personality branches.
+
 ## 22. Verification Commands
 
 ```powershell
