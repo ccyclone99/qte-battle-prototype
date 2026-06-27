@@ -140,6 +140,25 @@ function verifyBattleStyle(key, expectedStyle, expectedEnemyHp, actionKey, expec
   assert(`style ${key} log has style`, logs.some(line => line.includes("战斗风格")), logs.join(" | "));
 }
 
+function verifyCounterflowStyleScope() {
+  const { input, battle } = createBattle();
+  tap(input, battle, "8");
+  const style = battle.getCurrentStyle();
+  const chains = battle.getEffectiveChains();
+  const encounter = context.EncounterDatabase.encounters.counter_dojo;
+  const modifiers = encounter.modifiers || {};
+
+  assert("counterflow keeps style id", battle.playerConfig.style === "counterflow", battle.playerConfig.style);
+  assert("counterflow has no spell loadout", battle.playerConfig.spells.length === 0, battle.playerConfig.spells.join(","));
+  assert("counterflow has no borrowed combat arts", battle.playerConfig.combatArts.length === 0, battle.playerConfig.combatArts.join(","));
+  assert("counterflow S remains dual blade", chains.S === "dualblades_s_v2", chains.S || "none");
+  assert("counterflow D remains dual blade", chains.D === "dualblades_d_v2", chains.D || "none");
+  assert("counterflow keeps style counterspell", style && style.counterChain === "counterspell_reversal", style?.counterChain || "none");
+  assert("counterflow keeps dual coverage", battle.getCounterCoverageCount() === 3, String(battle.getCounterCoverageCount()));
+  assert("counter dojo gives no spell energy", !("startSpellEnergy" in modifiers), String(modifiers.startSpellEnergy));
+  assert("counter dojo gives no absorb boost", !("absorbEnergyMul" in modifiers) && !("absorbDamageMul" in modifiers), JSON.stringify(modifiers));
+}
+
 function verifyManualEnemyOverride() {
   const { input, battle, logs } = createBattle({ enemyId: "swift" });
   assert("manual enemy label visible", battle.getEnemySelectionLabel().includes("迅捷刺客"), battle.getEnemySelectionLabel());
@@ -506,7 +525,8 @@ try {
   verifyInputResetReleasesHeldKeys();
   verifyBattleStyle("6", "flameforge", 280, "A", "flame_blade", "ember_bulwark");
   verifyBattleStyle("7", "mirrorblade", 190, "S", "absorb_siphon", "arcane_conduit");
-  verifyBattleStyle("8", "counterflow", 210, "S", "absorb_siphon", "counter_dojo");
+  verifyBattleStyle("8", "counterflow", 210, "S", "dualblades_s_v2", "counter_dojo");
+  verifyCounterflowStyleScope();
   verifyManualEnemyOverride();
   verifyEncounterOverride();
   verifyEncounterEnemyTurnFlow();

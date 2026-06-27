@@ -88,6 +88,8 @@ check("style flameforge exists on key 6", StyleDatabase.flameforge && StyleDatab
 check("style mirrorblade exists on key 7", StyleDatabase.mirrorblade && StyleDatabase.mirrorblade.key === "7");
 check("style counterflow exists on key 8", StyleDatabase.counterflow && StyleDatabase.counterflow.key === "8");
 check("counterflow uses counter dojo", StyleDatabase.counterflow.preferredEncounter === "counter_dojo");
+check("counterflow is not an absorb or desslo bundle", StyleDatabase.counterflow.spells.length === 0 && StyleDatabase.counterflow.combatArts.length === 0 && StyleDatabase.counterflow.counterChain === "counterspell_reversal" && StyleDatabase.counterflow.counterCoverage.dualBlades === 3);
+check("counter dojo is not an absorb resource dojo", !("startSpellEnergy" in EncounterDatabase.encounters.counter_dojo.modifiers) && !("absorbEnergyMul" in EncounterDatabase.encounters.counter_dojo.modifiers) && !("absorbDamageMul" in EncounterDatabase.encounters.counter_dojo.modifiers));
 check("main menu exposes style select", indexHtml.includes('id="style-select"') && indexHtml.includes('value="manual"'));
 check("main menu exposes counterflow option", indexHtml.includes('value="counterflow"') && indexHtml.includes("风格 8 · 023 · 逆势双刃"));
 check("main menu has static counterflow style card", indexHtml.includes('data-style-id="counterflow"') && indexHtml.includes('data-style-key="8"') && indexHtml.includes("逆势双刃") && indexHtml.includes("key-eight"));

@@ -1523,6 +1523,7 @@ Weapon distinction:
 - Staff coverage target:
   - `coverageCount = 1`.
   - Its enemy-turn advantage should come mainly from prepared casting, absorb, and counterspell chains.
+  - Style `8` is not a staff or absorb package; its enemy-turn advantage comes from style-specific counterspell and dual-blade clash coverage.
 
 Combat art clarification:
 
@@ -1568,6 +1569,27 @@ Acceptance criteria:
 - Counterspell QTE completion creates an active attack; damage resolves at hit impact, not at final keypress.
 - Automatic attack on the compressed own turn does not receive the manual-QTE crit bonus.
 - Data validation, flow smoke, and static smoke cover the new style, encounter, attack-chain references, and counterflow flow.
+
+### R50 - Counterflow Scope Correction, Completed
+
+Goal: restore style `8` to the original counterflow plan instead of letting it behave like a composite of `咒还` and `德斯洛大陆剑术`.
+
+Correct scope:
+
+- Style `8 · 逆势双刃` uses `dualBlades` as its weapon.
+- It does not grant the full `absorb` spell loadout.
+- It does not grant the `desslo` combat art package.
+- Own-turn `S` and `D` stay on the dual-blade base chains, not `absorb_siphon` or `overflow_burst`.
+- Enemy-turn spell response can still enter `counterspell_reversal`, but that chain is owned by the style as a reaction, not inherited from the absorb spell kit.
+- Enemy-turn melee response uses `counterCoverage`, so dual blades can cover rapid follow-up nodes without needing generic attack-anytime rules.
+- `逆势试炼` no longer grants opening spell energy or absorb multipliers; it tests timing, coverage, and the style-specific counterspell chain.
+
+Acceptance criteria:
+
+- Flow smoke asserts style `8` has no `spells` and no `combatArts`.
+- Flow smoke asserts style `8` starts `dualblades_s_v2` on own-turn `S`.
+- Static smoke asserts `逆势试炼` has no absorb resource or absorb damage modifiers.
+- Existing enemy-turn clash and counterspell active-attack flows still pass.
 
 ### R15 - Delayed Settlement Prototype, Superseded By R16
 
@@ -2406,7 +2428,7 @@ Implemented direction:
   - staff: focus sigil, orbiting motes, and cast tether line
 - The layer is drawn inside the player model transform after arms and weapon silhouettes, so it follows lean, hit squash, actor scale, and current QTE motion.
 - This pass is render-only. It does not change QTE timing, enemy AI, active attack travel, hit confirm, damage, resources, or input windows.
-- The asset cache key is bumped to `r49a`.
+- The asset cache key is bumped to `r50a`.
 
 Acceptance criteria:
 

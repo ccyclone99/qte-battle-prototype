@@ -141,8 +141,8 @@ const EncounterDatabase = {
       enemyId: "caster",
       maxHp: 210,
       terrain: "错拍训练场",
-      intent: "敌人会把法术和近身快攻压在同一回合内，适合测试拼刀、咒还反制和双持覆盖。",
-      recommendedStyles: ["counterflow", "desslo", "mirrorblade"],
+      intent: "敌人会把法术和近身快攻压在同一回合内，适合测试拼刀覆盖、专属法术反制和双持覆盖。",
+      recommendedStyles: ["counterflow", "desslo"],
       attackPattern: ["spellDoubleCut", "knifeFlurry", "arcaneBolt", "quickStab"],
       phases: [
         {
@@ -156,17 +156,14 @@ const EncounterDatabase = {
         }
       ],
       modifiers: {
-        startSpellEnergy: 20,
         enemyDamageMul: 0.92,
         enemyWindupMul: 1.06,
         responseWindowMul: 1.0,
-        absorbEnergyMul: 1.15,
-        absorbDamageMul: 1.04,
         normalDamageMul: 1.0,
         swordDamageMul: 1.03
       },
       ruleLines: [
-        "开局法术能量 +20，允许更早尝试咒还反制。",
+        "不开局赠送法术能量；法术反制只来自敌方回合的专属反制链。",
         "敌人同一回合可出现多段攻势；单手覆盖 1 段，双持可覆盖多段。",
         "逆势双刃的己方回合更短：不手动输入会自动攻击，但没有额外加成。"
       ]
