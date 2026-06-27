@@ -502,6 +502,24 @@ async function runVisualSmoke() {
     ]);
 
     await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-demo");
+    await closeTutorial(cdp);
+    await pressKey(cdp, "1");
+    await pressKey(cdp, "5");
+    await wait(900);
+    await captureScenario(cdp, "showcase-counterflow-track", [
+      { label: "counterflow showcase active", ok: await evaluate(cdp, `document.body.textContent.includes("Showcase · 逆势双刃三节点反击")`) },
+      { label: "counterflow action sequence active", ok: await evaluate(cdp, `typeof demo !== "undefined" && demo.state === "action_sequence" && demo.playerConfig.style === "counterflow"`) },
+      { label: "counterflow visual track active", ok: await evaluate(cdp, `(() => {
+        const seq = typeof demo !== "undefined" ? demo.actionSequence : null;
+        if (!seq || !seq.phases || !seq.phases[seq.phaseIndex]) return false;
+        const visual = seq.phases[seq.phaseIndex].visual;
+        return !!(visual && visual.scheme === "counterflow" && Array.isArray(visual.track) && visual.track.length >= 7);
+      })()`) },
+      { label: "counterflow renderer helper present", ok: await evaluate(cdp, `typeof renderer !== "undefined" && typeof renderer.drawDemoCounterflowTrack === "function"`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
     await pressKey(cdp, "6");

@@ -147,6 +147,54 @@ defineEffectEvents(["absorbReleasePeak"], {
   impact: 1
 });
 
+defineEffectEvents(["counterflowCatch"], {
+  particles: [
+    { preset: "magic", anchor: "playerHand", intensity: 1.05 },
+    { preset: "guard", anchor: "playerCore", intensity: 0.65 }
+  ],
+  bursts: [
+    { kind: "glyph", anchor: "playerHand", color: "#16a085", radius: 38, duration: 0.42, spin: -0.8 },
+    { kind: "beam", anchor: "enemyCore", toAnchor: "playerHand", color: "#5dade2", width: 4, duration: 0.26 }
+  ],
+  cameraZoom: { zoom: 1.04, duration: 0.16 }
+});
+
+defineEffectEvents(["counterflowSlip"], {
+  particles: [
+    { preset: "magic", anchor: "playerCore", intensity: 0.95 },
+    { preset: "slash", anchor: "playerHand", intensity: 0.55 }
+  ],
+  bursts: [
+    { kind: "ring", anchor: "playerCore", color: "#16a085", radius: 48, width: 4, duration: 0.28 },
+    { kind: "slash", anchor: "playerHand", color: "#5dade2", secondaryColor: "#ffffff", length: 86, width: 4, angle: -0.20, duration: 0.22 }
+  ]
+});
+
+defineEffectEvents(["counterflowClashLead"], {
+  particles: [
+    { preset: "slash", anchor: "enemyCore", intensity: 1.15 },
+    { preset: "guard", anchor: "playerShield", intensity: 0.75 }
+  ],
+  bursts: [
+    { kind: "slash", anchor: "enemyCore", color: "#16a085", secondaryColor: "#ffffff", length: 112, width: 6, angle: 0.48, duration: 0.24 },
+    { kind: "ring", anchor: "playerShield", color: "#5dade2", radius: 42, width: 4, duration: 0.28 }
+  ],
+  screenShake: 0.12
+});
+
+defineEffectEvents(["counterflowClashFollow"], {
+  particles: [
+    { preset: "slash", anchor: "enemyCore", intensity: 1.25 },
+    { preset: "guard", anchor: "playerShield", intensity: 0.8 }
+  ],
+  bursts: [
+    { kind: "slash", anchor: "enemyCore", color: "#5dade2", secondaryColor: "#16a085", length: 118, width: 6, angle: -0.56, duration: 0.24 },
+    { kind: "slash", anchor: "enemyCore", color: "#ffffff", secondaryColor: "#16a085", length: 92, width: 4, angle: 0.64, duration: 0.20 }
+  ],
+  screenShake: 0.14,
+  impact: 1
+});
+
 defineEffectEvents(["absorbBacklash"], {
   particles: { preset: "magic", anchor: "playerCore", intensity: 1.0 },
   screenFlash: { color: "#9b59b6", duration: 0.16 },

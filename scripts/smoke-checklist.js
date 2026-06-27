@@ -111,6 +111,7 @@ check("knife rain avoids opening double quick stab", EncounterDatabase.encounter
 check("fireBladeBurst has burst renderer data", !!(EffectEventDefinitions.fireBladeBurst && EffectEventDefinitions.fireBladeBurst.bursts));
 check("overflowBurst has burst renderer data", !!(EffectEventDefinitions.overflowBurst && EffectEventDefinitions.overflowBurst.bursts));
 check("greatswordCleavePerfect has burst renderer data", !!(EffectEventDefinitions.greatswordCleavePerfect && EffectEventDefinitions.greatswordCleavePerfect.bursts));
+check("counterflow showcase effects have burst data", !!(EffectEventDefinitions.counterflowCatch && EffectEventDefinitions.counterflowClashFollow && EffectEventDefinitions.counterflowClashFollow.bursts));
 check("renderer has player silhouette helper", rendererJs.includes("drawPlayerSilhouette"));
 check("renderer has enemy silhouette helper", rendererJs.includes("drawEnemySilhouette"));
 check("renderer has stage and nameplate helpers", rendererJs.includes("drawBattleStage") && rendererJs.includes("drawActorGroundSigil") && rendererJs.includes("drawCombatNameplates"));
@@ -154,6 +155,7 @@ check("demo mode exposes system escape handler", demoModeJs.includes("handleSyst
 check("demo detail opens by default", mainJs.includes('demoDetailDrawer.classList.remove("hidden")'));
 check("demo detail uses status lines", mainJs.includes("demo.getStatusLines") && mainJs.includes("demo.getControlHint"));
 check("demo includes showcase category", demoModeJs.includes('key: "showcases"') && demoModeJs.includes("Showcase · 火球三分支对比"));
+check("demo includes counterflow showcase", demoModeJs.includes("Showcase · 逆势双刃三节点反击") && demoModeJs.includes('scheme: "counterflow"') && demoModeJs.includes("counterflowClashFollow"));
 check("demo help advertises showcase", mainJs.includes("亮点演示 Showcase") && mainJs.includes("1-5</b> 选择演示分类"));
 check("enemy readout renderer exists", rendererJs.includes("drawEnemyAttackReadout") && rendererJs.includes("推荐"));
 check("audio has R7 feedback cues", audioJs.includes("sfxWindowOpen") && audioJs.includes("sfxResourceGain") && audioJs.includes("sfxTransition"));
@@ -163,6 +165,7 @@ check("timing audit script exists", fs.existsSync(path.join(root, "scripts/check
 check("visual smoke script exists", !!visualSmokeJs);
 check("visual smoke uses screenshot capture", visualSmokeJs.includes("Page.captureScreenshot"));
 check("visual smoke covers style 7 and replay", visualSmokeJs.includes("battle-style7-qte") && visualSmokeJs.includes("demo-result-replay-qte"));
+check("visual smoke covers counterflow showcase track", visualSmokeJs.includes("showcase-counterflow-track") && visualSmokeJs.includes("counterflow visual track active"));
 check("visual smoke covers encounter stage themes", visualSmokeJs.includes("style 6 forge stage theme") && visualSmokeJs.includes("style 7 arcane stage theme") && visualSmokeJs.includes("style 8 dojo stage theme"));
 check("visual smoke covers encounter phase model visuals", visualSmokeJs.includes("enemy encounter phase visuals active") && visualSmokeJs.includes("enemy phase nameplate uses phase name"));
 check("visual smoke covers combat phase lighting", visualSmokeJs.includes("combat phase lighting qte active") && visualSmokeJs.includes("combat phase lighting enemy response"));
@@ -219,10 +222,11 @@ check("battle applies chain handfeel", battleJs.includes("Utils.getChainHandfeel
 check("battle applies qte pacing", battleJs.includes("Utils.getBattleQTEPacing") && battleJs.includes("qteRunner.timeScale") && battleJs.includes("qteRunner.postNodePause"));
 check("demo applies chain pacing", demoModeJs.includes("Utils.getDemoPacing") && demoModeJs.includes("getActiveDirectorLines") && demoModeJs.includes("getPreviewSummaryLines"));
 check("renderer shows demo focus panel", rendererJs.includes("drawDemoFocusPanel") && rendererJs.includes("演示摘要"));
+check("renderer shows counterflow demo track", rendererJs.includes("drawDemoCounterflowTrack") && rendererJs.includes("drawDemoCounterflowLinks") && rendererJs.includes('visual.scheme !== "counterflow"'));
 check("demo layout avoids detail drawer", rendererJs.includes("getDemoStageBounds") && rendererJs.includes("stage.compact") && rendererJs.includes("drawDemoQTEBar(scene, bounds)"));
 check("battle action HUD hides equipment noise", rendererJs.includes("isActionFocusedState") && rendererJs.includes("drawEquipmentChips") && rendererJs.includes('scene.turnState === "attack_active"'));
 check("demo result suppresses residual flash", rendererJs.includes("shouldDrawScreenFlash") && rendererJs.includes('scene.turnState !== "demo_preview"') && visualSmokeJs.includes("demo result suppresses residual flash"));
-check("demo action key prompt uses lower lane", rendererJs.includes("actionKeyPromptY = 365") && rendererJs.includes("drawBigKeyPrompt(scene, keyMatch[1], \"\", actionKeyPromptY"));
+check("demo action key prompt uses lower lane", rendererJs.includes("actionKeyPromptY = hasSequenceVisual ? 408 : 365") && rendererJs.includes("drawBigKeyPrompt(scene, keyMatch[1], \"\", actionKeyPromptY"));
 check("demo action suppresses duplicate enemy readout", rendererJs.includes("suppressReadout: true") && rendererJs.includes("!options.suppressReadout"));
 check("demo qte uses compact result feedback", demoModeJs.includes('"qteResult"') && fxJs.includes('t.type === "qteResult"'));
 check("R14 accessible qte timings", chainsJs.includes("beats: [0.38, 0.82, 1.24]") && chainsJs.includes("duration: 1.18") && chainsJs.includes("perfect: 0.72") && chainsJs.includes("chargeMul: 1.08"));

@@ -7198,24 +7198,30 @@ class CanvasRenderer {
     const phase = seq.phases[seq.phaseIndex];
     const total = seq.phases.length;
     const completed = seq.phaseIndex;
-    const actionKeyPromptY = 365;
+    const hasSequenceVisual = !!(phase && phase.visual);
+    const actionKeyPromptY = hasSequenceVisual ? 408 : 365;
+
+    if (hasSequenceVisual) {
+      this.drawDemoActionSequenceVisual(ctx, phase.visual, stage, t);
+    }
 
     // 当前阶段大字说明
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 36px sans-serif";
+    ctx.font = hasSequenceVisual ? "bold 26px sans-serif" : "bold 36px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(this.truncateText(ctx, phase.label || "", stage.w), stage.centerX, this.height / 2 - 30);
+    const phaseLabelY = hasSequenceVisual ? 294 : this.height / 2 - 30;
+    ctx.fillText(this.truncateText(ctx, phase.label || "", stage.w), stage.centerX, phaseLabelY);
 
     if (phase.detail) {
       ctx.fillStyle = "#d8d8e8";
       ctx.font = "15px sans-serif";
       ctx.textBaseline = "top";
-      ctx.fillText(this.truncateText(ctx, phase.detail, stage.w), stage.centerX, this.height / 2 + 2);
+      ctx.fillText(this.truncateText(ctx, phase.detail, stage.w), stage.centerX, phaseLabelY + 30);
     }
 
     // 阶段进度点
-    const dotY = this.height / 2 + 30;
+    const dotY = hasSequenceVisual ? 366 : this.height / 2 + 30;
     const startX = stage.centerX - (total - 1) * 20;
     for (let i = 0; i < total; i++) {
       const x = startX + i * 40;
@@ -7235,6 +7241,167 @@ class CanvasRenderer {
     if (keyMatch && keyMatch[1]) {
       this.drawBigKeyPrompt(scene, keyMatch[1], "", actionKeyPromptY, t, stage.centerX);
     }
+  }
+
+  drawDemoActionSequenceVisual(ctx, visual, stage, t) {
+    if (!visual || visual.scheme !== "counterflow") return;
+    this.drawDemoCounterflowTrack(ctx, visual, stage, t);
+  }
+
+  drawDemoCounterflowTrack(ctx, visual, stage, t) {
+    const track = Array.isArray(visual.track) ? visual.track : [];
+    if (track.length === 0) return;
+
+    const panelW = Math.min(700, Math.max(430, stage.w - 34));
+    const panelH = 130;
+    const x = stage.centerX - panelW / 2;
+    const y = 128;
+    const active = Math.max(0, visual.active || 0);
+    const accent = "#16a085";
+    const enemyNodes = track
+      .map((node, index) => ({ ...node, index }))
+      .filter(node => node.lane === "enemy");
+    const playerNodes = track
+      .map((node, index) => ({ ...node, index }))
+      .filter(node => node.lane !== "enemy");
+    const rowY = {
+      enemy: y + 42,
+      player: y + 92
+    };
+    const leftPad = 78;
+    const rightPad = 36;
+    const laneW = panelW - leftPad - rightPad;
+    const laneX = x + leftPad;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(8, 12, 18, 0.72)";
+    ctx.strokeStyle = this.hexToRgba(accent, 0.42);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = this.hexToRgba(accent, 0.10);
+    ctx.fillRect(x + 10, rowY.enemy - 16, panelW - 20, 30);
+    ctx.fillStyle = "rgba(52, 152, 219, 0.08)";
+    ctx.fillRect(x + 10, rowY.player - 16, panelW - 20, 30);
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = "#e74c3c";
+    ctx.fillText("敌方", x + 22, rowY.enemy);
+    ctx.fillStyle = accent;
+    ctx.fillText("我方", x + 22, rowY.player);
+
+    const positionNodes = nodes => {
+      const count = Math.max(1, nodes.length - 1);
+      return nodes.map((node, laneIndex) => ({
+        ...node,
+        laneIndex,
+        x: laneX + (laneIndex / count) * laneW,
+        y: rowY[node.lane === "enemy" ? "enemy" : "player"]
+      }));
+    };
+    const positionedEnemy = positionNodes(enemyNodes);
+    const positionedPlayer = positionNodes(playerNodes);
+    const allNodes = [...positionedEnemy, ...positionedPlayer];
+    const byIndex = new Map(allNodes.map(node => [node.index, node]));
+
+    const drawRail = nodes => {
+      if (nodes.length <= 1) return;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      nodes.forEach((node, idx) => {
+        if (idx === 0) ctx.moveTo(node.x, node.y);
+        else ctx.lineTo(node.x, node.y);
+      });
+      ctx.stroke();
+    };
+    drawRail(positionedEnemy);
+    drawRail(positionedPlayer);
+
+    this.drawDemoCounterflowLinks(ctx, byIndex, active, accent, t);
+
+    for (const node of allNodes) {
+      const done = node.index < active;
+      const current = node.index === active;
+      const future = node.index > active;
+      const color = node.lane === "enemy" ? "#e74c3c" : accent;
+      const pulse = current ? (1 + Math.sin(t * 10) * 0.10) : 1;
+      const radius = (current ? 13 : 10) * pulse;
+
+      ctx.save();
+      ctx.translate(node.x, node.y);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = future ? 0.34 : (done ? 0.48 : 0.92);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = current ? 18 : 8;
+      ctx.fillStyle = this.hexToRgba(color, current ? 0.28 : 0.16);
+      ctx.strokeStyle = done ? "rgba(255,255,255,0.38)" : color;
+      ctx.lineWidth = current ? 3 : 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.globalAlpha = future ? 0.52 : 1;
+      ctx.fillStyle = current ? "#ffffff" : "#dfe7ef";
+      ctx.font = node.icon.length > 2 ? "bold 9px sans-serif" : "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowBlur = 0;
+      ctx.fillText(node.icon || "", 0, 0);
+
+      ctx.font = "11px sans-serif";
+      ctx.fillStyle = future ? "rgba(220,226,236,0.55)" : "#dce6ef";
+      ctx.textBaseline = "top";
+      ctx.fillText(this.truncateText(ctx, node.label || "", 64), 0, 18);
+      ctx.restore();
+    }
+
+    if (visual.note) {
+      ctx.fillStyle = "#cfd8e8";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(this.truncateText(ctx, visual.note, panelW - 32), stage.centerX, y + panelH - 22);
+    }
+    ctx.restore();
+  }
+
+  drawDemoCounterflowLinks(ctx, byIndex, active, accent, t) {
+    const linkSets = [
+      [0, 3, "#5dade2"],
+      [1, 4, accent],
+      [2, 5, "#f1c40f"],
+      [5, 6, accent],
+      [6, 0, "#9b59b6"]
+    ];
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    for (const [fromIndex, toIndex, color] of linkSets) {
+      const from = byIndex.get(fromIndex);
+      const to = byIndex.get(toIndex);
+      if (!from || !to) continue;
+      const hot = active === fromIndex || active === toIndex || (active === 5 && fromIndex === 2);
+      const alpha = hot ? 0.55 + Math.sin(t * 8) * 0.08 : (active > toIndex ? 0.20 : 0.10);
+      ctx.strokeStyle = this.hexToRgba(color, alpha);
+      ctx.lineWidth = hot ? 4 : 2;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = hot ? 16 : 6;
+      ctx.beginPath();
+      const midX = (from.x + to.x) / 2;
+      const midY = (from.y + to.y) / 2 - (from.y === to.y ? 18 : 0);
+      ctx.moveTo(from.x, from.y);
+      ctx.quadraticCurveTo(midX, midY, to.x, to.y);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   drawDemoEnemyWindup(scene, t, bounds = null) {

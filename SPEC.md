@@ -2218,6 +2218,35 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke verifies battle style `6` / `flame_blade` QTE exposes a multi-node player chain layer with current and future nodes.
 
+### R43 Counterflow Showcase Direction Pass, Completed
+
+Goal: style `8` should be visible in the demo experience as an authored combat sequence, not only as a menu option or a normal battle loadout.
+
+Implemented direction:
+
+- `DemoMode.getShowcaseItems()` now includes `Showcase · 逆势双刃三节点反击`.
+- The sequence shows the intended style `8` fantasy in one readable playback:
+  - enemy-turn pressure begins as spell -> quick stab -> follow-up stab
+  - the player catches the spell while holding counterspell charge
+  - the player dodges during that charge instead of splitting the action into another turn
+  - dual blades produce two fast clash beats to cover and interrupt the remaining physical pressure
+  - counterspell release resolves only after the return projectile hits
+- `CanvasRenderer.drawDemoCounterflowTrack()` adds a compact two-lane demo panel:
+  - upper lane: enemy attack nodes
+  - lower lane: player response nodes
+  - current node pulses
+  - completed/future nodes stay visually distinct
+  - route links show catch, slip, clash, follow-up, and return paths
+- `EffectEventDefinitions` now includes counterflow-specific catch/slip/clash bursts so the showcase is not just text.
+- This pass is presentation-only. It does not change battle timing, QTE judgement, counterflow data, active attack resolution, hit confirm, or damage rules.
+
+Acceptance criteria:
+
+- Demo showcase category includes a style `8` authored sequence.
+- Renderer exposes the counterflow demo track helpers.
+- Static smoke protects the new showcase, renderer helper, and effect events.
+- Visual smoke opens demo showcase item `5` and verifies the counterflow track is active in-browser.
+
 ## 22. Verification Commands
 
 ```powershell
@@ -2265,6 +2294,7 @@ Manual browser smoke test:
 - Enter demo mode.
 - Open Showcase and run Fire branch comparison.
 - Run enemy-turn Showcase and confirm type/danger/recommended key/countdown are visible.
+- Run Counterflow Showcase and confirm the two-lane enemy/player node track is visible.
 - Open spell demos.
 - Run Fire v2 entry.
 - Press `R` on the result preview and confirm the same Fire v2 entry replays.

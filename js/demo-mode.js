@@ -44,6 +44,7 @@ class DemoMode {
     this.playerMaxHp = 100;
     this.enemyHp = 200;
     this.enemyMaxHp = 200;
+    this.enemyConfig = EnemyDatabase.base;
     this.playerState = {
       spellEnergy: 0,
       maxSpellEnergy: 100,
@@ -124,6 +125,7 @@ class DemoMode {
     this.enemyStunTimer = 0;
     this.armorBreakActive = false;
     this.armorBreakTurns = 0;
+    this.enemyConfig = EnemyDatabase.base;
     this.playerState.spellEnergy = 0;
     this.playerState.consecutiveDodges = 0;
     this.playerState.shieldEnchanted = false;
@@ -435,7 +437,7 @@ class DemoMode {
   // ========== 演示项构造 ==========
 
   getShowcaseItems() {
-    const phase = (label, detail, key, effect) => ({ duration: 0.8, label, detail, key, effect });
+    const phase = (label, detail, key, effect, options = {}) => ({ duration: 0.8, label, detail, key, effect, ...options });
     const fireShowcase = [
       phase("① 火星弹分支", "过早松手会保留补正，而不是直接断链。", "A", (demo) => {
         demo.spawnFloatingText("Early", 220, 220, "popup");
@@ -557,6 +559,114 @@ class DemoMode {
       })
     ];
 
+    const counterflowTrack = [
+      { lane: "enemy", label: "法术", icon: "✦" },
+      { lane: "enemy", label: "快刺", icon: "↯" },
+      { lane: "enemy", label: "追刺", icon: "↯" },
+      { lane: "player", label: "接印", icon: "S" },
+      { lane: "player", label: "闪身", icon: "SPACE" },
+      { lane: "player", label: "双刃", icon: "A" },
+      { lane: "player", label: "返还", icon: "S" }
+    ];
+
+    const counterflowVisual = (active, note) => ({
+      scheme: "counterflow",
+      active,
+      note,
+      track: counterflowTrack
+    });
+
+    const counterflowShowcase = [
+      phase("① 敌方三段压迫", "敌方回合内连续给出：法术、近身快刺、追刺。", "", (demo) => {
+        demo.applyStyle("counterflow");
+        demo.enemyConfig = EnemyDatabase.archetypes.caster;
+        demo.enemyAttack = Difficulty.scaleAttack({ id: "arcaneBolt", ...EnemyDatabase.attacks.arcaneBolt });
+        demo.enemyAttackTimer = 0.72;
+        demo.enemyAttackPhase = "response";
+        demo.playerState.currentState = "casting";
+        demo.spawnFloatingText("三段压迫", 720, 182, "status");
+        demo.emitTransitionVisual({ visualEvent: "counterflowCatch", resource: { spellEnergy: 10 } });
+        demo.log("逆势双刃：敌方以法术起手，后接两段快攻");
+      }, {
+        duration: 0.95,
+        visual: counterflowVisual(0, "敌方动作不是一次结算，而是三段即将到来的时间点。")
+      }),
+      phase("② 接住法术并不断蓄", "长按施法接住第一段，蓄力状态保留。", "S", (demo) => {
+        demo.enemyAttack = Difficulty.scaleAttack({ id: "arcaneBolt", ...EnemyDatabase.attacks.arcaneBolt });
+        demo.enemyAttackTimer = 1.08;
+        demo.enemyAttackPhase = "hit";
+        demo.playerState.currentState = "casting";
+        demo.playerState.spellEnergy = 24;
+        demo.resourceSystem.add("spellEnergy", 24);
+        demo.spawnFloatingText("+24", 220, 210, "status");
+        demo.emitTransitionVisual({ visualEvent: "counterflowCatch", resource: { spellEnergy: 24 } });
+        demo.log("逆势双刃：接住法术，蓄力没有断");
+      }, {
+        duration: 0.82,
+        visual: counterflowVisual(3, "第一节点接法术，仍保持反咒蓄力。")
+      }),
+      phase("③ 蓄力中闪避", "不松施法键，通过闪身让第二段快刺落空。", "SPACE", (demo) => {
+        demo.enemyAttack = Difficulty.scaleAttack({ id: "quickStab", ...EnemyDatabase.attacks.quickStab });
+        demo.enemyAttackTimer = 0.52;
+        demo.enemyAttackPhase = "response";
+        demo.playerState.currentState = "casting";
+        demo.playerState.consecutiveDodges = 1;
+        demo.playerState.spellEnergy = 38;
+        demo.resourceSystem.add("spellEnergy", 14);
+        demo.emitTransitionVisual({ visualEvent: "counterflowSlip", iframe: 0.16, resource: { spellEnergy: 14 } });
+        demo.triggerActorReaction("player", "dodge", 1.15, { direction: -1, color: "#16a085" });
+        demo.log("逆势双刃：蓄力中闪避第二段");
+      }, {
+        duration: 0.82,
+        visual: counterflowVisual(4, "第二节点用闪避处理，不拆成另一个回合。")
+      }),
+      phase("④ 双刃连续拼刀", "双持允许更快的两段攻击，覆盖剩余快攻。", "A", (demo) => {
+        demo.enemyAttack = Difficulty.scaleAttack({ id: "quickStab", ...EnemyDatabase.attacks.quickStab });
+        demo.enemyAttackTimer = 0.62;
+        demo.enemyAttackPhase = "hit";
+        demo.playerState.currentState = "swordAttack";
+        demo.spawnFloatingText("拼刀", 480, 218, "popup");
+        demo.spawnFloatingText("-16", 740, 245, "damage");
+        demo.enemyHp = Math.max(0, demo.enemyHp - 16);
+        demo.emitTransitionVisual({ visualEvent: "counterflowClashLead", damage: 16 });
+        demo.triggerActorReaction("player", "attack", 1.1, { color: "#16a085" });
+        demo.log("逆势双刃：第一刀拼掉快刺");
+      }, {
+        duration: 0.68,
+        visual: counterflowVisual(5, "双持第一刀进入拼刀。")
+      }),
+      phase("⑤ 追加刀打断追刺", "第二刀紧接，打断敌方第三段。", "A", (demo) => {
+        demo.enemyAttack = Difficulty.scaleAttack({ id: "quickStab", ...EnemyDatabase.attacks.quickStab });
+        demo.enemyAttackTimer = 0.66;
+        demo.enemyAttackPhase = "hit";
+        demo.playerState.currentState = "swordAttack";
+        demo.spawnFloatingText("打断", 740, 202, "status");
+        demo.spawnFloatingText("-18", 740, 245, "damage");
+        demo.enemyHp = Math.max(0, demo.enemyHp - 18);
+        demo.emitTransitionVisual({ visualEvent: "counterflowClashFollow", damage: 18 });
+        demo.triggerActorReaction("enemy", "stagger", 1.0, { color: "#16a085" });
+        demo.log("逆势双刃：第二刀打断追刺");
+      }, {
+        duration: 0.68,
+        visual: counterflowVisual(5, "双持第二刀覆盖追刺，敌方第三段被打断。")
+      }),
+      phase("⑥ 反咒返还命中", "最后释放反咒，直到投射物命中才结算伤害。", "S", (demo) => {
+        demo.enemyAttack = null;
+        demo.enemyAttackPhase = "none";
+        demo.playerState.currentState = "casting";
+        demo.playerState.spellEnergy = 58;
+        demo.spawnFloatingText("-38", 740, 245, "crit");
+        demo.enemyHp = Math.max(0, demo.enemyHp - 38);
+        demo.enemyStunTimer = 0.65;
+        demo.applyStatusResults([demo.statusSystem.apply({ target: "player", type: "absorbReady", turns: 1 }, { source: "showcase-counterflow" })].filter(Boolean));
+        demo.emitTransitionVisual({ visualEvent: "absorbReleasePeak", damage: 38, stunEnemy: 0.65, resource: { spellEnergy: 18 } });
+        demo.log("逆势双刃：反咒返还命中后结算");
+      }, {
+        duration: 0.92,
+        visual: counterflowVisual(6, "反咒释放后飞行命中，命中时才给最终结算。")
+      })
+    ];
+
     return [
       {
         name: "Showcase · 火球三分支对比",
@@ -589,6 +699,18 @@ class DemoMode {
         setup: (demo) => demo.applyStyle("mirrorblade"),
         preview: "敌方预警 -> 绿色窗口 -> 镜咒折返",
         details: ["展示重点：危险等级、输入时机、反击和资源反转。"]
+      },
+      {
+        name: "Showcase · 逆势双刃三节点反击",
+        description: "敌方回合内接法术、闪避、连续拼刀并释放反咒返还。",
+        actionSequence: counterflowShowcase,
+        setup: (demo) => {
+          demo.applyStyle("counterflow");
+          demo.enemyConfig = EnemyDatabase.archetypes.caster;
+        },
+        preview: "法术 -> 闪身续蓄 -> 双刃拼刀 -> 反咒返还",
+        director: ["看上轨敌方三段节点", "看下轨玩家反制动作", "注意最后命中才结算"],
+        details: ["展示重点：敌方三节点、蓄力中闪避、双持连续拼刀、反咒投射命中结算。"]
       }
     ];
   }
