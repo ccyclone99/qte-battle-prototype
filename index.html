@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QTE Battle Prototype</title>
-  <link rel="stylesheet" href="style.css?v=r46a">
+  <link rel="stylesheet" href="style.css?v=r47a">
 </head>
 <body>
   <div id="game-container">
@@ -64,49 +64,50 @@
       </div>
       <div id="style-choice-grid" class="style-choice-grid" role="radiogroup" aria-label="战斗风格">
         <button type="button" class="style-choice manual selected" data-style-id="manual" role="radio" aria-checked="true" aria-label="进战斗后手动选择">
-          <span class="style-choice-number">手动</span>
+          <span class="style-choice-key">手动</span>
           <span class="style-choice-name">进战斗后选择</span>
-          <span class="style-choice-shortcut"></span>
+          <span class="style-choice-number"></span>
         </button>
         <button type="button" class="style-choice" data-style-id="fire" data-style-key="1" role="radio" aria-checked="false" aria-label="风格 1，001 · 烈火重重" style="--style-color:#e74c3c">
-          <span class="style-choice-number">001</span>
+          <span class="style-choice-key">风格 1</span>
           <span class="style-choice-name">烈火重重</span>
-          <span class="style-choice-shortcut">风格 1</span>
+          <span class="style-choice-number">编号 001</span>
         </button>
         <button type="button" class="style-choice" data-style-id="absorb" data-style-key="2" role="radio" aria-checked="false" aria-label="风格 2，002 · 咒还" style="--style-color:#9b59b6">
-          <span class="style-choice-number">002</span>
+          <span class="style-choice-key">风格 2</span>
           <span class="style-choice-name">咒还</span>
-          <span class="style-choice-shortcut">风格 2</span>
+          <span class="style-choice-number">编号 002</span>
         </button>
         <button type="button" class="style-choice" data-style-id="desslo" data-style-key="3" role="radio" aria-checked="false" aria-label="风格 3，001 · 德斯洛大陆剑术" style="--style-color:#3498db">
-          <span class="style-choice-number">001</span>
+          <span class="style-choice-key">风格 3</span>
           <span class="style-choice-name">德斯洛大陆剑术</span>
-          <span class="style-choice-shortcut">风格 3</span>
+          <span class="style-choice-number">编号 001</span>
         </button>
         <button type="button" class="style-choice" data-style-id="eastern" data-style-key="4" role="radio" aria-checked="false" aria-label="风格 4，008 · 东方诸国剑术" style="--style-color:#2ecc71">
-          <span class="style-choice-number">008</span>
+          <span class="style-choice-key">风格 4</span>
           <span class="style-choice-name">东方诸国剑术</span>
-          <span class="style-choice-shortcut">风格 4</span>
+          <span class="style-choice-number">编号 008</span>
         </button>
         <button type="button" class="style-choice" data-style-id="desolo" data-style-key="5" role="radio" aria-checked="false" aria-label="风格 5，097 · 荒芜之地的剑术" style="--style-color:#f1c40f">
-          <span class="style-choice-number">097</span>
+          <span class="style-choice-key">风格 5</span>
           <span class="style-choice-name">荒芜之地的剑术</span>
-          <span class="style-choice-shortcut">风格 5</span>
+          <span class="style-choice-number">编号 097</span>
         </button>
         <button type="button" class="style-choice" data-style-id="flameforge" data-style-key="6" role="radio" aria-checked="false" aria-label="风格 6，021 · 火铸大剑" style="--style-color:#e67e22">
-          <span class="style-choice-number">021</span>
+          <span class="style-choice-key">风格 6</span>
           <span class="style-choice-name">火铸大剑</span>
-          <span class="style-choice-shortcut">风格 6</span>
+          <span class="style-choice-number">编号 021</span>
         </button>
         <button type="button" class="style-choice" data-style-id="mirrorblade" data-style-key="7" role="radio" aria-checked="false" aria-label="风格 7，022 · 镜咒双刃" style="--style-color:#8e44ad">
-          <span class="style-choice-number">022</span>
+          <span class="style-choice-key">风格 7</span>
           <span class="style-choice-name">镜咒双刃</span>
-          <span class="style-choice-shortcut">风格 7</span>
+          <span class="style-choice-number">编号 022</span>
         </button>
         <button type="button" class="style-choice key-eight" data-style-id="counterflow" data-style-key="8" role="radio" aria-checked="false" aria-label="风格 8，023 · 逆势双刃" style="--style-color:#16a085">
-          <span class="style-choice-number">023</span>
+          <span class="style-choice-key">风格 8</span>
           <span class="style-choice-name">逆势双刃</span>
-          <span class="style-choice-shortcut">风格 8</span>
+          <span class="style-choice-number">编号 023</span>
+          <span class="style-choice-role">反制流派</span>
         </button>
       </div>
       <div class="menu-hint">战斗中按 ESC 可返回此菜单</div>
@@ -220,31 +221,31 @@
     <button id="touch-toggle" class="touch-toggle" title="虚拟按键 V">⌨</button>
   </div>
 
-  <script src="js/utils.js?v=r46a"></script>
-  <script src="js/difficulty.js?v=r46a"></script>
-  <script src="js/audio.js?v=r46a"></script>
-  <script src="js/fx.js?v=r46a"></script>
-  <script src="js/input.js?v=r46a"></script>
-  <script src="js/data/chains.js?v=r46a"></script>
-  <script src="js/data/weapons.js?v=r46a"></script>
-  <script src="js/data/spells.js?v=r46a"></script>
-  <script src="js/data/combatArts.js?v=r46a"></script>
-  <script src="js/data/styles.js?v=r46a"></script>
-  <script src="js/data/defenses.js?v=r46a"></script>
-  <script src="js/data/enemies.js?v=r46a"></script>
-  <script src="js/data/encounters.js?v=r46a"></script>
-  <script src="js/data/effects.js?v=r46a"></script>
-  <script src="js/systems/effects.js?v=r46a"></script>
-  <script src="js/systems/statuses.js?v=r46a"></script>
-  <script src="js/systems/resources.js?v=r46a"></script>
-  <script src="js/systems/hit-confirm.js?v=r46a"></script>
-  <script src="js/systems/active-attacks.js?v=r46a"></script>
-  <script src="js/systems/qte-debug.js?v=r46a"></script>
-  <script src="js/systems/chain-effects.js?v=r46a"></script>
-  <script src="js/demo-mode.js?v=r46a"></script>
-  <script src="js/qte-runner.js?v=r46a"></script>
-  <script src="js/battle.js?v=r46a"></script>
-  <script src="js/renderer.js?v=r46a"></script>
-  <script src="js/main.js?v=r46a"></script>
+  <script src="js/utils.js?v=r47a"></script>
+  <script src="js/difficulty.js?v=r47a"></script>
+  <script src="js/audio.js?v=r47a"></script>
+  <script src="js/fx.js?v=r47a"></script>
+  <script src="js/input.js?v=r47a"></script>
+  <script src="js/data/chains.js?v=r47a"></script>
+  <script src="js/data/weapons.js?v=r47a"></script>
+  <script src="js/data/spells.js?v=r47a"></script>
+  <script src="js/data/combatArts.js?v=r47a"></script>
+  <script src="js/data/styles.js?v=r47a"></script>
+  <script src="js/data/defenses.js?v=r47a"></script>
+  <script src="js/data/enemies.js?v=r47a"></script>
+  <script src="js/data/encounters.js?v=r47a"></script>
+  <script src="js/data/effects.js?v=r47a"></script>
+  <script src="js/systems/effects.js?v=r47a"></script>
+  <script src="js/systems/statuses.js?v=r47a"></script>
+  <script src="js/systems/resources.js?v=r47a"></script>
+  <script src="js/systems/hit-confirm.js?v=r47a"></script>
+  <script src="js/systems/active-attacks.js?v=r47a"></script>
+  <script src="js/systems/qte-debug.js?v=r47a"></script>
+  <script src="js/systems/chain-effects.js?v=r47a"></script>
+  <script src="js/demo-mode.js?v=r47a"></script>
+  <script src="js/qte-runner.js?v=r47a"></script>
+  <script src="js/battle.js?v=r47a"></script>
+  <script src="js/renderer.js?v=r47a"></script>
+  <script src="js/main.js?v=r47a"></script>
 </body>
 </html>

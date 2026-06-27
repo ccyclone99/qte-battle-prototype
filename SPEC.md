@@ -2330,6 +2330,37 @@ Acceptance criteria:
 - Static smoke protects heavy blade, twin blade, and focus staff profiles.
 - Visual smoke verifies the three profile families are distinct during browser-rendered battle checks.
 
+### R47 Actor Intent Badge Pass, Completed
+
+Goal: current combat intent should be readable from the actor model area itself, not only from the HUD, QTE bar, logs, or enemy attack text.
+
+Implemented direction:
+
+- `CanvasRenderer.getActorIntentBadgeVisuals()` derives a compact model-attached intent badge from:
+  - active player/enemy attacks
+  - enemy windup / response / hit windows
+  - player defense response windows
+  - player casting / charge / QTE states
+  - short hit reactions
+- `drawActorIntentBadgeLayer()` draws a small badge near the actor shoulder/head:
+  - circular shell and progress arc
+  - attack/cast rays
+  - defense diamond
+  - hit cross
+  - a subtle connector line to keep the badge attached to the model
+- Player and enemy calls are rendered after persistent model/status overlays and before the old reaction debug overlay, so they read as model-state hints rather than standalone HUD widgets.
+- Main-menu style cards now use `风格 N` as the primary visual label and move lore numbers like `023` / `008` into secondary `编号 NNN` text.
+- `风格 8 · 023 · 逆势双刃` is promoted into a full-row counter style card with `反制流派` text, so the online first screen no longer depends on players noticing a small shortcut label.
+- This pass is render-only. It does not change QTE timing, input windows, active attack travel, hit confirm, AI, damage, resources, status duration, or layout.
+- The asset cache key is bumped to `r47a`.
+
+Acceptance criteria:
+
+- Renderer exposes actor intent badge helper methods.
+- Static smoke protects enemy-window and defense-window intent branches.
+- Visual smoke verifies player attack, enemy response, and player defense badges in browser-rendered battle scenes.
+- Visual smoke verifies the style 8 card has `风格 8` as its primary label and is inside the desktop first viewport.
+
 ## 22. Verification Commands
 
 ```powershell

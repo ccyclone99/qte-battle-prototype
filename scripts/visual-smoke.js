@@ -439,16 +439,33 @@ async function runVisualSmoke() {
       { label: "style 8 visible in menu grid", ok: await evaluate(cdp, `(() => {
         const btn = document.querySelector('#style-choice-grid button[data-style-id="counterflow"]');
         if (!btn) return false;
+        const key = btn.querySelector(".style-choice-key");
+        const number = btn.querySelector(".style-choice-number");
+        const role = btn.querySelector(".style-choice-role");
         const rect = btn.getBoundingClientRect();
         const style = getComputedStyle(btn);
-        return btn.textContent.includes("023") && btn.textContent.includes("逆势双刃") && btn.textContent.includes("风格 8") && btn.dataset.styleKey === "8" && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+        return key && key.textContent.trim() === "风格 8"
+          && number && number.textContent.includes("023")
+          && role && role.textContent.includes("反制")
+          && btn.textContent.includes("逆势双刃")
+          && btn.dataset.styleKey === "8"
+          && rect.width > 40 && rect.height > 20
+          && rect.top >= 0 && rect.bottom <= innerHeight
+          && style.display !== "none" && style.visibility !== "hidden";
       })()`) },
       { label: "style 008 visible in menu grid", ok: await evaluate(cdp, `(() => {
         const btn = document.querySelector('#style-choice-grid button[data-style-id="eastern"]');
         if (!btn) return false;
+        const key = btn.querySelector(".style-choice-key");
+        const number = btn.querySelector(".style-choice-number");
         const rect = btn.getBoundingClientRect();
         const style = getComputedStyle(btn);
-        return btn.textContent.includes("008") && btn.textContent.includes("东方诸国剑术") && btn.textContent.includes("风格 4") && btn.dataset.styleKey === "4" && rect.width > 40 && rect.height > 20 && style.display !== "none" && style.visibility !== "hidden";
+        return key && key.textContent.trim() === "风格 4"
+          && number && number.textContent.includes("008")
+          && btn.textContent.includes("东方诸国剑术")
+          && btn.dataset.styleKey === "4"
+          && rect.width > 40 && rect.height > 20
+          && style.display !== "none" && style.visibility !== "hidden";
       })()`) },
       { label: "native style select labels style 8", ok: await evaluate(cdp, `(() => {
         const select = document.getElementById("style-select");
@@ -702,6 +719,13 @@ async function runVisualSmoke() {
         const visuals = r.getActorFootworkVisuals("player", 220, r.height - 145, "#e67e22", p, rig, { state: "swordAttack", motion: "flameBladeBurst", t: 1.3 });
         return !!(visuals && visuals.active && visuals.action > 0.3 && visuals.feet.length === 2 && visuals.trails.length >= 1 && visuals.center.w > 55);
       })()`) },
+      { label: "player intent badge active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorIntentBadgeVisuals || !r.getActorPerformance) return false;
+        const p = r.getActorPerformance(battle, "player", battle.actorReactions.get("player"), r.getCurrentPose(battle));
+        const badge = r.getActorIntentBadgeVisuals(battle, "player", p, { color: "#e67e22" });
+        return !!(badge && badge.active && badge.kind === "attack" && badge.label === "weapon-release" && badge.progress >= 0 && badge.radius >= 15);
+      })()`) },
       { label: "player fire attack descriptor", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         const a = battle.activeAttackSystem.active.find(item => item.source === "player");
@@ -930,6 +954,20 @@ async function runVisualSmoke() {
         const rig = r.getEnemyRigProfile(r.getEnemyModelProfile(battle.enemyConfig));
         const visuals = r.getActorFootworkVisuals("enemy", r.width - 245, r.height - 135, battle.enemyConfig.color || "#e74c3c", p, rig, { enemyPose: p.enemyPose, poseIntensity: p.poseIntensity, t: 1.7 });
         return !!(visuals && visuals.active && visuals.forward === -1 && visuals.feet.length === 2 && visuals.trails.length >= 1 && visuals.pressure > 0.35);
+      })()`) },
+      { label: "enemy intent badge active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorIntentBadgeVisuals || !r.getActorPerformance) return false;
+        const p = r.getActorPerformance(battle, "enemy", battle.actorReactions.get("enemy"));
+        const badge = r.getActorIntentBadgeVisuals(battle, "enemy", p, { color: battle.enemyConfig.color || "#e74c3c" });
+        return !!(badge && badge.active && badge.kind === "cast" && badge.label === "enemy-window" && badge.phase === "response" && badge.side === -1);
+      })()`) },
+      { label: "player defense intent badge active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getActorIntentBadgeVisuals || !r.getActorPerformance) return false;
+        const p = r.getActorPerformance(battle, "player", battle.actorReactions.get("player"), r.getCurrentPose(battle));
+        const badge = r.getActorIntentBadgeVisuals(battle, "player", p, { color: "#16a085" });
+        return !!(badge && badge.active && badge.kind === "defense" && badge.label === "defense-window" && badge.phase === "response");
       })()`) },
       { label: "player defense intent visuals active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;

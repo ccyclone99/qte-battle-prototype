@@ -122,19 +122,26 @@ function createStyleChoiceButton(value, style) {
   button.setAttribute("aria-label", style ? `风格 ${style.key}，${style.number} · ${style.name}` : "进战斗后手动选择");
   if (style && style.color) button.style.setProperty("--style-color", style.color);
 
-  const number = document.createElement("span");
-  number.className = "style-choice-number";
-  number.textContent = style ? style.number : "手动";
+  const key = document.createElement("span");
+  key.className = "style-choice-key";
+  key.textContent = style ? `风格 ${style.key}` : "手动";
 
   const name = document.createElement("span");
   name.className = "style-choice-name";
   name.textContent = style ? style.name : "进战斗后选择";
 
-  const shortcut = document.createElement("span");
-  shortcut.className = "style-choice-shortcut";
-  shortcut.textContent = style ? `风格 ${style.key}` : "";
+  const number = document.createElement("span");
+  number.className = "style-choice-number";
+  number.textContent = style ? `编号 ${style.number}` : "";
 
-  button.append(number, name, shortcut);
+  button.append(key, name, number);
+
+  if (keyEight) {
+    const role = document.createElement("span");
+    role.className = "style-choice-role";
+    role.textContent = "反制流派";
+    button.appendChild(role);
+  }
   return button;
 }
 

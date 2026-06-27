@@ -385,8 +385,12 @@ body {
 }
 
 .style-choice.key-eight {
+  grid-column: span 3;
+  height: 52px;
   border-color: color-mix(in srgb, var(--style-color, #16a085) 70%, rgba(255, 255, 255, 0.24));
-  box-shadow: 0 0 18px color-mix(in srgb, var(--style-color, #16a085) 18%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--style-color, #16a085) 18%, rgba(26, 26, 37, 0.92)), rgba(26, 26, 37, 0.88));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--style-color, #16a085) 22%, transparent);
 }
 
 .style-choice:hover {
@@ -402,16 +406,23 @@ body {
   box-shadow: 0 0 16px color-mix(in srgb, var(--style-color, #f1c40f) 25%, transparent);
 }
 
-.style-choice-number {
+.style-choice-key {
   flex: 0 0 auto;
-  min-width: 34px;
-  font-size: 13px;
+  min-width: 54px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--style-color, #f1c40f);
 }
 
+.style-choice.key-eight .style-choice-key {
+  min-width: 62px;
+  font-size: 14px;
+  color: #7fffe0;
+}
+
 .style-choice-name {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -419,13 +430,22 @@ body {
   font-weight: 700;
 }
 
-.style-choice-shortcut {
+.style-choice-number {
   flex: 0 0 auto;
-  min-width: 48px;
+  min-width: 54px;
   text-align: right;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   color: rgba(232, 232, 240, 0.72);
+}
+
+.style-choice-role {
+  flex: 0 0 auto;
+  min-width: 58px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 900;
+  color: #7fffe0;
 }
 
 .style-choice.manual {
@@ -751,17 +771,31 @@ body {
     border-radius: 5px;
   }
 
-  .style-choice-number {
-    min-width: 28px;
+  .style-choice.key-eight {
+    height: 38px;
+  }
+
+  .style-choice-key {
+    min-width: 38px;
     font-size: 10px;
+  }
+
+  .style-choice.key-eight .style-choice-key {
+    min-width: 46px;
+    font-size: 11px;
   }
 
   .style-choice-name {
     font-size: 11px;
   }
 
-  .style-choice-shortcut {
-    min-width: 36px;
+  .style-choice-number {
+    min-width: 42px;
+    font-size: 8px;
+  }
+
+  .style-choice-role {
+    min-width: 44px;
     font-size: 9px;
   }
 

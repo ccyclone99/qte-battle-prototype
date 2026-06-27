@@ -94,7 +94,7 @@ check("main menu has static counterflow style card", indexHtml.includes('data-st
 check("main menu style select starts chosen style", mainJs.includes("selectedStyleId") && mainJs.includes("applyMenuStyleSelection") && mainJs.includes("battle.startPlayerTurn()"));
 check("main menu syncs style select from data", mainJs.includes("syncStyleSelectOptions") && mainJs.includes("Object.entries(StyleDatabase)") && mainJs.includes("styleOptionLabel"));
 check("main menu shows visible style choices", indexHtml.includes('id="style-choice-grid"') && mainJs.includes("createStyleChoiceButton") && styleCss.includes(".style-choice-grid"));
-check("main menu visible choices separate style numbers from style keys", mainJs.includes("style-choice-number") && mainJs.includes("style-choice-shortcut") && mainJs.includes("button.dataset.styleId") && mainJs.includes("button.dataset.styleKey") && mainJs.includes("风格 ${style.key}") && styleCss.includes(".style-choice.key-eight"));
+check("main menu visible choices separate style numbers from style keys", mainJs.includes("style-choice-key") && mainJs.includes("style-choice-number") && mainJs.includes("style-choice-role") && mainJs.includes("button.dataset.styleId") && mainJs.includes("button.dataset.styleKey") && mainJs.includes("风格 ${style.key}") && indexHtml.includes("编号 023") && styleCss.includes(".style-choice.key-eight"));
 check("native style select separates style numbers from keys", mainJs.includes("风格 ${style.key} · ${style.number} · ${style.name}") && indexHtml.includes("风格 4 · 008 · 东方诸国剑术") && indexHtml.includes("风格 8 · 023 · 逆势双刃"));
 check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.knifeFlurry);
 check("enemy attacks declare telegraphs", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.telegraph && attack.telegraph.type && attack.telegraph.shape && attack.telegraph.pose && attack.telegraph.width));
@@ -124,6 +124,7 @@ check("renderer has cinematic focus helpers", rendererJs.includes("getCinematicF
 check("renderer has stage-only camera helpers", rendererJs.includes("getRenderCamera") && rendererJs.includes("applyWorldCamera") && rendererJs.includes("drawWorldScene") && rendererJs.includes("uiStable: true"));
 check("renderer has actor performance helpers", rendererJs.includes("getActorPerformance") && rendererJs.includes("getActorActiveAttack") && rendererJs.includes("drawActorPerformanceAfterimage"));
 check("renderer has actor footwork helpers", rendererJs.includes("getActorFootworkVisuals") && rendererJs.includes("drawActorFootworkLayer") && rendererJs.includes("trailCount"));
+check("renderer has actor intent badge helpers", rendererJs.includes("getActorIntentBadgeVisuals") && rendererJs.includes("drawActorIntentBadgeLayer") && rendererJs.includes("enemy-window") && rendererJs.includes("defense-window"));
 check("renderer has actor damage visual helpers", rendererJs.includes("getActorDamageVisuals") && rendererJs.includes("drawActorDamageMarks") && rendererJs.includes("critical") && rendererJs.includes("defeated"));
 check("renderer has actor impact reaction helpers", rendererJs.includes("getActorImpactReactionVisuals") && rendererJs.includes("drawActorImpactReactionLayer") && rendererJs.includes("slashLike") && rendererJs.includes("spellLike"));
 check("renderer has timing readability helpers", rendererJs.includes("getQTEReadabilityMetrics") && rendererJs.includes("drawQTEReadabilityPanel") && rendererJs.includes("getEnemyTimingMetrics") && rendererJs.includes("drawEnemyTimingPanel"));
@@ -189,6 +190,7 @@ check("visual smoke covers actor damage visuals", visualSmokeJs.includes("actor 
 check("visual smoke covers actor impact reactions", visualSmokeJs.includes("actor impact reaction visuals active") && visualSmokeJs.includes("getActorImpactReactionVisuals"));
 check("visual smoke covers actor status visuals", visualSmokeJs.includes("actor status visuals active") && visualSmokeJs.includes("player status visuals active"));
 check("visual smoke covers actor footwork visuals", visualSmokeJs.includes("player footwork visuals active") && visualSmokeJs.includes("enemy footwork visuals active"));
+check("visual smoke covers actor intent badges", visualSmokeJs.includes("player intent badge active") && visualSmokeJs.includes("enemy intent badge active") && visualSmokeJs.includes("player defense intent badge active"));
 check("visual smoke covers weapon silhouette profiles", visualSmokeJs.includes("weapon silhouette profiles distinct") && visualSmokeJs.includes("getWeaponSilhouetteProfile"));
 check("visual smoke covers resource pulse visuals", visualSmokeJs.includes("resource pulse visuals active") && visualSmokeJs.includes("spell resource pulse active"));
 check("visual smoke covers virtual controls", visualSmokeJs.includes("battle-virtual-controls-qte") && visualSmokeJs.includes("clickVirtualKey"));

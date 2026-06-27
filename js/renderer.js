@@ -3189,6 +3189,10 @@ class CanvasRenderer {
     this.drawActorDamageMarks(ctx, "player", px, py, this.getActorDamageVisuals(scene, "player"), styleColor, t);
     this.drawPlayerStatusOverlays(ctx, scene, px, py, styleColor, playerStatusVisuals, t);
     this.drawPlayerDefenseIntentOverlay(ctx, scene, px, py, this.getPlayerDefenseIntentVisuals(scene, playerStatusVisuals), t);
+    this.drawActorIntentBadgeLayer(ctx, px, py, this.getActorIntentBadgeVisuals(scene, "player", playerPerformance, {
+      pose,
+      color: styleColor
+    }), t);
     this.drawActorReactionOverlay(px, py, 35, playerReaction);
 
     // 敌人
@@ -3235,6 +3239,9 @@ class CanvasRenderer {
     this.drawActorImpactReactionLayer(ctx, "enemy", ex, ey, enemyImpactVisuals, enemyConfig.color || "#e74c3c", t);
     this.drawActorDamageMarks(ctx, "enemy", ex, ey, this.getActorDamageVisuals(scene, "enemy"), enemyConfig.color || "#e74c3c", t);
     this.drawEnemyStatusOverlays(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
+    this.drawActorIntentBadgeLayer(ctx, ex, ey, this.getActorIntentBadgeVisuals(scene, "enemy", enemyPerformance, {
+      color: enemyConfig.color || "#e74c3c"
+    }), t);
     this.drawActorReactionOverlay(ex, ey, 50, enemyReaction);
 
     // 敌方攻击意图图标
@@ -4370,6 +4377,197 @@ class CanvasRenderer {
     }
     ctx.restore();
 
+    ctx.restore();
+  }
+
+  getActorIntentBadgeVisuals(scene, actor, performance = null, context = {}) {
+    if (!scene) return { active: false };
+    const isEnemy = actor === "enemy";
+    const baseColor = context.color || (isEnemy ? "#e74c3c" : "#3498db");
+    const perf = performance || this.getActorPerformance(scene, actor);
+    const active = this.getActorActiveAttack(scene, actor, "source");
+    const incoming = this.getActorActiveAttack(scene, actor, "target");
+    const pose = context.pose || null;
+    let kind = "";
+    let icon = "";
+    let label = "";
+    let phase = "";
+    let color = baseColor;
+    let secondary = "#ffffff";
+    let progress = 0;
+    let intensity = 0;
+    let side = isEnemy ? -1 : 1;
+
+    if (active) {
+      const profile = active.profile || {};
+      const spellLike = profile.type === "projectile" || profile.type === "beam" || profile.type === "pulse";
+      kind = spellLike ? "cast" : "attack";
+      icon = spellLike ? "✦" : "!";
+      label = spellLike ? "spell-release" : "weapon-release";
+      phase = active.phase || "active";
+      color = profile.color || baseColor;
+      progress = Utils.clamp(active.progress || 0, 0, 1);
+      intensity = Utils.clamp(0.52 + progress * 0.44 + (phase === "impact" ? 0.22 : 0), 0.55, 1.15);
+    } else if (isEnemy && scene.enemyAttack && scene.enemyAttackPhase && scene.enemyAttackPhase !== "none" && scene.enemyAttackPhase !== "canceled") {
+      const attack = scene.enemyAttack;
+      const telegraphType = attack.telegraph && attack.telegraph.type ? attack.telegraph.type : (attack.type || "");
+      const spellLike = ["spell", "bolt", "burst"].includes(telegraphType) || !!attack.interruptible;
+      const phasePower = scene.enemyAttackPhase === "hit" ? 1 : (scene.enemyAttackPhase === "response" ? 0.82 : 0.48);
+      const phaseMax = scene.enemyAttackPhase === "windup"
+        ? attack.windup
+        : (scene.enemyAttackPhase === "response" ? attack.responseWindow : attack.hitDuration);
+      const timer = scene.enemyAttackTimer || 0;
+      kind = spellLike ? "cast" : "attack";
+      icon = attack.icon || (spellLike ? "✦" : "!");
+      label = scene.enemyAttackPhase === "response" ? "enemy-window" : "enemy-intent";
+      phase = scene.enemyAttackPhase;
+      color = attack.color || baseColor;
+      progress = phaseMax ? Utils.clamp(timer / phaseMax, 0, 1) : 0.5;
+      intensity = Utils.clamp(0.38 + phasePower * 0.58, 0.42, 1.1);
+      side = -1;
+    } else if (!isEnemy && incoming && scene.turnState === "enemy_turn") {
+      kind = "defense";
+      icon = "◇";
+      label = "incoming-defense";
+      phase = incoming.phase || "incoming";
+      color = baseColor;
+      progress = Utils.clamp(incoming.progress || 0, 0, 1);
+      intensity = Utils.clamp(0.46 + progress * 0.32, 0.46, 0.88);
+    } else if (!isEnemy && scene.turnState === "enemy_turn" && scene.enemyAttackPhase === "response") {
+      kind = "defense";
+      icon = "◇";
+      label = "defense-window";
+      phase = "response";
+      color = baseColor;
+      progress = 0.78;
+      intensity = 0.82;
+    } else if (!isEnemy && pose && (pose.state === "casting" || pose.state === "charge")) {
+      kind = "cast";
+      icon = "✦";
+      label = "player-cast";
+      phase = pose.state;
+      color = baseColor;
+      progress = Utils.clamp(perf.actionProgress || perf.cast || 0.5, 0, 1);
+      intensity = Utils.clamp(0.42 + (perf.cast || 0.4) * 0.48, 0.42, 0.95);
+    } else if (!isEnemy && scene.turnState === "qte_running" && scene.qteRunner) {
+      kind = "qte";
+      icon = "Q";
+      label = "qte-input";
+      phase = "input";
+      color = baseColor;
+      progress = scene.qteRunner.currentNodeProgress ? scene.qteRunner.currentNodeProgress() : 0.5;
+      intensity = 0.58;
+    }
+
+    const hitPressure = Math.max(0, perf && perf.hitSquash || 0);
+    if (!kind && hitPressure > 0.12) {
+      kind = "hit";
+      icon = "×";
+      label = "hit-react";
+      phase = "reaction";
+      color = baseColor;
+      progress = Utils.clamp(hitPressure, 0, 1);
+      intensity = Utils.clamp(0.46 + hitPressure * 0.7, 0.46, 1.0);
+    }
+
+    if (!kind || intensity <= 0.05) return { active: false };
+
+    const offsetX = side * (isEnemy ? 54 : 46);
+    const offsetY = kind === "defense" ? -42 : (kind === "hit" ? -60 : -70);
+    return {
+      active: true,
+      actor,
+      kind,
+      icon,
+      label,
+      phase,
+      color,
+      secondary,
+      intensity: Utils.clamp(intensity, 0, 1.2),
+      progress: Utils.clamp(progress, 0, 1),
+      x: offsetX,
+      y: offsetY,
+      radius: kind === "qte" ? 15 : (kind === "hit" ? 13 : 17),
+      side
+    };
+  }
+
+  drawActorIntentBadgeLayer(ctx, x, y, visuals, t) {
+    if (!visuals || !visuals.active) return;
+    const color = visuals.color || "#f1c40f";
+    const intensity = Utils.clamp(visuals.intensity || 0.5, 0, 1.2);
+    const progress = Utils.clamp(visuals.progress || 0, 0, 1);
+    const pulse = 0.5 + Math.sin(t * 8 + progress * Math.PI) * 0.5;
+    const bx = x + (visuals.x || 0);
+    const by = y + (visuals.y || -64);
+    const radius = visuals.radius || 16;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.translate(bx, by);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 + intensity * 12;
+
+    ctx.fillStyle = this.hexToRgba("#071018", 0.55 + intensity * 0.12);
+    ctx.strokeStyle = this.hexToRgba(color, 0.42 + intensity * 0.32);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + intensity * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    const start = -Math.PI * 0.5;
+    const end = start + Math.PI * 2 * progress;
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.62 + intensity * 0.18);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 4, start, end);
+    ctx.stroke();
+
+    if (visuals.kind === "attack" || visuals.kind === "cast") {
+      ctx.strokeStyle = this.hexToRgba(color, 0.32 + intensity * 0.24);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const a = -0.7 + i * 0.7 + pulse * 0.15;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * (radius + 7), Math.sin(a) * (radius + 7));
+        ctx.lineTo(Math.cos(a) * (radius + 15 + intensity * 4), Math.sin(a) * (radius + 15 + intensity * 4));
+        ctx.stroke();
+      }
+    } else if (visuals.kind === "defense") {
+      ctx.strokeStyle = this.hexToRgba(color, 0.46 + intensity * 0.22);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -radius - 5);
+      ctx.lineTo(radius + 6, 0);
+      ctx.lineTo(0, radius + 5);
+      ctx.lineTo(-radius - 6, 0);
+      ctx.closePath();
+      ctx.stroke();
+    } else if (visuals.kind === "hit") {
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.70);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-radius * 0.6, -radius * 0.6);
+      ctx.lineTo(radius * 0.6, radius * 0.6);
+      ctx.moveTo(radius * 0.6, -radius * 0.6);
+      ctx.lineTo(-radius * 0.6, radius * 0.6);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = visuals.kind === "hit" ? "#ffffff" : this.hexToRgba("#ffffff", 0.92);
+    ctx.font = visuals.kind === "qte" ? "bold 12px sans-serif" : "bold 16px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(visuals.icon || "!", 0, 1);
+
+    ctx.globalAlpha = 0.20 + intensity * 0.16;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-visuals.side * 8, radius + 5);
+    ctx.lineTo(-visuals.side * 22, radius + 18);
+    ctx.stroke();
     ctx.restore();
   }
 
