@@ -869,6 +869,48 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
+    await pressKey(cdp, "8");
+    await wait(240);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.setTurnState("enemy_turn");
+      battle.activeAttackSystem.clear();
+      battle.startEnemyAttackChain("spellDoubleCut");
+      for (const attack of battle.activeAttackSystem.active) {
+        attack.elapsed = 1.10;
+        battle.activeAttackSystem.updateAttackState(attack);
+        attack.paused = true;
+      }
+      const current = battle.activeAttackSystem.active.find(attack => attack.intent.chainIndex === 0);
+      if (current) {
+        battle.enemyAttack = current.intent.attack;
+        battle.enemyAttackTimer = current.elapsed;
+      }
+      battle.enemyAttackPhase = "response";
+      battle.turnBanner = null;
+      battle.flashMessage = null;
+      battle.messageTimer = 0;
+    })()`);
+    await wait(260);
+    await captureScenario(cdp, "battle-enemy-chain-intent", [
+      { label: "enemy chain active", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.enemyAttackChain && battle.enemyAttackChain.id === "spellDoubleCut"`) },
+      { label: "enemy chain commits staged attacks", ok: await evaluate(cdp, `battle.activeAttackSystem.active.filter(a => a.source === "enemy" && a.intent.chainId === "spellDoubleCut").length === 3`) },
+      { label: "enemy chain intent visuals active", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        if (!r || typeof battle === "undefined" || !r.getEnemyChainIntentVisuals) return false;
+        const chain = r.getEnemyChainIntentVisuals(battle);
+        return !!(chain && chain.active && chain.chainId === "spellDoubleCut" && chain.count === 3 && chain.rows.length === 3 && chain.rows.some(row => row.hot || row.pending) && chain.rows.filter(row => !row.resolved).length >= 2 && chain.nextCount >= 1);
+      })()`) },
+      { label: "enemy chain uses mixed telegraph shapes", ok: await evaluate(cdp, `(() => {
+        const r = typeof renderer !== "undefined" ? renderer : null;
+        const chain = r && typeof battle !== "undefined" ? r.getEnemyChainIntentVisuals(battle) : null;
+        return !!(chain && chain.rows.some(row => row.shape === "line") && chain.rows.some(row => row.attackId === "quickStab"));
+      })()`) }
+    ]);
+
+    await navigate(cdp, appUrl, desktop);
+    await clickId(cdp, "btn-start");
+    await closeTutorial(cdp);
     await pressKey(cdp, "6");
     await wait(240);
     await evaluate(cdp, `(() => {

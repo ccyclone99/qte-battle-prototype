@@ -2174,6 +2174,28 @@ Acceptance criteria:
 - Static smoke protects the helper surface.
 - Visual smoke verifies a critical enemy impact reaction profile in an active-attack battle screenshot.
 
+### R41 Enemy Chain Intent Pass, Completed
+
+Goal: enemy multi-hit chains should read as a sequence of incoming attacks, not as a single current telegraph plus combat log text.
+
+Implemented direction:
+
+- `CanvasRenderer.getEnemyChainIntentVisuals()` derives a render-only chain profile from `enemyAttackChain` and staged enemy active attacks.
+- `drawEnemyChainIntentLayer()` draws a low-text stage layer behind actors:
+  - chain badge near the enemy side
+  - one pip per incoming chain node
+  - glowing current node
+  - dim resolved/canceled nodes
+  - faint route curves for pending attacks
+- The layer helps rapid enemy chains such as `spellDoubleCut` and `knifeFlurry` show remaining pressure without adding another text panel.
+- This pass is render-only and does not change enemy attack timing, response windows, active attack staging, hit confirm, damage, enemy AI, or input handling.
+
+Acceptance criteria:
+
+- Renderer exposes enemy chain intent helpers.
+- Static smoke protects the helper surface.
+- Visual smoke verifies `spellDoubleCut` produces a three-node chain intent layer with current/pending pressure and follow-up nodes.
+
 ## 22. Verification Commands
 
 ```powershell

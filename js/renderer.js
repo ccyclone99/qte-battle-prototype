@@ -2370,6 +2370,212 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  getEnemyChainIntentVisuals(scene) {
+    const chain = scene && scene.enemyAttackChain;
+    const activeSystem = scene && scene.activeAttackSystem;
+    if (!chain || !Array.isArray(chain.nodes) || chain.nodes.length <= 1 || !activeSystem || !Array.isArray(activeSystem.active)) {
+      return { active: false };
+    }
+
+    const chainId = chain.id || "";
+    const chainAttacks = activeSystem.active
+      .filter(attack => attack && !attack.completed && attack.source === "enemy" && attack.target === "player" && attack.intent && attack.intent.chainId === chainId)
+      .sort((a, b) => {
+        const ai = a.intent.chainIndex ?? 999;
+        const bi = b.intent.chainIndex ?? 999;
+        if (ai !== bi) return ai - bi;
+        return (a.profile && a.profile.impactTime || 0) - (b.profile && b.profile.impactTime || 0);
+      });
+    if (chainAttacks.length === 0) return { active: false };
+
+    const count = Math.max(chain.nodes.length, ...chainAttacks.map(attack => (attack.intent.chainCount || 0)));
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const node = chain.nodes[i] || {};
+      const attack = chainAttacks.find(item => (item.intent.chainIndex ?? -1) === i) || null;
+      const sourceAttack = attack && attack.intent ? (attack.intent.attack || {}) : {};
+      const profile = attack && attack.profile ? attack.profile : {};
+      const impactTime = Math.max(0.001, profile.impactTime || ((sourceAttack.windup || 0) + (sourceAttack.hitTime || 0.18)));
+      const reactionStart = Math.max(0, profile.reactionStart || Math.max(0, impactTime - (sourceAttack.responseDuration || 0.4)));
+      const elapsed = attack ? Math.max(0, attack.elapsed || 0) : 0;
+      const timeToImpact = impactTime - elapsed;
+      const phase = !attack ? "queued" : (attack.canceled ? "canceled" : (attack.resolved ? "resolved" : attack.phase));
+      const telegraph = this.getEnemyTelegraph(sourceAttack);
+      const hot = phase === "reaction" || phase === "impact";
+      const pending = !!attack && !attack.resolved && !attack.canceled && elapsed < impactTime;
+      rows.push({
+        index: i,
+        nodeId: node.id || (sourceAttack.chainNodeId || `${i + 1}`),
+        attackId: sourceAttack.id || node.attackId || "",
+        phase,
+        hot,
+        pending,
+        resolved: phase === "resolved" || phase === "canceled",
+        progress: Utils.clamp(elapsed / impactTime, 0, 1),
+        responseProgress: Utils.clamp((elapsed - reactionStart) / Math.max(0.001, impactTime - reactionStart), 0, 1),
+        timeToImpact,
+        color: sourceAttack.color || (attack && attack.profile && attack.profile.color) || "#e74c3c",
+        shape: telegraph.shape || "line",
+        pose: telegraph.pose || "lunge",
+        width: telegraph.width || 30
+      });
+    }
+
+    const current = rows.find(row => row.hot)
+      || rows.find(row => row.pending)
+      || rows.find(row => !row.resolved)
+      || rows[rows.length - 1];
+    const nextRows = rows.filter(row => !row.resolved && row.index >= (current ? current.index : 0));
+    const primaryColor = current && current.color ? current.color : (chainAttacks[0].profile && chainAttacks[0].profile.color) || "#e74c3c";
+
+    return {
+      active: true,
+      chainId,
+      name: chain.name || chainId,
+      icon: chain.icon || "連",
+      count,
+      currentIndex: current ? current.index : 0,
+      color: primaryColor,
+      rows,
+      nextCount: nextRows.length,
+      progress: current ? current.progress : 0
+    };
+  }
+
+  drawEnemyChainIntentLayer(ctx, visuals, t) {
+    if (!visuals || !visuals.active || !Array.isArray(visuals.rows) || visuals.rows.length <= 1) return;
+
+    const enemyX = this.width - 220;
+    const enemyY = this.height - 190;
+    const playerX = 220;
+    const playerY = this.height - 190;
+    const railX = this.width - 122;
+    const centerY = enemyY - 82;
+    const spacing = visuals.rows.length <= 2 ? 36 : 30;
+    const startY = centerY - (visuals.rows.length - 1) * spacing / 2;
+    const primary = visuals.color || "#e74c3c";
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    ctx.strokeStyle = this.hexToRgba(primary, 0.16);
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 9]);
+    ctx.beginPath();
+    for (let i = 0; i < visuals.rows.length; i++) {
+      const y = startY + i * spacing;
+      if (i === 0) ctx.moveTo(railX, y);
+      else ctx.lineTo(railX, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    for (const row of visuals.rows) {
+      const y = startY + row.index * spacing;
+      const hot = row.index === visuals.currentIndex || row.hot;
+      const resolved = row.resolved;
+      const pending = row.pending && !resolved;
+      const color = row.color || primary;
+      const pulse = hot ? (0.82 + Math.sin(t * 10 + row.index) * 0.18) : 0.68;
+      const alpha = resolved ? 0.18 : (hot ? 0.70 * pulse : (pending ? 0.34 : 0.22));
+      const radius = hot ? 12 : 8;
+      const pipX = railX + (hot ? Math.sin(t * 8) * 2 : 0);
+
+      if (!resolved) {
+        const routeAlpha = hot ? 0.18 : 0.08;
+        ctx.save();
+        ctx.globalAlpha = routeAlpha;
+        ctx.strokeStyle = this.hexToRgba(color, 0.92);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = hot ? 18 : 8;
+        ctx.lineWidth = hot ? 7 : 4;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        const midX = enemyX - 132 - row.index * 16;
+        const midY = enemyY - 112 + row.index * 16;
+        ctx.moveTo(enemyX - 42, enemyY - 38 + (row.index - 1) * 6);
+        ctx.quadraticCurveTo(midX, midY, playerX + 42, playerY - 12 + (row.index - 1) * 8);
+        ctx.stroke();
+        if (hot) {
+          const head = Utils.clamp(row.progress || 0, 0, 1);
+          const hx = enemyX - 42 + (playerX + 42 - (enemyX - 42)) * head;
+          const hy = enemyY - 38 + (playerY - 12 - (enemyY - 38)) * head - Math.sin(head * Math.PI) * (52 - row.index * 5);
+          ctx.globalAlpha = 0.48;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(hx, hy, 5 + pulse * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.translate(pipX, y);
+      ctx.globalAlpha = alpha;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = hot ? 18 : 8;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = this.hexToRgba(color, hot ? 0.22 : 0.10);
+      ctx.lineWidth = hot ? 3 : 2;
+      ctx.beginPath();
+      if (row.shape === "circle") {
+        ctx.arc(0, 0, radius + (hot ? Math.sin(t * 8) * 2 : 0), 0, Math.PI * 2);
+      } else if (row.shape === "cone") {
+        ctx.moveTo(-radius, -radius * 0.72);
+        ctx.lineTo(radius * 1.18, 0);
+        ctx.lineTo(-radius, radius * 0.72);
+        ctx.closePath();
+      } else if (row.shape === "arc") {
+        ctx.arc(0, 0, radius + 2, Math.PI * 0.22, Math.PI * 1.58);
+      } else {
+        ctx.moveTo(-radius, 0);
+        ctx.lineTo(radius, 0);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      if (hot) {
+        ctx.globalAlpha = Math.min(0.82, alpha + 0.18);
+        ctx.strokeStyle = this.hexToRgba("#ffffff", 0.78);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius + 8 + Math.sin(t * 7) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (resolved) {
+        ctx.globalAlpha = 0.28;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-radius, -radius);
+        ctx.lineTo(radius, radius);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    const badgeY = startY - 30;
+    ctx.save();
+    ctx.translate(railX, badgeY);
+    ctx.globalAlpha = 0.34 + Math.sin(t * 5) * 0.06;
+    ctx.strokeStyle = this.hexToRgba(primary, 0.72);
+    ctx.fillStyle = this.hexToRgba(primary, 0.10);
+    ctx.shadowColor = primary;
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(-18, -14, 36, 28, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = primary;
+    ctx.font = "bold 15px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(visuals.icon || "連", 0, 0);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
   drawEnemyGlyph(ctx, x, y, radius, color, t) {
     ctx.save();
     ctx.translate(x, y);
@@ -2557,6 +2763,7 @@ class CanvasRenderer {
 
     this.drawBattleStage(scene, t);
     this.drawCombatPhaseLighting(ctx, this.getCombatPhaseLighting(scene), t);
+    this.drawEnemyChainIntentLayer(ctx, this.getEnemyChainIntentVisuals(scene), t);
 
     // 玩家
     const basePx = 220;
