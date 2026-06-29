@@ -73,6 +73,7 @@ class CanvasRenderer {
   }
 
   render(scene) {
+    this.currentScene = scene;
     const ctx = this.ctx;
     const now = performance.now();
     const t = now / 1000;
@@ -689,6 +690,9 @@ class CanvasRenderer {
   }
 
   resolveCinematicAnchor(anchor) {
+    if (this.currentScene && this.currentScene.resolveBattleAnchor) {
+      return this.currentScene.resolveBattleAnchor(anchor);
+    }
     const anchors = {
       playerCore: { x: 220, y: 360 },
       playerHand: { x: 270, y: 320 },
@@ -2055,6 +2059,9 @@ class CanvasRenderer {
   }
 
   getBattleAnchor(anchor) {
+    if (this.currentScene && this.currentScene.resolveBattleAnchor) {
+      return this.currentScene.resolveBattleAnchor(anchor);
+    }
     const py = this.height - 190;
     const ey = this.height - 190;
     const anchors = {
@@ -3466,6 +3473,7 @@ class CanvasRenderer {
     // 玩家
     const basePx = 220;
     const basePy = this.height - 190;
+    const playerStage = scene && scene.getActorMeleeOffset ? scene.getActorMeleeOffset("player") : { x: 0, y: 0 };
     const weaponId = scene.playerConfig ? scene.playerConfig.weapon : null;
     const weapon = weaponId ? WeaponDatabase[weaponId] : null;
     const playerReaction = this.getActorReaction(scene, "player");
@@ -3480,8 +3488,8 @@ class CanvasRenderer {
 
     // 待机呼吸
     let bob = Math.sin(t * 2) * 2;
-    let px = basePx + playerReaction.offsetX;
-    let py = basePy + bob + playerReaction.offsetY + playerPerformance.offsetY;
+    let px = basePx + (playerStage.x || 0) + playerReaction.offsetX;
+    let py = basePy + (playerStage.y || 0) + bob + playerReaction.offsetY + playerPerformance.offsetY;
 
     // 架势位移
     const pState = pose.state;
@@ -3500,10 +3508,10 @@ class CanvasRenderer {
     stanceOffset += playerPerformance.offsetX;
     px += stanceOffset;
 
-    this.drawActorShadow(ctx, basePx + stanceOffset + playerReaction.offsetX * 0.35, basePy + 45, 42 * playerPerformance.shadowScale * playerRig.shadowScale, "rgba(52, 152, 219, 0.3)");
-    this.drawActorGroundSigil(ctx, basePx + stanceOffset, basePy + 45, 50, styleColor, "player", t);
+    this.drawActorShadow(ctx, basePx + (playerStage.x || 0) + stanceOffset + playerReaction.offsetX * 0.35, basePy + (playerStage.y || 0) + 45, 42 * playerPerformance.shadowScale * playerRig.shadowScale, "rgba(52, 152, 219, 0.3)");
+    this.drawActorGroundSigil(ctx, basePx + (playerStage.x || 0) + stanceOffset, basePy + (playerStage.y || 0) + 45, 50, styleColor, "player", t);
     const playerStatusVisuals = this.getActorStatusVisuals(scene, "player");
-    this.drawActorFootworkLayer(ctx, this.getActorFootworkVisuals("player", px, basePy + 45, styleColor, playerPerformance, playerRig, {
+    this.drawActorFootworkLayer(ctx, this.getActorFootworkVisuals("player", px, basePy + (playerStage.y || 0) + 45, styleColor, playerPerformance, playerRig, {
       reaction: playerReaction,
       state: pState,
       motion,
@@ -3541,12 +3549,13 @@ class CanvasRenderer {
     // 敌人
     const baseEx = this.width - 220;
     const baseEy = this.height - 190;
+    const enemyStage = scene && scene.getActorMeleeOffset ? scene.getActorMeleeOffset("enemy") : { x: 0, y: 0 };
     const eBob = Math.sin(t * 2 + 1) * 2;
     const enemyReaction = this.getActorReaction(scene, "enemy");
     const enemyPerformance = this.getActorPerformance(scene, "enemy", enemyReaction, null);
     const enemyImpactVisuals = this.getActorImpactReactionVisuals(scene, "enemy", enemyReaction, enemyPerformance);
-    let ex = baseEx + enemyReaction.offsetX;
-    let ey = baseEy + eBob + enemyReaction.offsetY + enemyPerformance.offsetY;
+    let ex = baseEx + (enemyStage.x || 0) + enemyReaction.offsetX;
+    let ey = baseEy + (enemyStage.y || 0) + eBob + enemyReaction.offsetY + enemyPerformance.offsetY;
 
     // 敌方蓄力前冲
     let enemyForward = 0;
@@ -3558,10 +3567,10 @@ class CanvasRenderer {
     const enemyConfig = scene.enemyConfig || EnemyDatabase.base;
     const enemyRig = this.getEnemyRigProfile(this.getEnemyModelProfile(enemyConfig));
     const enemyStatusVisuals = this.getActorStatusVisuals(scene, "enemy");
-    this.drawActorShadow(ctx, baseEx + enemyForward + enemyReaction.offsetX * 0.25, baseEy + 55, 58 * enemyPerformance.shadowScale * enemyRig.shadowScale, "rgba(192, 57, 43, 0.3)");
-    this.drawActorGroundSigil(ctx, baseEx + enemyForward, baseEy + 55, 62, enemyConfig.color || "#e74c3c", "enemy", t);
+    this.drawActorShadow(ctx, baseEx + (enemyStage.x || 0) + enemyForward + enemyReaction.offsetX * 0.25, baseEy + (enemyStage.y || 0) + 55, 58 * enemyPerformance.shadowScale * enemyRig.shadowScale, "rgba(192, 57, 43, 0.3)");
+    this.drawActorGroundSigil(ctx, baseEx + (enemyStage.x || 0) + enemyForward, baseEy + (enemyStage.y || 0) + 55, 62, enemyConfig.color || "#e74c3c", "enemy", t);
     this.drawEnemyStatusAuras(ctx, scene, ex, ey, enemyConfig.color || "#e74c3c", enemyStatusVisuals, t);
-    this.drawActorFootworkLayer(ctx, this.getActorFootworkVisuals("enemy", ex, baseEy + 55, enemyConfig.color || "#e74c3c", enemyPerformance, enemyRig, {
+    this.drawActorFootworkLayer(ctx, this.getActorFootworkVisuals("enemy", ex, baseEy + (enemyStage.y || 0) + 55, enemyConfig.color || "#e74c3c", enemyPerformance, enemyRig, {
       reaction: enemyReaction,
       enemyPose: enemyPerformance.enemyPose,
       poseIntensity: enemyPerformance.poseIntensity,
@@ -7863,20 +7872,20 @@ class CanvasRenderer {
     if (!data) return;
 
     const ctx = this.ctx;
-    const panelW = 650;
-    const panelH = 92;
+    const panelW = 540;
+    const panelH = 70;
     const x = (this.width - panelW) / 2;
-    const y = this.layout.qteBarY - 18;
+    const y = this.layout.qteBarY + 2;
     const color = data.color;
     const metrics = data.metrics;
     const inResponse = metrics.inResponse;
 
     ctx.save();
-    ctx.fillStyle = "rgba(7, 9, 15, 0.72)";
-    ctx.strokeStyle = this.hexToRgba(inResponse ? "#2ecc71" : color, inResponse ? 0.68 : 0.32);
-    ctx.lineWidth = 1.5;
+    ctx.fillStyle = "rgba(7, 9, 15, 0.50)";
+    ctx.strokeStyle = this.hexToRgba(inResponse ? "#2ecc71" : color, inResponse ? 0.42 : 0.22);
+    ctx.lineWidth = 1.2;
     ctx.shadowColor = inResponse ? "#2ecc71" : color;
-    ctx.shadowBlur = inResponse ? 14 : 4;
+    ctx.shadowBlur = inResponse ? 8 : 0;
     ctx.beginPath();
     ctx.roundRect(x, y, panelW, panelH, 8);
     ctx.fill();
@@ -7886,24 +7895,24 @@ class CanvasRenderer {
     const attackName = String(data.attack.name || "敌方攻击").replace(/^\d+\/\d+\s*/, "");
     const title = `${data.chainName} · 第 ${data.nodeIndex + 1}/${data.nodeCount} 段`;
     const state = inResponse ? "现在" : "预兆";
-    this.drawTimingChip(ctx, x + 18, y + 18, state, inResponse ? "#2ecc71" : color, 56);
-    this.drawTimingChip(ctx, x + panelW - 112, y + 18, `距命中 ${metrics.timeToHit.toFixed(1)}s`, "#cfd0df", 96);
+    this.drawTimingChip(ctx, x + 14, y + 13, state, inResponse ? "#2ecc71" : color, 54);
+    this.drawTimingChip(ctx, x + panelW - 106, y + 13, `距命中 ${metrics.timeToHit.toFixed(1)}s`, "#cfd0df", 92);
 
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "bold 15px sans-serif";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(this.truncateText(ctx, `${title} · ${attackName}`, panelW - 220), x + panelW / 2, y + 24);
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    ctx.fillText(this.truncateText(ctx, `${title} · ${attackName}`, panelW - 210), x + panelW / 2, y + 19);
 
     const rows = data.chain && data.chain.active && Array.isArray(data.chain.rows)
       ? data.chain.rows
       : Array.from({ length: data.nodeCount }, (_, index) => ({ index, color, resolved: index < data.nodeIndex, hot: index === data.nodeIndex }));
-    const pipY = y + 50;
-    const pipStart = x + 54;
-    const pipEnd = x + panelW - 54;
+    const pipY = y + 39;
+    const pipStart = x + 48;
+    const pipEnd = x + panelW - 48;
     const span = Math.max(1, rows.length - 1);
     ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.10)";
     ctx.beginPath();
     ctx.moveTo(pipStart, pipY);
     ctx.lineTo(pipEnd, pipY);
@@ -7914,45 +7923,31 @@ class CanvasRenderer {
       const current = (row.index || 0) === data.nodeIndex;
       const resolved = row.resolved && !current;
       const pipColor = current ? (inResponse ? "#2ecc71" : color) : (resolved ? "#7f8c8d" : "#48515f");
-      const radius = current ? 10 : 7;
+      const radius = current ? 8 : 5;
 
       ctx.save();
       ctx.translate(px, pipY);
       ctx.fillStyle = this.hexToRgba(pipColor, current ? 0.35 : 0.20);
       ctx.strokeStyle = pipColor;
       ctx.shadowColor = pipColor;
-      ctx.shadowBlur = current ? 12 : 0;
+      ctx.shadowBlur = current ? 8 : 0;
       ctx.beginPath();
       ctx.arc(0, 0, radius + (current ? Math.sin(t * 8) * 1.5 : 0), 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 10px sans-serif";
+      ctx.font = "bold 9px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(String((row.index || 0) + 1), 0, 0);
       ctx.restore();
     }
 
-    const barX = x + 34;
-    const barY = y + 68;
-    const barW = panelW - 68;
-    const barH = 8;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
-    ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = "rgba(46, 204, 113, 0.25)";
-    const responseX = barX + barW * metrics.responseStartRatio;
-    ctx.fillRect(responseX, barY, barX + barW - responseX, barH);
-    ctx.fillStyle = this.hexToRgba(color, 0.88);
-    ctx.fillRect(barX, barY, barW * metrics.progress, barH);
-    ctx.fillStyle = "#e74c3c";
-    ctx.fillRect(barX + barW - 2, barY - 3, 4, barH + 6);
-
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.font = "bold 12px sans-serif";
-    ctx.fillStyle = inResponse ? "#2ecc71" : "#cfd0df";
-    ctx.fillText(this.truncateText(ctx, `${data.primaryAction} · ${data.hint}`, panelW - 80), x + panelW / 2, y + 78);
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillStyle = inResponse ? "rgba(46, 204, 113, 0.92)" : "rgba(207, 208, 223, 0.78)";
+    ctx.fillText(this.truncateText(ctx, `${data.primaryAction} · ${data.hint}`, panelW - 58), x + panelW / 2, y + 54);
     ctx.restore();
   }
 

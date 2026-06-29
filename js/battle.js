@@ -575,6 +575,9 @@ class BattleSystem {
       color: attack.color || "#e74c3c",
       fromAnchor: "enemyCore",
       toAnchor: "playerCore",
+      timelineOffset: offset,
+      meleeTimeline: attack.meleeTimeline || null,
+      meleeStart: Number.isFinite(attack.meleeStart) ? attack.meleeStart : null,
       timeline: {
         startup: offset + attack.windup,
         travel: Math.max(0.001, attack.hitTime),
@@ -592,7 +595,10 @@ class BattleSystem {
   }
 
   getEnemyActiveAttackTiming(attack, offset = 0) {
-    const impactTime = offset + (attack ? attack.windup : 0) + (attack ? attack.hitTime : 0);
+    const melee = attack && !this.isIncomingSpellAttack(attack) ? attack.meleeTimeline : null;
+    const impactTime = melee && Number.isFinite(melee.contactFrame)
+      ? offset + melee.contactFrame
+      : offset + (attack ? attack.windup : 0) + (attack ? attack.hitTime : 0);
     const readableCap = this.getEnemyCounterActiveDuration(attack);
     const responseDuration = Math.min(attack && attack.responseDuration ? attack.responseDuration : Difficulty.responseDuration(), readableCap);
     const responseStart = Math.max(0, impactTime - responseDuration);
@@ -610,6 +616,10 @@ class BattleSystem {
   }
 
   getEnemyCounterActiveDuration(attack = {}) {
+    const melee = attack && !this.isIncomingSpellAttack(attack) ? attack.meleeTimeline : null;
+    if (melee && Number.isFinite(melee.activeStart) && Number.isFinite(melee.activeEnd)) {
+      return Utils.clamp((melee.activeEnd - melee.activeStart) * this.getCounterDifficultyScale(), 0.16, 0.34);
+    }
     const counter = this.getAttackCounterProfile(attack);
     const telegraph = attack.telegraph || {};
     let base = 0.25;
@@ -1237,6 +1247,44 @@ class BattleSystem {
     };
   }
 
+  buildCounterMeleeTimeline(incoming, timeline, outcome = {}, options = {}) {
+    const contactFrame = Math.max(0.08, timeline.impactTime || 0.16);
+    const activeStart = Math.max(0.02, timeline.activeStart ?? timeline.reactionStart ?? (timeline.startup || 0.05));
+    const activeEnd = Math.max(activeStart + 0.06, activeStart + (timeline.activeDuration || 0.12));
+    const total = Math.max(contactFrame + 0.20, contactFrame + (timeline.recovery || 0.24));
+    const accepted = outcome.accepted !== false && options.whiff !== true;
+    const interrupt = options.kind === "interrupt";
+    const heavy = this.playerConfig.weapon === "greatsword";
+    const advance = options.advance || (accepted ? (interrupt ? 146 : (heavy ? 128 : 118)) : 76);
+    const settle = accepted ? Math.max(42, advance * 0.42) : Math.max(32, advance * 0.56);
+    const sweepKind = interrupt ? "interrupt-slash" : (options.whiff ? "whiff" : "counter-clash");
+    return {
+      total,
+      contactFrame,
+      activeStart,
+      activeEnd,
+      sweep: {
+        kind: sweepKind,
+        width: heavy ? 66 : 46,
+        reach: heavy ? 116 : 94,
+        yOffset: heavy ? -8 : -14
+      },
+      rootMotion: {
+        source: [
+          { at: 0.00, x: 0 },
+          { at: Math.max(0.02, activeStart * 0.72), x: advance * 0.55 },
+          { at: contactFrame, x: advance },
+          { at: total, x: settle }
+        ],
+        target: [
+          { at: 0.00, x: 0 },
+          { at: contactFrame, x: accepted ? 10 : 0 },
+          { at: total, x: 0 }
+        ]
+      }
+    };
+  }
+
   findActiveAttackById(id) {
     if (!id || !this.activeAttackSystem || !Array.isArray(this.activeAttackSystem.active)) return null;
     return this.activeAttackSystem.active.find(attack => attack && attack.id === id) || null;
@@ -1290,6 +1338,7 @@ class BattleSystem {
     const label = `clash:${chainKey}:${sourceAttack.chainNodeId || sourceAttack.id || incoming.id}`;
     const token = `${label}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`;
     const timeline = this.getCounterAttackTimeline(incoming, weaponProfile, outcome);
+    const meleeTimeline = this.buildCounterMeleeTimeline(incoming, timeline, outcome);
 
     SFX.sfxCounter();
     this.triggerActorReaction("player", "attack", outcome.perfect ? 1.12 : 0.96, {
@@ -1316,6 +1365,7 @@ class BattleSystem {
       weapon: this.playerConfig.weapon,
       color: weapon.color || "#2ecc71",
       timeline,
+      meleeTimeline,
       counterNodeTargetId: incoming.id,
       counterNode: {
         chainId: incoming.intent.chainId || null,
@@ -1384,6 +1434,7 @@ class BattleSystem {
     const label = `interrupt:${chainKey}:${interruptTargets.map(attack => attack.intent.attackId || attack.id).join("+")}`;
     const token = `${label}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`;
     const timeline = this.getCounterAttackTimeline(incoming, weaponProfile, outcome);
+    const meleeTimeline = this.buildCounterMeleeTimeline(incoming, timeline, outcome, { kind: "interrupt" });
 
     SFX.sfxCounter();
     this.triggerActorReaction("player", "attack", 1.12, {
@@ -1410,6 +1461,7 @@ class BattleSystem {
       weapon: this.playerConfig.weapon,
       color: weapon.color || "#2ecc71",
       timeline,
+      meleeTimeline,
       interruptTargetIds: interruptTargets.map(attack => attack.id),
       interruptContext: followupContext,
       onComplete: attack => this.finishSpellInterruptAttack(attack),
@@ -1469,6 +1521,13 @@ class BattleSystem {
         reactionDuration: 0.05,
         recovery: weaponProfile.recovery || 0.24
       },
+      meleeTimeline: this.buildCounterMeleeTimeline(incoming, {
+        startup: 0.04,
+        impactTime: 0.09,
+        activeStart: 0.04,
+        activeDuration: 0.05,
+        recovery: weaponProfile.recovery || 0.24
+      }, { accepted: false }, { whiff: true }),
       onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
     });
     this.setMessage(`${sourceAttack ? sourceAttack.name : "此段"}不能拼刀 · ${attackCounter.hint || "换防御"}`);
@@ -1491,6 +1550,16 @@ class BattleSystem {
     const startup = Math.max(0.02, weaponProfile.startup || 0.1);
     const activeDuration = Math.max(0.06, weaponProfile.activeDuration || 0.12);
     const recovery = Math.max(0.18, weaponProfile.recovery || 0.24);
+    const whiffTimeline = {
+      startup,
+      travel: activeDuration * 0.45,
+      impactTime: startup + activeDuration * 0.45,
+      activeStart: startup,
+      activeDuration,
+      reactionStart: startup,
+      reactionDuration: activeDuration,
+      recovery
+    };
     this.activeAttackSystem.commit({
       kind: "defenseCounter",
       source: "player",
@@ -1508,16 +1577,8 @@ class BattleSystem {
       chainFamily: "counter",
       weapon: this.playerConfig.weapon,
       color: weapon.color || "#95a5a6",
-      timeline: {
-        startup,
-        travel: activeDuration * 0.45,
-        impactTime: startup + activeDuration * 0.45,
-        activeStart: startup,
-        activeDuration,
-        reactionStart: startup,
-        reactionDuration: activeDuration,
-        recovery
-      },
+      timeline: whiffTimeline,
+      meleeTimeline: this.buildCounterMeleeTimeline(incoming, whiffTimeline, { accepted: false }, { whiff: true }),
       whiffContext: {
         reason: "early",
         targetAttackId: incoming ? incoming.id : null,
@@ -1567,6 +1628,13 @@ class BattleSystem {
         reactionDuration: 0.05,
         recovery: weaponProfile.recovery || 0.24
       },
+      meleeTimeline: this.buildCounterMeleeTimeline(incoming, {
+        startup: 0.05,
+        impactTime: 0.10,
+        activeStart: 0.05,
+        activeDuration: 0.05,
+        recovery: weaponProfile.recovery || 0.24
+      }, { accepted: false }, { whiff: true, advance: 48 }),
       onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
     });
     this.setMessage(`出刀过慢 · ${sourceAttack ? sourceAttack.name : "敌方攻击"}压到身前`);
@@ -2843,6 +2911,7 @@ class BattleSystem {
   startEnemyTurn() {
     this.tickStatuses("enemy");
     if (this.checkEnemyDefeated()) return;
+    if (this.activeAttackSystem) this.activeAttackSystem.clear();
 
     // 眩晕跳过敌方回合
     if (this.enemyStunTimer > 0) {
@@ -2957,6 +3026,8 @@ class BattleSystem {
     attack.counterNode = node.counterNode || "";
     attack.opensFollowupOnSuccess = !!node.opensFollowupOnSuccess;
     attack.offset = Math.max(0, node.offset || 0);
+    if (Number.isFinite(node.meleeStart)) attack.meleeStart = node.meleeStart;
+    if (node.meleeTimeline) attack.meleeTimeline = node.meleeTimeline;
     attack.name = `${attack.chainIndex + 1}/${attack.chainCount} ${attack.name}`;
     this.decorateEnemyAttackResponse(attack);
     return attack;
@@ -3581,6 +3652,31 @@ class BattleSystem {
     if (this.actorReactions) {
       this.actorReactions.trigger(target, type, intensity, options);
     }
+  }
+
+  getActorMeleeOffset(actor) {
+    if (!this.activeAttackSystem || !this.activeAttackSystem.getActorMeleeOffset) {
+      return { x: 0, y: 0, intensity: 0 };
+    }
+    return this.activeAttackSystem.getActorMeleeOffset(actor);
+  }
+
+  resolveBattleAnchor(anchor) {
+    const player = this.getActorMeleeOffset("player");
+    const enemy = this.getActorMeleeOffset("enemy");
+    const anchors = {
+      playerCore: { x: 220 + player.x, y: 360 + player.y },
+      playerHand: { x: 270 + player.x, y: 320 + player.y },
+      playerShield: { x: 220 + player.x, y: 380 + player.y },
+      enemyCore: { x: 740 + enemy.x, y: 380 + enemy.y },
+      enemyChest: { x: 740 + enemy.x, y: 350 + enemy.y },
+      midpoint: { x: 480 + (player.x + enemy.x) * 0.5, y: 370 + (player.y + enemy.y) * 0.5 },
+      player: { x: 220 + player.x, y: 360 + player.y },
+      enemy: { x: 740 + enemy.x, y: 380 + enemy.y },
+      qteBar: { x: 480, y: 456 },
+      hudEnergy: { x: 220, y: 120 }
+    };
+    return anchors[anchor] || anchors.midpoint;
   }
 
   shakeScreen(amount) {

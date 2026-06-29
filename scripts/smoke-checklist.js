@@ -100,6 +100,21 @@ check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.a
 check("counter dojo rotates varied pressure chains", ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"].every(id => EncounterDatabase.encounters.counter_dojo.attackPattern.includes(id)));
 check("enemy attacks declare telegraphs", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.telegraph && attack.telegraph.type && attack.telegraph.shape && attack.telegraph.pose && attack.telegraph.width));
 check("enemy attacks declare counter tags", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.counter && attack.counter.type && attack.counter.hint));
+const meleeAttackIds = ["quickStab", "thrust", "slash", "heavySmash", "shieldBash"];
+check("enemy melee attacks define contact timelines", meleeAttackIds.every(id => EnemyDatabase.attacks[id] && EnemyDatabase.attacks[id].meleeTimeline && EnemyDatabase.attacks[id].meleeTimeline.contactFrame > 0));
+check("enemy melee timelines define active windows and root motion", meleeAttackIds.every(id => {
+  const timeline = EnemyDatabase.attacks[id] && EnemyDatabase.attacks[id].meleeTimeline;
+  return timeline
+    && timeline.activeStart < timeline.contactFrame
+    && timeline.contactFrame < timeline.activeEnd
+    && timeline.rootMotion
+    && Array.isArray(timeline.rootMotion.source)
+    && timeline.rootMotion.source.length >= 3;
+}));
+check("close melee chains carry staging offsets", ["bladeRushTriple", "knifeFlurry", "spellDoubleCut"].every(id => {
+  const chain = EnemyDatabase.attackChains && EnemyDatabase.attackChains[id];
+  return chain && chain.nodes.some(node => Number.isFinite(node.meleeStart) || EnemyDatabase.attacks[node.attackId]?.meleeTimeline);
+}));
 
 for (const id of ["caster", "armored", "swift", "shielded"]) {
   check(`enemy archetype exists: ${id}`, !!(EnemyDatabase.archetypes && EnemyDatabase.archetypes[id]));
@@ -229,8 +244,11 @@ check("battle resolves counters by active-frame overlap", battleJs.includes("pla
 check("battle punishes early counter whiffs", battleJs.includes("triggerEarlyCounterAttempt") && battleJs.includes("counterEarlyWhiff") && battleJs.includes('defenseMode = "failedCounter"') && flowSmokeJs.includes("early counter whiff is punished by hit"));
 check("battle suppresses small counter node damage noise", battleJs.includes("suppressFloatingText: true") && battleJs.includes("suppressLog: true") && battleJs.includes("resolveCounterNodeImpact") && battleJs.includes("resolveSpellInterruptImpact"));
 check("active attack profiles expose active frames", activeAttacksJs.includes("activeStart") && activeAttacksJs.includes("activeDuration") && activeAttacksJs.includes("activeEnd"));
+check("active attack system samples melee root motion", activeAttacksJs.includes("getActorMeleeOffset") && activeAttacksJs.includes("getMeleeOffsetForAttack") && activeAttacksJs.includes("resolveMeleeTimeline") && activeAttacksJs.includes("cloneRootMotion"));
 check("weapon counter profiles include active and whiff tuning", weaponsJs.includes("activeDuration") && weaponsJs.includes("whiffVulnerability"));
 check("renderer draws target-anchored melee active attacks", rendererJs.includes("drawActiveAttacks") && rendererJs.includes("drawMeleeActiveAttack") && !rendererJs.includes("drawActiveAttackPrompt") && !rendererJs.includes("攻击实体推进中"));
+check("battle exposes dynamic melee anchors", battleJs.includes("getActorMeleeOffset(actor)") && battleJs.includes("resolveBattleAnchor(anchor)") && battleJs.includes("buildCounterMeleeTimeline") && battleJs.includes("activeAttackSystem.clear()"));
+check("renderer applies melee staging to actors", rendererJs.includes("playerStage") && rendererJs.includes("enemyStage") && rendererJs.includes("resolveCinematicAnchor(anchor)") && rendererJs.includes("resolveBattleAnchor(anchor)"));
 check("renderer suppresses projectile-like enemy melee lines", rendererJs.includes("meleeEnemyPressure") && rendererJs.includes("const melee = attack.profile && attack.profile.type === \"melee\"") && rendererJs.includes('meleeType === "stab"') && rendererJs.includes('meleeType === "smash"'));
 check("battle splits melee qte hits", battleJs.includes("buildQTEHitSegments") && battleJs.includes("commitSegmentedQTEActiveAttacks") && battleJs.includes("suppressFlowComplete") && battleJs.includes("suppressImpactSideEffects"));
 check("battle trims qte floating text noise", battleJs.includes('if (outcome !== "success")') && !battleJs.includes("% 连击`, 740, 300"));

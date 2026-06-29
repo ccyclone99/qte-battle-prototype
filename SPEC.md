@@ -1797,6 +1797,219 @@ Acceptance criteria:
 - Static smoke protects `visualBudget`, resource pulse scaling, afterimage scaling, motion-line scaling, and particle density.
 - `node scripts\verify.js --skip-visual` passes.
 
+### R56 - Melee Staging And Contact Timeline, Completed
+
+Goal: make enemy-turn counter combat read as actual melee contact instead of distant actors resolving a timing bar. The fight should feel slower because bodies move, weapons commit, contact happens, and recovery breathes. The bottom timing HUD remains available, but the primary cue should be animation, spacing, and the weapon contact frame.
+
+Completed in `r63`:
+
+- Enemy melee attacks now carry `meleeTimeline` data with contact frame, active window, sweep metadata, and root motion.
+- `ActiveAttackSystem` samples melee root motion and exposes actor offsets, using the dominant active melee offset per actor so overlapping chain nodes do not stack into teleporting.
+- Enemy melee impact timing now uses authored `contactFrame`; response windows remain separate from collision active frames.
+- Battle anchors, hit/impact effects, cinematic anchors, shadows, sigils, and actor rendering resolve against dynamic melee positions.
+- Enemy counter, spell interrupt, and failed early/late counter attempts now produce player-side melee timelines, so player responses also step/whiff/strike before settlement.
+- `bladeRushTriple`, `knifeFlurry`, `spellDoubleCut`, `shieldSpellRush`, `feintCrush`, and `curseNeedle` timing offsets were retuned around staged contact.
+- Counterflow HUD was reduced from a dominant read bar into a compact support panel: no wide progress bar, lower opacity, lower height, and only node/recommendation/time-to-hit hints.
+- `startEnemyTurn()` clears stale active attacks at the new-turn boundary while preserving recent attack history, preventing forced turn transitions from inheriting old attacks.
+- Static and flow smoke now protect melee timelines, root-motion hooks, dynamic anchors, contact-frame timing, and visible enemy approach.
+- R56 visual smoke captured `r56-melee-contact-range-compact-hud`: at `0.65s`, quick stab enemy offset was about `-274px`, dynamic enemy anchor was about `466px`, actor spacing was about `247px`, and `impactTime === contactFrame === 0.70`.
+
+Problem statement:
+
+- Current melee nodes have correct active-frame logic, but the two actors often stay too far apart.
+- This makes melee read like ranged QTE resolution even when projectile-like paths have been removed.
+- Slowing the fight by widening UI bars would reduce challenge but would not fix the physical staging problem.
+- The next pass must slow perceived rhythm through approach, anticipation, contact, hit-stop, and recovery.
+
+Core design principles:
+
+- Melee attacks require spatial commitment.
+  - The attacker must move into a believable contact distance before the weapon active frame.
+  - The defender response should also have a visible step, brace, dodge, guard, or counter-swing.
+- Damage and clash resolution happen at contact, not at keypress or at the end of a UI bar.
+- QTE timing should be read from body motion first:
+  - approach and footwork announce range,
+  - windup announces threat direction,
+  - weapon commit announces the response moment,
+  - contact sparks and hit-stop confirm the result.
+- The bottom HUD is secondary.
+  - It may show node count, recommendation, and rough time-to-contact.
+  - It should not be the main way to understand when melee hits.
+- Active windows can remain tight.
+  - The total node can feel slower because anticipation/recovery are longer.
+  - Early input remains punishable by visible whiff.
+
+Terminology:
+
+- `meleeTimeline`
+  - Authoritative render/gameplay timeline for a melee node.
+  - Contains approach, windup, active/contact, reaction, recovery, and optional retreat segments.
+- `rootMotion`
+  - Per-node actor displacement curve.
+  - Used to move enemy/player bodies toward or away from contact range.
+- `contactFrame`
+  - Authored moment inside the active segment where the weapon should visually meet the target, guard, or opposing weapon.
+- `weaponSweep`
+  - A swept melee hit volume between previous and current weapon points.
+  - Prevents fast slashes from missing because the weapon skipped over the hurtbox between frames.
+- `hurtbox`
+  - Body volume that can be hit.
+  - Can shift during dodge, brace, hit reaction, or root motion.
+- `defenseVolume`
+  - Guard, parry, clash, or shield volume that can intercept a weapon sweep before it reaches the body hurtbox.
+
+Proposed node timeline:
+
+```js
+{
+  approach: { start: 0.00, end: 0.28, enemyOffsetX: -110, playerOffsetX: 0 },
+  windup: { start: 0.18, end: 0.62, pose: "stab-prep", facing: "high-mid" },
+  active: { start: 0.62, end: 0.78, contactFrame: 0.70, weaponSweep: "thrust" },
+  reaction: { start: 0.78, end: 0.94, hitStop: 0.10 },
+  recovery: { start: 0.94, end: 1.22, retreatOffsetX: 35 }
+}
+```
+
+Runtime behavior:
+
+- Enemy melee active attacks should instantiate from `meleeTimeline`.
+- Actor world positions should be derived from:
+  - base position,
+  - chain/node root motion,
+  - reaction offsets,
+  - hit-stop freeze.
+- During `active`, `HitConfirmSystem` should test swept weapon volumes against:
+  - player body hurtbox,
+  - player dodge state,
+  - player guard/parry/clash volumes,
+  - player counter weapon sweep when A/S/D was committed.
+- A confirmed clash cancels only the current enemy node.
+- A confirmed hit damages the player only at collision/contact.
+- A whiff produces no damage and leaves the attacker in recovery.
+- If the player attacks too early:
+  - player weapon sweep appears before enemy contact,
+  - if it does not overlap enemy weapon/body at the correct active moment, it becomes `counterEarlyWhiff`,
+  - enemy node continues and can punish.
+
+Player response timelines:
+
+- `A/S/D` counter attack:
+  - startup: hand/weapon pulls back,
+  - step: player moves toward contact range,
+  - active: player weapon sweep can clash with enemy weapon/body,
+  - recovery: player returns to guard or is punished.
+- `SPACE` dodge:
+  - shifts player hurtbox out of the incoming sweep,
+  - success is represented by the enemy sweep missing the body hurtbox,
+  - dodge should not look like a static invulnerability icon.
+- `F` guard:
+  - raises a defense volume,
+  - weapon sweep can collide with shield/guard plane,
+  - success produces guard recoil and a short hit-stop.
+- Spell/counterspell nodes:
+  - ranged spells may keep projectile/beam travel.
+  - weapon interrupts against enemy casting should use a dash-in or close slash if the current player response is melee.
+
+First chain targets:
+
+- `bladeRushTriple`
+  - Node 1: enemy lunge jab.
+    - Enemy closes from mid range.
+    - Player A/S/D can meet the stab near player front.
+  - Node 2: close-range slash.
+    - Actors stay close after node 1 instead of resetting to far range.
+    - A second response clashes at a different weapon angle.
+  - Node 3: committed finisher.
+    - Longer anticipation, heavier contact, stronger recovery.
+    - Correct response cancels the finisher and opens `followup_turn`.
+- `knifeFlurry`
+  - Multiple short close-range swings.
+  - Dual-blade responses should have faster chained weapon sweeps.
+  - Single-sword style should feel better with attack plus guard/dodge rather than one input covering everything.
+- `spellDoubleCut`
+  - Enemy begins at casting range.
+  - If interrupted by melee response, player visibly closes and strikes the caster at the cast contact frame.
+  - If not interrupted, enemy closes into two physical cuts.
+- `feintCrush`
+  - Enemy approach starts early but active contact is delayed.
+  - Early attack should visibly whiff into the feint.
+- `curseNeedle`
+  - Remains a ranged/projectile exception.
+  - Uses travel and dodge/guard timing rather than forced melee contact.
+
+Rendering requirements:
+
+- Draw only the current melee node as the primary world cue.
+- Actor spacing must visibly close for melee:
+  - lunge/stab contact should happen near the defender front,
+  - slash contact should happen between bodies,
+  - overhead/smash contact should land at body or guard height.
+- Weapon trails should follow the actual `weaponSweep`.
+- Contact visuals should be local and short:
+  - spark at weapon/body or weapon/guard overlap,
+  - small hit-stop,
+  - recoil on both actors,
+  - no large screen-wide flash.
+- Actor root motion should not move HUD or UI.
+- Existing `visualBudget` must apply to any new contact, trail, and ornament effects.
+
+Timing direction:
+
+- Slow perceived enemy-turn rhythm by increasing visible staging, not by making the green window huge.
+- Recommended first tuning:
+  - light melee node total: `0.95s - 1.15s`,
+  - normal melee node total: `1.15s - 1.35s`,
+  - heavy/finisher node total: `1.35s - 1.65s`,
+  - active collision window: roughly `0.20s - 0.34s`,
+  - hit-stop on clash/hit: `0.08s - 0.14s`,
+  - post-contact recovery: `0.22s - 0.40s`.
+- The player should feel more time to read the attack because the enemy approaches and winds up, not because the hitbox is active forever.
+
+Implementation plan:
+
+- Step 1: Add data shape.
+  - Add melee timeline/profile fields to enemy attack definitions or active attack profiles.
+  - Include root motion, contact frame, weapon sweep kind, contact side, and retreat behavior.
+- Step 2: Add staging helpers.
+  - Compute actor offsets from active attack timeline.
+  - Keep actors close across nodes when the chain is a close melee chain.
+- Step 3: Add swept melee collision.
+  - Extend `HitConfirmSystem` with melee sweep sampling.
+  - Test weapon sweep against hurtbox and defense volumes.
+- Step 4: Update renderer.
+  - Render player/enemy body motion from timeline offsets.
+  - Render weapon trails from sweep points.
+  - Render local clash/hit feedback at actual overlap.
+- Step 5: Apply to representative chains.
+  - Start with `bladeRushTriple`, `knifeFlurry`, and `spellDoubleCut`.
+  - Then adapt `feintCrush` and any remaining melee attacks.
+- Step 6: Coverage.
+  - Static smoke protects timeline fields and sweep collision hooks.
+  - Flow smoke verifies early whiff, successful clash, and delayed contact settlement.
+  - Screenshot smoke verifies actors close distance during melee nodes.
+
+Acceptance criteria:
+
+- Starting `counter_dojo` shows `bladeRushTriple` as physical melee:
+  - enemy advances before node 1 contact,
+  - actors are visibly closer at contact than at turn start,
+  - node 2 starts from close range rather than full reset distance.
+- Pressing A/S/D too early produces a visible player whiff before enemy contact and does not cancel the enemy node.
+- Pressing A/S/D at the active overlap produces a local weapon clash at contact range.
+- Damage/cancel still resolves only at contact/collision.
+- The bottom HUD remains readable but is no longer the dominant visual explanation of melee timing.
+- `knifeFlurry` reads as close fast cuts, not distant projectiles or remote slashes.
+- `spellDoubleCut` distinguishes the cast interrupt from the follow-up physical cuts.
+- New visuals obey the R55 noise budget.
+- `node scripts\verify.js --skip-visual` passes.
+
+Non-goals:
+
+- Do not reintroduce style selection or demo-system updates.
+- Do not make every attack melee; projectile and beam spell attacks may remain ranged.
+- Do not solve animation with large floating text, extra tutorial panels, or wider QTE bars.
+- Do not make one successful input cancel multiple sequential enemy nodes unless that behavior is explicitly authored for a weapon profile later.
+
 ### R15 - Delayed Settlement Prototype, Superseded By R16
 
 Goal: prove that QTE input completion should not immediately settle combat. The player needs a visible attack, guard, or cast follow-through before HP, resources, statuses, and turn flow resolve.

@@ -139,10 +139,84 @@ class ActiveAttackSystem {
     };
   }
 
+  getActorMeleeOffset(actor) {
+    const total = { x: 0, y: 0, intensity: 0, source: null };
+    for (const attack of this.active) {
+      if (!attack || attack.completed) continue;
+      const offset = this.getMeleeOffsetForAttack(attack, actor);
+      if (!offset || offset.intensity <= 0) continue;
+      if (!total.source || Math.abs(offset.x) > Math.abs(total.x)) {
+        total.x = offset.x;
+        total.y = offset.y;
+        total.source = attack;
+      }
+      total.intensity = Math.max(total.intensity, offset.intensity);
+    }
+    total.x = this.clamp(total.x, -340, 340);
+    total.y = this.clamp(total.y, -36, 36);
+    return total;
+  }
+
+  getMeleeOffsetForAttack(attack, actor) {
+    const timeline = attack && attack.profile ? attack.profile.meleeTimeline : null;
+    if (!timeline || !timeline.rootMotion) return null;
+    if (attack.profile.type !== "melee") return null;
+
+    const localTime = attack.elapsed - (timeline.offset || 0);
+    if (localTime < 0 || localTime > timeline.total + 0.18) return null;
+
+    const actorIsSource = attack.source === actor;
+    const actorIsTarget = attack.target === actor;
+    if (!actorIsSource && !actorIsTarget) return null;
+
+    const points = actorIsSource ? timeline.rootMotion.source : timeline.rootMotion.target;
+    if (!Array.isArray(points) || points.length === 0) return null;
+
+    const sourceAnchor = this.resolveAnchorStatic(attack.intent.fromAnchor || attack.intent.anchor || (attack.source === "enemy" ? "enemyCore" : "playerHand"));
+    const targetAnchor = this.resolveAnchorStatic(attack.intent.toAnchor || (attack.target === "player" ? "playerCore" : "enemyCore"));
+    const dir = Math.sign(targetAnchor.x - sourceAnchor.x) || (attack.source === "enemy" ? -1 : 1);
+    const sampled = this.sampleMotion(points, localTime);
+    const phaseMul = attack.canceled ? 0.72 : 1;
+    return {
+      x: dir * (sampled.x || 0) * phaseMul,
+      y: sampled.y || 0,
+      intensity: this.clamp(Math.abs(sampled.x || 0) / 150, 0, 1),
+      localTime,
+      contactFrame: timeline.contactFrame || 0
+    };
+  }
+
+  sampleMotion(points, localTime) {
+    if (!Array.isArray(points) || points.length === 0) return { x: 0, y: 0 };
+    if (localTime <= points[0].at) return { x: points[0].x || 0, y: points[0].y || 0 };
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i];
+      const b = points[i + 1];
+      if (localTime > b.at) continue;
+      const span = Math.max(0.001, b.at - a.at);
+      const ratio = this.easeInOut(this.clamp((localTime - a.at) / span, 0, 1));
+      return {
+        x: (a.x || 0) + ((b.x || 0) - (a.x || 0)) * ratio,
+        y: (a.y || 0) + ((b.y || 0) - (a.y || 0)) * ratio
+      };
+    }
+    const last = points[points.length - 1];
+    return { x: last.x || 0, y: last.y || 0 };
+  }
+
+  easeInOut(value) {
+    const t = this.clamp(value, 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
   resolveAnchor(anchor) {
     if (this.owner && this.owner.effectQueue && this.owner.effectQueue.resolveAnchor) {
       return this.owner.effectQueue.resolveAnchor(anchor);
     }
+    return this.resolveAnchorStatic(anchor);
+  }
+
+  resolveAnchorStatic(anchor) {
     const anchors = {
       playerCore: { x: 220, y: 360 },
       playerHand: { x: 270, y: 320 },
@@ -388,7 +462,22 @@ class ActiveAttackSystem {
       profile.recovery = tl.recovery ?? profile.recovery;
     }
 
-    profile.travelStart = profile.startup;
+    const meleeTimeline = ActiveAttackSystem.resolveMeleeTimeline(intent, profile);
+    if (meleeTimeline && type === "melee") {
+      const offset = meleeTimeline.offset || 0;
+      const authoredReactionStart = profile.reactionStart;
+      profile.meleeTimeline = meleeTimeline;
+      profile.travelStart = offset;
+      profile.impactTime = offset + meleeTimeline.contactFrame;
+      profile.reactionStart = authoredReactionStart ?? Math.max(0, offset + meleeTimeline.activeStart - profile.reactionLead);
+      profile.activeStart = offset + meleeTimeline.activeStart;
+      profile.activeDuration = Math.max(0.05, meleeTimeline.activeEnd - meleeTimeline.activeStart);
+      profile.reactionDuration = Math.max(0.05, offset + meleeTimeline.activeEnd - profile.reactionStart);
+      profile.recovery = Math.max(0.18, meleeTimeline.total - meleeTimeline.contactFrame);
+      profile.radius = Math.max(profile.radius || 28, meleeTimeline.sweep && meleeTimeline.sweep.width ? meleeTimeline.sweep.width : 28);
+    }
+
+    profile.travelStart = profile.travelStart ?? profile.startup;
     profile.impactTime = profile.impactTime ?? (profile.startup + profile.travel);
     profile.reactionStart = profile.reactionStart ?? Math.max(0, profile.impactTime - profile.reactionLead);
     profile.activeDuration = profile.activeDuration ?? profile.active;
@@ -396,6 +485,54 @@ class ActiveAttackSystem {
     profile.activeEnd = profile.activeStart + profile.activeDuration;
     profile.reactionEnd = Math.min(profile.impactTime, profile.reactionStart + profile.reactionDuration);
     profile.total = Math.max(profile.impactTime + profile.recovery, profile.reactionEnd + profile.recovery, profile.activeEnd + profile.recovery);
+    if (profile.meleeTimeline) {
+      profile.total = Math.max(profile.total, (profile.meleeTimeline.offset || 0) + profile.meleeTimeline.total);
+    }
     return profile;
+  }
+
+  static resolveMeleeTimeline(intent = {}, profile = {}) {
+    const raw = intent.meleeTimeline || (intent.attack && intent.attack.meleeTimeline);
+    if (!raw) return null;
+    const total = Math.max(0.3, raw.total || raw.duration || (raw.contactFrame || 0.7) + 0.34);
+    const contactFrame = this.numberOr(raw.contactFrame, Math.min(total - 0.18, 0.7));
+    const activeStart = this.numberOr(raw.activeStart, Math.max(0, contactFrame - 0.11));
+    const activeEnd = this.numberOr(raw.activeEnd, Math.min(total, contactFrame + 0.12));
+    const startX = Number.isFinite(intent.meleeStart) ? intent.meleeStart : null;
+    const rootMotion = this.cloneRootMotion(raw.rootMotion || {}, startX);
+    return {
+      total,
+      contactFrame: this.clampStatic(contactFrame, 0.05, total),
+      activeStart: this.clampStatic(activeStart, 0, total),
+      activeEnd: this.clampStatic(Math.max(activeEnd, activeStart + 0.05), 0.05, total),
+      offset: Math.max(0, intent.timelineOffset || raw.offset || 0),
+      sweep: { ...(raw.sweep || {}) },
+      rootMotion
+    };
+  }
+
+  static cloneRootMotion(rootMotion, startX = null) {
+    const clone = {};
+    for (const key of ["source", "target"]) {
+      const points = Array.isArray(rootMotion[key]) ? rootMotion[key] : [{ at: 0, x: 0 }, { at: 1, x: 0 }];
+      clone[key] = points.map((point, index) => ({
+        at: Number.isFinite(point.at) ? point.at : index,
+        x: Number.isFinite(point.x) ? point.x : 0,
+        y: Number.isFinite(point.y) ? point.y : 0
+      }));
+    }
+    if (Number.isFinite(startX) && clone.source.length > 0) {
+      const delta = startX - (clone.source[0].x || 0);
+      clone.source = clone.source.map(point => ({ ...point, x: point.x + delta }));
+    }
+    return clone;
+  }
+
+  static numberOr(value, fallback) {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  static clampStatic(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
 }

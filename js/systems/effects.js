@@ -401,6 +401,9 @@ class EffectEventQueue {
   }
 
   resolveAnchor(anchor) {
+    if (this.owner && this.owner.resolveBattleAnchor && this.mode !== "demo") {
+      return this.owner.resolveBattleAnchor(anchor);
+    }
     const isDemo = this.mode === "demo" || (this.owner && String(this.owner.turnState || "").startsWith("demo_"));
     const playerY = isDemo ? 280 : 360;
     const enemyY = isDemo ? 260 : 380;

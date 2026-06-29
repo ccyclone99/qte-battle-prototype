@@ -96,6 +96,27 @@ const EnemyDatabase = {
         pose: "lunge",
         width: 18
       },
+      meleeTimeline: {
+        total: 1.08,
+        contactFrame: 0.70,
+        activeStart: 0.60,
+        activeEnd: 0.82,
+        sweep: { kind: "thrust", width: 34, reach: 92, yOffset: -16 },
+        rootMotion: {
+          source: [
+            { at: 0.00, x: 0 },
+            { at: 0.24, x: 150 },
+            { at: 0.70, x: 278 },
+            { at: 1.08, x: 184 }
+          ],
+          target: [
+            { at: 0.00, x: 0 },
+            { at: 0.62, x: 0 },
+            { at: 0.78, x: 8 },
+            { at: 1.08, x: 0 }
+          ]
+        }
+      },
       counter: {
         type: "quick_melee",
         canClash: true,
@@ -119,6 +140,27 @@ const EnemyDatabase = {
         shape: "line",
         pose: "lunge",
         width: 24
+      },
+      meleeTimeline: {
+        total: 1.32,
+        contactFrame: 0.88,
+        activeStart: 0.74,
+        activeEnd: 1.02,
+        sweep: { kind: "thrust", width: 42, reach: 118, yOffset: -14 },
+        rootMotion: {
+          source: [
+            { at: 0.00, x: 0 },
+            { at: 0.30, x: 132 },
+            { at: 0.88, x: 300 },
+            { at: 1.32, x: 196 }
+          ],
+          target: [
+            { at: 0.00, x: 0 },
+            { at: 0.78, x: 0 },
+            { at: 0.94, x: 12 },
+            { at: 1.32, x: 0 }
+          ]
+        }
       },
       counter: {
         type: "finisher",
@@ -144,6 +186,27 @@ const EnemyDatabase = {
         pose: "sweep",
         width: 42
       },
+      meleeTimeline: {
+        total: 1.18,
+        contactFrame: 0.76,
+        activeStart: 0.64,
+        activeEnd: 0.90,
+        sweep: { kind: "slash", width: 52, reach: 104, yOffset: -10 },
+        rootMotion: {
+          source: [
+            { at: 0.00, x: 0 },
+            { at: 0.22, x: 144 },
+            { at: 0.76, x: 265 },
+            { at: 1.18, x: 188 }
+          ],
+          target: [
+            { at: 0.00, x: 0 },
+            { at: 0.66, x: 0 },
+            { at: 0.84, x: 10 },
+            { at: 1.18, x: 0 }
+          ]
+        }
+      },
       counter: {
         type: "melee",
         canClash: true,
@@ -168,6 +231,27 @@ const EnemyDatabase = {
         shape: "circle",
         pose: "overhead",
         width: 68
+      },
+      meleeTimeline: {
+        total: 1.62,
+        contactFrame: 1.10,
+        activeStart: 0.94,
+        activeEnd: 1.26,
+        sweep: { kind: "smash", width: 76, reach: 92, yOffset: 8 },
+        rootMotion: {
+          source: [
+            { at: 0.00, x: 0 },
+            { at: 0.36, x: 118 },
+            { at: 1.10, x: 242 },
+            { at: 1.62, x: 162 }
+          ],
+          target: [
+            { at: 0.00, x: 0 },
+            { at: 1.00, x: 0 },
+            { at: 1.18, x: 16 },
+            { at: 1.62, x: 0 }
+          ]
+        }
       },
       counter: {
         type: "heavy_melee",
@@ -272,6 +356,27 @@ const EnemyDatabase = {
         pose: "bash",
         width: 58
       },
+      meleeTimeline: {
+        total: 1.30,
+        contactFrame: 0.86,
+        activeStart: 0.72,
+        activeEnd: 1.00,
+        sweep: { kind: "bash", width: 64, reach: 76, yOffset: -2 },
+        rootMotion: {
+          source: [
+            { at: 0.00, x: 0 },
+            { at: 0.28, x: 126 },
+            { at: 0.86, x: 252 },
+            { at: 1.30, x: 176 }
+          ],
+          target: [
+            { at: 0.00, x: 0 },
+            { at: 0.76, x: 0 },
+            { at: 0.94, x: 14 },
+            { at: 1.30, x: 0 }
+          ]
+        }
+      },
       counter: {
         type: "bash",
         canClash: false,
@@ -291,8 +396,8 @@ const EnemyDatabase = {
       description: "纯物理三段压迫；用于测试敌方回合内逐节点拼刀，而不是一次输入覆盖多段。",
       nodes: [
         { id: "jab", attackId: "quickStab", offset: 0, role: "opener", counterNode: "clash_light" },
-        { id: "sweep", attackId: "slash", offset: 0.56, role: "pressure", counterNode: "clash_or_guard" },
-        { id: "lunge", attackId: "thrust", offset: 1.12, role: "finisher", counterNode: "clash_finisher", opensFollowupOnSuccess: true }
+        { id: "sweep", attackId: "slash", offset: 0.82, role: "pressure", counterNode: "clash_or_guard", meleeStart: 104 },
+        { id: "lunge", attackId: "thrust", offset: 1.62, role: "finisher", counterNode: "clash_finisher", opensFollowupOnSuccess: true, meleeStart: 118 }
       ]
     },
 
@@ -302,8 +407,8 @@ const EnemyDatabase = {
       description: "法术起手压反应，接两段近身快攻；用于测试施法打断、逐节点拼刀和双持连续攻击。",
       nodes: [
         { id: "cast", attackId: "arcaneBolt", offset: 0, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true },
-        { id: "firstCut", attackId: "quickStab", offset: 1.08, role: "pressure", counterNode: "clash_light" },
-        { id: "secondCut", attackId: "quickStab", offset: 1.52, role: "finisher", counterNode: "clash_finisher", opensFollowupOnSuccess: true }
+        { id: "firstCut", attackId: "quickStab", offset: 1.18, role: "pressure", counterNode: "clash_light" },
+        { id: "secondCut", attackId: "quickStab", offset: 1.92, role: "finisher", counterNode: "clash_finisher", opensFollowupOnSuccess: true, meleeStart: 112 }
       ]
     },
 
@@ -314,7 +419,7 @@ const EnemyDatabase = {
       nodes: [
         { id: "bash", attackId: "shieldBash", offset: 0, role: "opener", counterNode: "guard_or_dodge" },
         { id: "bolt", attackId: "arcaneBolt", offset: 0.9, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true },
-        { id: "sweep", attackId: "slash", offset: 1.34, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true }
+        { id: "sweep", attackId: "slash", offset: 1.58, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true, meleeStart: 96 }
       ]
     },
 
@@ -324,7 +429,7 @@ const EnemyDatabase = {
       description: "短刺骗反应后接重砸；用于测试不能只按同一节奏处理所有敌方回合。",
       nodes: [
         { id: "feint", attackId: "quickStab", offset: 0, role: "feint", counterNode: "clash_light" },
-        { id: "crush", attackId: "heavySmash", offset: 0.86, role: "finisher", counterNode: "heavy_clash", opensFollowupOnSuccess: true }
+        { id: "crush", attackId: "heavySmash", offset: 1.06, role: "finisher", counterNode: "heavy_clash", opensFollowupOnSuccess: true, meleeStart: 86 }
       ]
     },
 
@@ -334,7 +439,7 @@ const EnemyDatabase = {
       description: "慢速咒爆接近身追刺，再补一枚飞弹；用于测试法术打断与后续追击覆盖。",
       nodes: [
         { id: "curse", attackId: "curseBurst", offset: 0, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true },
-        { id: "needle", attackId: "quickStab", offset: 1.14, role: "pressure", counterNode: "clash_light" },
+        { id: "needle", attackId: "quickStab", offset: 1.24, role: "pressure", counterNode: "clash_light" },
         { id: "bolt", attackId: "arcaneBolt", offset: 1.72, role: "finisher", counterNode: "spell_interrupt", opensFollowupOnSuccess: true }
       ]
     },
@@ -345,7 +450,7 @@ const EnemyDatabase = {
       description: "短间隔双物理攻击；单手需要防御组合，双持可用连续拼刀逐段处理。",
       nodes: [
         { id: "left", attackId: "quickStab", offset: 0, role: "opener", counterNode: "clash_light" },
-        { id: "right", attackId: "slash", offset: 0.5, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true }
+        { id: "right", attackId: "slash", offset: 0.72, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true, meleeStart: 118 }
       ]
     }
   }

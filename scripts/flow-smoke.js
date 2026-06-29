@@ -355,6 +355,12 @@ function verifyDefaultEnemyAttackChain() {
 
   assert("default enemy chain active", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
   assert("default commits multi enemy attacks", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack").length >= 3, String(battle.activeAttackSystem.active.length));
+  const firstMelee = battle.activeAttackSystem.active.find(attack => attack.intent.kind === "enemyAttack" && attack.intent.chainIndex === 0);
+  assert("default melee node carries contact timeline", !!(firstMelee && firstMelee.profile.meleeTimeline && firstMelee.profile.meleeTimeline.contactFrame > 0), firstMelee ? firstMelee.intent.attackId : "none");
+  assert("default melee impact uses contact frame", Math.abs(firstMelee.profile.impactTime - firstMelee.profile.meleeTimeline.contactFrame) < 0.001, `${firstMelee.profile.impactTime}/${firstMelee.profile.meleeTimeline.contactFrame}`);
+  tick(battle, 0.26);
+  const stagedEnemy = battle.getActorMeleeOffset("enemy");
+  assert("default melee staging advances enemy", stagedEnemy.x < -45 && stagedEnemy.intensity > 0.2, `${Math.round(stagedEnemy.x)}/${stagedEnemy.intensity.toFixed(2)}`);
   assert("default reaches response", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
 
   const enemyStart = battle.enemyHp;
