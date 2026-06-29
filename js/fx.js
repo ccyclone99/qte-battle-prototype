@@ -1,6 +1,8 @@
 class ParticleSystem {
   constructor() {
     this.particles = [];
+    this.density = 0.58;
+    this.alphaScale = 0.66;
   }
 
   clear() {
@@ -23,16 +25,18 @@ class ParticleSystem {
   }
 
   spawn(count, x, y, config) {
-    for (let i = 0; i < count; i++) {
+    const actualCount = Math.max(0, Math.round(count * this.density));
+    for (let i = 0; i < actualCount; i++) {
       const angle = (Math.random() * Math.PI * 2);
       const speed = config.speedMin + Math.random() * (config.speedMax - config.speedMin);
+      const life = config.lifeMin + Math.random() * (config.lifeMax - config.lifeMin);
       this.particles.push({
         x: x + (Math.random() - 0.5) * (config.spread || 0),
         y: y + (Math.random() - 0.5) * (config.spread || 0),
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        life: config.lifeMin + Math.random() * (config.lifeMax - config.lifeMin),
-        maxLife: config.lifeMin + Math.random() * (config.lifeMax - config.lifeMin),
+        life,
+        maxLife: life,
         size: config.sizeMin + Math.random() * (config.sizeMax - config.sizeMin),
         color: Array.isArray(config.colors) ? config.colors[Math.floor(Math.random() * config.colors.length)] : config.color,
         gravity: config.gravity || 0,
@@ -107,7 +111,7 @@ class ParticleSystem {
     ctx.save();
     for (const p of this.particles) {
       const alpha = p.life / p.maxLife;
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = alpha * this.alphaScale;
       ctx.fillStyle = p.color;
       ctx.beginPath();
       if (p.shape === "circle") {
@@ -124,6 +128,8 @@ class ParticleSystem {
 class EffectBurstSystem {
   constructor() {
     this.bursts = [];
+    this.alphaScale = 0.62;
+    this.glowScale = 0.45;
   }
 
   clear() {
@@ -175,14 +181,15 @@ class EffectBurstSystem {
   }
 
   drawRing(ctx, burst, progress, alpha) {
+    const scaledAlpha = alpha * this.alphaScale;
     const radius = (burst.radius || 46) * (0.45 + progress * 0.85);
     ctx.save();
     ctx.translate(burst.x, burst.y);
-    ctx.globalAlpha = alpha * (burst.alpha || 0.85);
+    ctx.globalAlpha = scaledAlpha * (burst.alpha || 0.85);
     ctx.strokeStyle = burst.color || "#ffffff";
     ctx.lineWidth = (burst.width || 5) * (1 - progress * 0.55);
     ctx.shadowColor = burst.color || "#ffffff";
-    ctx.shadowBlur = burst.glow || 16;
+    ctx.shadowBlur = (burst.glow || 16) * this.glowScale;
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.stroke();
@@ -190,10 +197,11 @@ class EffectBurstSystem {
   }
 
   drawPulse(ctx, burst, progress, alpha) {
+    const scaledAlpha = alpha * this.alphaScale;
     const radius = (burst.radius || 56) * (0.35 + progress);
     const grad = ctx.createRadialGradient(burst.x, burst.y, 0, burst.x, burst.y, radius);
-    grad.addColorStop(0, this.withAlpha(burst.coreColor || burst.color || "#ffffff", alpha * 0.7));
-    grad.addColorStop(0.45, this.withAlpha(burst.color || "#ffffff", alpha * 0.35));
+    grad.addColorStop(0, this.withAlpha(burst.coreColor || burst.color || "#ffffff", scaledAlpha * 0.56));
+    grad.addColorStop(0.45, this.withAlpha(burst.color || "#ffffff", scaledAlpha * 0.25));
     grad.addColorStop(1, this.withAlpha(burst.edgeColor || burst.color || "#ffffff", 0));
     ctx.save();
     ctx.fillStyle = grad;
@@ -204,16 +212,17 @@ class EffectBurstSystem {
   }
 
   drawGlyph(ctx, burst, progress, alpha) {
+    const scaledAlpha = alpha * this.alphaScale;
     const radius = burst.radius || 36;
     const spin = (burst.spin || 1) * progress * Math.PI * 2;
     ctx.save();
     ctx.translate(burst.x, burst.y);
     ctx.rotate(spin);
-    ctx.globalAlpha = alpha * (burst.alpha || 0.9);
+    ctx.globalAlpha = scaledAlpha * (burst.alpha || 0.9);
     ctx.strokeStyle = burst.color || "#9b59b6";
     ctx.lineWidth = burst.width || 2;
     ctx.shadowColor = burst.color || "#9b59b6";
-    ctx.shadowBlur = burst.glow || 14;
+    ctx.shadowBlur = (burst.glow || 14) * this.glowScale;
 
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
@@ -222,7 +231,7 @@ class EffectBurstSystem {
     ctx.arc(0, 0, radius * 0.62, 0, Math.PI * 2);
     ctx.stroke();
 
-    const ticks = burst.ticks || 6;
+    const ticks = Math.min(4, burst.ticks || 6);
     for (let i = 0; i < ticks; i++) {
       const a = (i / ticks) * Math.PI * 2;
       ctx.beginPath();
@@ -234,6 +243,7 @@ class EffectBurstSystem {
   }
 
   drawSlash(ctx, burst, progress, alpha) {
+    const scaledAlpha = alpha * this.alphaScale;
     const length = burst.length || 110;
     const width = burst.width || 7;
     const sweep = burst.sweep || 0.85;
@@ -241,12 +251,12 @@ class EffectBurstSystem {
     ctx.save();
     ctx.translate(burst.x, burst.y);
     ctx.rotate(burst.angle || 0);
-    ctx.globalAlpha = alpha * (burst.alpha || 0.9);
+    ctx.globalAlpha = scaledAlpha * (burst.alpha || 0.9);
     ctx.strokeStyle = burst.color || "#f1c40f";
     ctx.lineWidth = width * (1 - progress * 0.4);
     ctx.lineCap = "round";
     ctx.shadowColor = burst.color || "#f1c40f";
-    ctx.shadowBlur = burst.glow || 16;
+    ctx.shadowBlur = (burst.glow || 16) * this.glowScale;
     ctx.beginPath();
     ctx.arc(0, 0, radius, -sweep, sweep);
     ctx.stroke();
@@ -262,18 +272,19 @@ class EffectBurstSystem {
   }
 
   drawBeam(ctx, burst, progress, alpha) {
+    const scaledAlpha = alpha * this.alphaScale;
     const x2 = burst.x2 ?? (burst.x + Math.cos(burst.angle || 0) * (burst.length || 180));
     const y2 = burst.y2 ?? (burst.y + Math.sin(burst.angle || 0) * (burst.length || 0));
     const eased = Math.sin(progress * Math.PI * 0.5);
     const endX = burst.x + (x2 - burst.x) * eased;
     const endY = burst.y + (y2 - burst.y) * eased;
     ctx.save();
-    ctx.globalAlpha = alpha * (burst.alpha || 0.75);
+    ctx.globalAlpha = scaledAlpha * (burst.alpha || 0.75);
     ctx.strokeStyle = burst.color || "#5dade2";
     ctx.lineWidth = burst.width || 5;
     ctx.lineCap = "round";
     ctx.shadowColor = burst.color || "#5dade2";
-    ctx.shadowBlur = burst.glow || 18;
+    ctx.shadowBlur = (burst.glow || 18) * this.glowScale;
     ctx.beginPath();
     ctx.moveTo(burst.x, burst.y);
     ctx.lineTo(endX, endY);
@@ -282,16 +293,17 @@ class EffectBurstSystem {
   }
 
   drawShield(ctx, burst, progress, alpha) {
+    const scaledAlpha = alpha * this.alphaScale;
     const radius = (burst.radius || 48) * (1 + progress * 0.12);
     const sides = burst.sides || 6;
     ctx.save();
     ctx.translate(burst.x, burst.y);
     ctx.rotate(Math.PI / 6 + progress * 0.35);
-    ctx.globalAlpha = alpha * (burst.alpha || 0.9);
+    ctx.globalAlpha = scaledAlpha * (burst.alpha || 0.9);
     ctx.strokeStyle = burst.color || "#95a5a6";
     ctx.lineWidth = burst.width || 4;
     ctx.shadowColor = burst.color || "#95a5a6";
-    ctx.shadowBlur = burst.glow || 18;
+    ctx.shadowBlur = (burst.glow || 18) * this.glowScale;
     ctx.beginPath();
     for (let i = 0; i <= sides; i++) {
       const a = (i / sides) * Math.PI * 2;
@@ -305,18 +317,19 @@ class EffectBurstSystem {
   }
 
   drawSpark(ctx, burst, progress, alpha) {
+    const scaledAlpha = alpha * this.alphaScale;
     const radius = burst.radius || 44;
-    const rays = burst.rays || 9;
+    const rays = Math.min(6, burst.rays || 9);
     const core = (burst.core || 10) * (1 - progress * 0.45);
     ctx.save();
     ctx.translate(burst.x, burst.y);
     ctx.rotate((burst.angle || 0) + progress * 0.22);
-    ctx.globalAlpha = alpha * (burst.alpha || 0.95);
+    ctx.globalAlpha = scaledAlpha * (burst.alpha || 0.95);
     ctx.strokeStyle = burst.color || "#ffffff";
     ctx.lineWidth = (burst.width || 4) * (1 - progress * 0.55);
     ctx.lineCap = "round";
     ctx.shadowColor = burst.color || "#ffffff";
-    ctx.shadowBlur = burst.glow || 18;
+    ctx.shadowBlur = (burst.glow || 18) * this.glowScale;
     for (let i = 0; i < rays; i++) {
       const a = (i / rays) * Math.PI * 2;
       const start = core + radius * 0.12 * progress;

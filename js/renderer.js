@@ -13,6 +13,18 @@ class CanvasRenderer {
       selectionTitleY: 60,
       demoTitleY: 62
     };
+    this.visualBudget = {
+      cinematic: 0.56,
+      counterFocus: 0.62,
+      defenseIntent: 0.58,
+      motionLines: 0.44,
+      afterimage: 0.24,
+      statusAura: 0.42,
+      resourcePulse: 0.30,
+      impact: 0.62,
+      ornament: 0.36,
+      screenFlash: 0.32
+    };
     const dpr = window.devicePixelRatio || 1;
     const displayWidth = 1280;
     const displayHeight = 720;
@@ -21,6 +33,12 @@ class CanvasRenderer {
     const scaleX = canvas.width / this.width;
     const scaleY = canvas.height / this.height;
     this.ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+  }
+
+  visualScale(kind = "statusAura") {
+    const budget = this.visualBudget || {};
+    const value = budget[kind];
+    return Number.isFinite(value) ? value : 1;
   }
 
   renderBlank() {
@@ -686,12 +704,13 @@ class CanvasRenderer {
     const focus = this.getCinematicFocus(scene);
     if (!focus) return;
     const ctx = this.ctx;
-    const intensity = Utils.clamp(focus.intensity || 0, 0, 1);
+    const scale = this.visualScale("cinematic");
+    const intensity = Utils.clamp((focus.intensity || 0) * scale, 0, 1);
     if (intensity <= 0.02) return;
 
     this.drawCinematicLetterbox(ctx, intensity, focus.color);
     if (!focus.meleePressure) this.drawCinematicLane(ctx, focus, t);
-    this.drawCinematicReticle(ctx, focus, t);
+    this.drawCinematicReticle(ctx, focus, t, intensity);
   }
 
   drawCinematicLetterbox(ctx, intensity, color) {
@@ -713,9 +732,9 @@ class CanvasRenderer {
     const from = focus.from || this.resolveCinematicAnchor("playerCore");
     const to = focus.to || this.resolveCinematicAnchor("enemyCore");
     const color = focus.color || "#f1c40f";
-    const intensity = Utils.clamp(focus.intensity || 0, 0, 1);
+    const intensity = Utils.clamp((focus.intensity || 0) * this.visualScale("cinematic"), 0, 1);
     const isEnemy = focus.kind === "enemyResponse" || focus.source === "enemy";
-    const laneAlpha = focus.kind === "qteFocus" ? 0.10 : 0.18 + intensity * 0.18;
+    const laneAlpha = focus.kind === "qteFocus" ? 0.05 : 0.08 + intensity * 0.10;
     const shimmer = 0.5 + Math.sin(t * 8) * 0.08;
 
     ctx.save();
@@ -725,18 +744,18 @@ class CanvasRenderer {
     grad.addColorStop(0.5, this.hexToRgba(color, laneAlpha * shimmer));
     grad.addColorStop(1, this.hexToRgba(color, laneAlpha * 0.50));
     ctx.strokeStyle = grad;
-    ctx.lineWidth = focus.kind === "qteFocus" ? 18 : 24 + intensity * 24;
+    ctx.lineWidth = focus.kind === "qteFocus" ? 10 : 14 + intensity * 16;
     ctx.lineCap = "round";
     ctx.shadowColor = color;
-    ctx.shadowBlur = 12 + intensity * 18;
+    ctx.shadowBlur = 5 + intensity * 8;
     ctx.beginPath();
     ctx.moveTo(from.x, from.y - 16);
     ctx.quadraticCurveTo(this.width / 2, 308 - intensity * 16, to.x, to.y - 18);
     ctx.stroke();
 
-    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.10 + intensity * 0.10);
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.04 + intensity * 0.05);
     ctx.lineWidth = 2;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 2; i++) {
       const offset = ((t * 110 + i * 90) % 520) / 520;
       const x = from.x + (to.x - from.x) * offset;
       const y = from.y + (to.y - from.y) * offset - 24 + Math.sin(offset * Math.PI) * -36;
@@ -748,12 +767,14 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawCinematicReticle(ctx, focus, t) {
+  drawCinematicReticle(ctx, focus, t, scaledIntensity = null) {
     const point = focus.point || this.resolveCinematicAnchor("midpoint");
     const color = focus.color || "#f1c40f";
-    const intensity = Utils.clamp(focus.intensity || 0, 0, 1);
-    const radius = focus.kind === "qteFocus" ? 34 : 42 + intensity * 20;
-    const alpha = focus.kind === "qteFocus" ? 0.18 : 0.24 + intensity * 0.28;
+    const intensity = scaledIntensity === null
+      ? Utils.clamp((focus.intensity || 0) * this.visualScale("cinematic"), 0, 1)
+      : scaledIntensity;
+    const radius = focus.kind === "qteFocus" ? 26 : 34 + intensity * 12;
+    const alpha = focus.kind === "qteFocus" ? 0.10 : 0.12 + intensity * 0.16;
     const spin = t * (focus.source === "enemy" ? -1.2 : 1.2);
 
     ctx.save();
@@ -761,9 +782,9 @@ class CanvasRenderer {
     ctx.translate(point.x, point.y);
     ctx.rotate(spin);
     ctx.strokeStyle = this.hexToRgba(color, alpha);
-    ctx.lineWidth = 2 + intensity * 2;
+    ctx.lineWidth = 1.5 + intensity * 1.2;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 14 + intensity * 18;
+    ctx.shadowBlur = 5 + intensity * 8;
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.stroke();
@@ -781,7 +802,7 @@ class CanvasRenderer {
 
     if (focus.phase === "impact") {
       ctx.strokeStyle = this.hexToRgba("#ffffff", 0.26 + intensity * 0.24);
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(0, 0, radius * (0.45 + Math.sin(t * 14) * 0.06), 0, Math.PI * 2);
       ctx.stroke();
@@ -1007,6 +1028,8 @@ class CanvasRenderer {
 
   drawResourcePulseLayer(ctx, visuals, t) {
     if (!visuals || !visuals.active || !Array.isArray(visuals.pulses)) return;
+    const visualScale = this.visualScale("resourcePulse");
+    if (visualScale <= 0.05) return;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
@@ -1015,7 +1038,7 @@ class CanvasRenderer {
 
     for (const pulse of visuals.pulses) {
       const progress = Utils.clamp(pulse.progress || 0, 0, 1);
-      const alpha = Utils.clamp(pulse.alpha || 0, 0, 1);
+      const alpha = Utils.clamp(pulse.alpha || 0, 0, 1) * visualScale;
       if (alpha <= 0.02) continue;
 
       const gain = pulse.direction !== "spend";
@@ -1032,36 +1055,36 @@ class CanvasRenderer {
         x: (from.x + to.x) / 2,
         y: Math.min(from.y, to.y) - 42 - (pulse.intensity || 1) * 16
       };
-      const laneAlpha = alpha * 0.18;
+      const laneAlpha = alpha * 0.08;
 
       ctx.strokeStyle = this.hexToRgba(color, laneAlpha);
-      ctx.lineWidth = 2 + (pulse.intensity || 1);
+      ctx.lineWidth = 1.2 + (pulse.intensity || 1) * 0.45;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 12 + (pulse.intensity || 1) * 8;
+      ctx.shadowBlur = 4 + (pulse.intensity || 1) * 3;
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
       ctx.quadraticCurveTo(control.x, control.y, to.x, to.y);
       ctx.stroke();
 
-      for (let i = 0; i < 4; i++) {
-        const u = Utils.clamp(progress - i * 0.11, 0, 1);
+      for (let i = 0; i < 2; i++) {
+        const u = Utils.clamp(progress - i * 0.18, 0, 1);
         const point = this.quadraticPoint(from, control, to, u);
-        const dotAlpha = alpha * Math.max(0, 1 - i * 0.18) * (0.45 + Math.sin((u + t) * Math.PI) * 0.12);
+        const dotAlpha = alpha * Math.max(0, 1 - i * 0.25) * (0.34 + Math.sin((u + t) * Math.PI) * 0.08);
         ctx.globalAlpha = dotAlpha;
         ctx.fillStyle = i === 0 ? "#ffffff" : color;
         ctx.beginPath();
-        ctx.arc(point.x, point.y, Math.max(2.5, 5.5 - i * 0.65) * (pulse.intensity || 1), 0, Math.PI * 2);
+        ctx.arc(point.x, point.y, Math.max(2, 4.2 - i * 0.75) * Math.min(1.15, pulse.intensity || 1), 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
 
       const halo = 1 + Math.sin(t * 12 + pulse.id) * 0.05;
-      const haloAlpha = alpha * (gain ? 0.38 : 0.30);
+      const haloAlpha = alpha * (gain ? 0.22 : 0.18);
       ctx.strokeStyle = this.hexToRgba(color, haloAlpha);
       ctx.fillStyle = this.hexToRgba(color, haloAlpha * 0.16);
       ctx.lineWidth = 2;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = 5;
       ctx.beginPath();
       ctx.roundRect(meter.x - 8, meter.y + 10, meter.w + 18, 20, 5);
       ctx.fill();
@@ -1071,7 +1094,7 @@ class CanvasRenderer {
       const tagX = meter.x + meter.w + 20;
       const tagY = meter.y + 20 - progress * 10;
       ctx.save();
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = alpha * 0.72;
       ctx.translate(tagX, tagY);
       ctx.scale(halo, halo);
       ctx.fillStyle = this.hexToRgba("#071018", 0.72);
@@ -1144,6 +1167,7 @@ class CanvasRenderer {
 
   drawAttackEffects(scene, t) {
     const ctx = this.ctx;
+    const ornamentScale = this.visualScale("ornament");
     const px = 220;
     const py = this.height - 190;
     const ex = this.width - 220;
@@ -1175,10 +1199,10 @@ class CanvasRenderer {
       ctx.save();
       ctx.translate(px, py);
       ctx.strokeStyle = pState === "casting" ? "#9b59b6" : "#f39c12";
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.5 + Math.sin(t * 5) * 0.2;
+      ctx.lineWidth = 1.4;
+      ctx.globalAlpha = (0.22 + Math.sin(t * 5) * 0.08) * ornamentScale;
       ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 4;
       ctx.beginPath();
       ctx.arc(0, 0, 48 + Math.sin(t * 4) * 4, 0, Math.PI * 2);
       ctx.stroke();
@@ -1190,9 +1214,9 @@ class CanvasRenderer {
       ctx.save();
       ctx.translate(px, py);
       ctx.fillStyle = "#f1c40f";
-      ctx.globalAlpha = 0.6 + Math.sin(t * 15) * 0.3;
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 + t * 4;
+      ctx.globalAlpha = (0.28 + Math.sin(t * 15) * 0.10) * ornamentScale;
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + t * 4;
         const r = 42 + Math.sin(t * 10 + i) * 4;
         ctx.beginPath();
         ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 2, 0, Math.PI * 2);
@@ -1205,9 +1229,9 @@ class CanvasRenderer {
     if (scene.enemyAttackPhase === "hit") {
       ctx.save();
       ctx.translate(ex, ey);
-      ctx.fillStyle = "rgba(231, 76, 60, 0.25)";
+      ctx.fillStyle = this.hexToRgba("#e74c3c", 0.08 * this.visualScale("impact"));
       ctx.beginPath();
-      ctx.arc(0, 0, 60, 0, Math.PI * 2);
+      ctx.arc(0, 0, 42, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -1277,11 +1301,12 @@ class CanvasRenderer {
       }
 
       if (attack.phase === "reaction") {
-        ctx.strokeStyle = "rgba(46, 204, 113, 0.65)";
-        ctx.lineWidth = 2;
+        const reactionScale = this.visualScale("counterFocus");
+        ctx.strokeStyle = this.hexToRgba("#2ecc71", 0.38 * reactionScale);
+        ctx.lineWidth = 1.5;
         ctx.setLineDash([8, 6]);
         ctx.beginPath();
-        ctx.arc(to.x, to.y, (profile.radius || 46) + 18 + Math.sin(t * 8) * 3, 0, Math.PI * 2);
+        ctx.arc(to.x, to.y, (profile.radius || 46) + 10 + Math.sin(t * 8) * 2, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -1292,6 +1317,8 @@ class CanvasRenderer {
   drawCounterFocusLayer(scene, t) {
     const data = this.getCounterFlowHudData(scene);
     if (!data || !data.active || scene.turnState !== "enemy_turn") return;
+    const visualScale = this.visualScale("counterFocus");
+    if (visualScale <= 0.05) return;
 
     const attack = data.active;
     const intent = attack.intent || {};
@@ -1299,8 +1326,8 @@ class CanvasRenderer {
     const from = attack.position || this.getBattleAnchor(intent.fromAnchor || intent.anchor || "enemyCore");
     const to = this.getBattleAnchor(intent.toAnchor || "playerCore");
     const pulse = 1 + Math.sin(t * 9) * 0.08;
-    const responseAlpha = data.metrics.inResponse ? 0.78 : 0.34;
-    const radius = data.metrics.inResponse ? 52 + Math.sin(t * 14) * 4 : 42;
+    const responseAlpha = (data.metrics.inResponse ? 0.62 : 0.20) * visualScale;
+    const radius = data.metrics.inResponse ? 46 + Math.sin(t * 14) * 3 : 36;
     const ctx = this.ctx;
     const melee = attack.profile && attack.profile.type === "melee";
 
@@ -1308,7 +1335,7 @@ class CanvasRenderer {
     ctx.globalCompositeOperation = "lighter";
     if (!melee) {
       ctx.strokeStyle = this.hexToRgba(color, responseAlpha);
-      ctx.lineWidth = data.metrics.inResponse ? 4 : 2;
+      ctx.lineWidth = data.metrics.inResponse ? 2.5 : 1.4;
       if (!data.metrics.inResponse) ctx.setLineDash([10, 10]);
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
@@ -1317,12 +1344,12 @@ class CanvasRenderer {
       ctx.setLineDash([]);
     } else {
       const dir = from.x > to.x ? 1 : -1;
-      ctx.strokeStyle = this.hexToRgba(color, data.metrics.inResponse ? 0.58 : 0.26);
-      ctx.lineWidth = data.metrics.inResponse ? 3 : 1.5;
+      ctx.strokeStyle = this.hexToRgba(color, (data.metrics.inResponse ? 0.42 : 0.14) * visualScale);
+      ctx.lineWidth = data.metrics.inResponse ? 2 : 1.2;
       ctx.setLineDash(data.metrics.inResponse ? [] : [6, 9]);
-      for (let i = 0; i < 3; i++) {
-        const ox = dir * (38 + i * 17);
-        const oy = -28 + i * 18;
+      for (let i = 0; i < 2; i++) {
+        const ox = dir * (34 + i * 20);
+        const oy = -18 + i * 24;
         ctx.beginPath();
         ctx.moveTo(to.x + ox, to.y + oy);
         ctx.lineTo(to.x + ox - dir * 18, to.y + oy + 6);
@@ -1333,14 +1360,14 @@ class CanvasRenderer {
 
     ctx.translate(to.x, to.y);
     ctx.shadowColor = color;
-    ctx.shadowBlur = data.metrics.inResponse ? 22 : 10;
-    ctx.strokeStyle = this.hexToRgba(color, data.metrics.inResponse ? 0.9 : 0.45);
-    ctx.lineWidth = data.metrics.inResponse ? 5 : 3;
+    ctx.shadowBlur = data.metrics.inResponse ? 9 : 4;
+    ctx.strokeStyle = this.hexToRgba(color, (data.metrics.inResponse ? 0.64 : 0.24) * visualScale);
+    ctx.lineWidth = data.metrics.inResponse ? 3 : 2;
     ctx.beginPath();
     ctx.arc(0, 0, radius * pulse, -Math.PI * 0.82, Math.PI * 0.82);
     ctx.stroke();
 
-    ctx.globalAlpha = data.metrics.inResponse ? 0.26 : 0.12;
+    ctx.globalAlpha = (data.metrics.inResponse ? 0.16 : 0.06) * visualScale;
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(0, 0, Math.max(18, radius * 0.42), 0, Math.PI * 2);
@@ -2155,7 +2182,8 @@ class CanvasRenderer {
   }
 
   drawContactGroundImpulse(ctx, contact, t) {
-    const alpha = contact.alpha * (contact.confirmed ? 0.48 : 0.26);
+    const impactScale = this.visualScale("impact");
+    const alpha = contact.alpha * (contact.confirmed ? 0.40 : 0.18) * impactScale;
     if (alpha <= 0.02) return;
     const p = this.easeOutCubic(contact.progress);
     const heavy = contact.force > 1.18 || contact.radius > 52;
@@ -2166,10 +2194,10 @@ class CanvasRenderer {
     ctx.scale(1 + p * 0.55, 1 + p * 0.18);
     ctx.globalAlpha = alpha;
     ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = this.hexToRgba(color, 0.14);
-    ctx.strokeStyle = this.hexToRgba(color, 0.56);
+    ctx.fillStyle = this.hexToRgba(color, 0.08);
+    ctx.strokeStyle = this.hexToRgba(color, 0.38);
     ctx.shadowColor = color;
-    ctx.shadowBlur = heavy ? 18 : 10;
+    ctx.shadowBlur = heavy ? 9 : 5;
     ctx.lineWidth = heavy ? 3 : 2;
     ctx.beginPath();
     ctx.ellipse(0, 0, contact.radius * 1.15, Math.max(7, contact.radius * 0.22), 0, 0, Math.PI * 2);
@@ -2177,11 +2205,11 @@ class CanvasRenderer {
     ctx.stroke();
 
     if (contact.confirmed && heavy) {
-      ctx.globalAlpha = alpha * 0.72;
-      ctx.shadowBlur = 8;
+      ctx.globalAlpha = alpha * 0.52;
+      ctx.shadowBlur = 4;
       ctx.lineCap = "round";
-      for (let i = 0; i < 5; i++) {
-        const side = i - 2;
+      for (let i = 0; i < 3; i++) {
+        const side = i - 1;
         const len = contact.radius * (0.42 + i * 0.05);
         const x0 = side * contact.radius * 0.18;
         ctx.beginPath();
@@ -2195,7 +2223,8 @@ class CanvasRenderer {
   }
 
   drawContactBodyImpact(ctx, contact, t) {
-    const alpha = contact.alpha;
+    const impactScale = this.visualScale("impact");
+    const alpha = contact.alpha * impactScale;
     if (alpha <= 0.03) return;
     const p = this.easeOutCubic(contact.progress);
     const isBeam = contact.kind === "beam" || contact.kind === "spell" || contact.kind === "projectile";
@@ -2207,11 +2236,11 @@ class CanvasRenderer {
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = alpha;
     ctx.shadowColor = contact.color;
-    ctx.shadowBlur = isBeam ? 28 : 20;
+    ctx.shadowBlur = isBeam ? 12 : 9;
 
     const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius);
-    grad.addColorStop(0, this.hexToRgba("#ffffff", 0.88));
-    grad.addColorStop(0.32, this.hexToRgba(contact.color, isBeam ? 0.52 : 0.42));
+    grad.addColorStop(0, this.hexToRgba("#ffffff", 0.62));
+    grad.addColorStop(0.32, this.hexToRgba(contact.color, isBeam ? 0.34 : 0.28));
     grad.addColorStop(1, this.hexToRgba(contact.color, 0));
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -2219,16 +2248,16 @@ class CanvasRenderer {
     ctx.fill();
 
     ctx.lineCap = "round";
-    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.72);
-    ctx.lineWidth = isBeam ? 3 : 4;
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.50);
+    ctx.lineWidth = isBeam ? 2 : 3;
     ctx.beginPath();
     ctx.moveTo(-contact.direction * streak * 0.48, -8);
     ctx.lineTo(contact.direction * streak * 0.42, 7);
     ctx.stroke();
 
-    ctx.strokeStyle = this.hexToRgba(contact.color, 0.82);
+    ctx.strokeStyle = this.hexToRgba(contact.color, 0.54);
     ctx.lineWidth = isBeam ? 2 : 3;
-    const spokes = isBeam ? 8 : 7;
+    const spokes = isBeam ? 5 : 4;
     for (let i = 0; i < spokes; i++) {
       const angle = (i / spokes) * Math.PI * 2 + t * 0.25;
       const inner = radius * 0.24;
@@ -2240,9 +2269,9 @@ class CanvasRenderer {
     }
 
     if (isBeam) {
-      ctx.strokeStyle = this.hexToRgba(contact.color, 0.55);
+      ctx.strokeStyle = this.hexToRgba(contact.color, 0.34);
       ctx.lineWidth = 2;
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 1; i++) {
         const r = radius * (0.78 + i * 0.34 + p * 0.22);
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -2254,7 +2283,7 @@ class CanvasRenderer {
   }
 
   drawContactWhiff(ctx, contact, t) {
-    const alpha = contact.alpha * 0.7;
+    const alpha = contact.alpha * 0.42 * this.visualScale("impact");
     if (alpha <= 0.02) return;
     const p = this.easeOutCubic(contact.progress);
 
@@ -2262,9 +2291,9 @@ class CanvasRenderer {
     ctx.translate(contact.impact.x, contact.impact.y);
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = this.hexToRgba("#95a5a6", 0.72);
+    ctx.strokeStyle = this.hexToRgba("#95a5a6", 0.45);
     ctx.shadowColor = "#95a5a6";
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 4;
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 7]);
     ctx.beginPath();
@@ -3241,9 +3270,10 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  drawEnemyGlyph(ctx, x, y, radius, color, t) {
+  drawEnemyGlyph(ctx, x, y, radius, color, t, alpha = 1) {
     ctx.save();
     ctx.translate(x, y);
+    ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -3751,8 +3781,10 @@ class CanvasRenderer {
 
   drawCombatPhaseLighting(ctx, lighting, t) {
     if (!lighting || !lighting.active) return;
+    const ornamentScale = this.visualScale("ornament");
+    if (ornamentScale <= 0.05) return;
     const floorY = lighting.floorY || this.height - 150;
-    const intensity = Utils.clamp(lighting.intensity || 0.28, 0, 1);
+    const intensity = Utils.clamp(lighting.intensity || 0.28, 0, 1) * ornamentScale;
     const color = lighting.color || "#3498db";
     const secondary = lighting.secondary || color;
     const pulse = 0.75 + Math.sin(t * (lighting.response ? 9.5 : 4.2)) * 0.10 + intensity * 0.18;
@@ -3803,10 +3835,10 @@ class CanvasRenderer {
 
     if (lighting.mode === "enemy") {
       if (!lighting.meleePressure) {
-        ctx.strokeStyle = this.hexToRgba(lighting.response ? secondary : color, lighting.response ? 0.22 : 0.11);
-        ctx.lineWidth = lighting.response ? 2.5 : 1.5;
+        ctx.strokeStyle = this.hexToRgba(lighting.response ? secondary : color, (lighting.response ? 0.12 : 0.055) * ornamentScale);
+        ctx.lineWidth = lighting.response ? 1.5 : 1;
         ctx.shadowColor = lighting.response ? secondary : color;
-        ctx.shadowBlur = lighting.response ? 10 : 4;
+        ctx.shadowBlur = lighting.response ? 4 : 2;
         ctx.setLineDash([8, 12]);
         ctx.beginPath();
         ctx.moveTo(enemyX, floorY + 24);
@@ -3816,11 +3848,11 @@ class CanvasRenderer {
       }
 
       if (lighting.response) {
-        ctx.strokeStyle = this.hexToRgba("#2ecc71", 0.30 + intensity * 0.18);
-        ctx.fillStyle = this.hexToRgba("#2ecc71", 0.03 + intensity * 0.035);
+        ctx.strokeStyle = this.hexToRgba("#2ecc71", 0.12 + intensity * 0.10);
+        ctx.fillStyle = this.hexToRgba("#2ecc71", 0.012 + intensity * 0.018);
         ctx.shadowColor = "#2ecc71";
-        ctx.shadowBlur = 16;
-        ctx.lineWidth = 2.25;
+        ctx.shadowBlur = 5;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.ellipse(playerX + 18, floorY + 4, 86 * pulse, 16 * pulse, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -4168,17 +4200,19 @@ class CanvasRenderer {
   }
 
   drawActorGroundSigil(ctx, x, y, radius, color, actor, t) {
+    const ornamentScale = this.visualScale("ornament");
+    if (ornamentScale <= 0.05) return;
     const pulse = 0.55 + Math.sin(t * 4 + (actor === "enemy" ? 1.4 : 0)) * 0.08;
     ctx.save();
     ctx.translate(x, y);
-    ctx.strokeStyle = this.hexToRgba(color || "#ffffff", actor === "enemy" ? 0.28 : 0.34);
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.hexToRgba(color || "#ffffff", (actor === "enemy" ? 0.16 : 0.18) * ornamentScale);
+    ctx.lineWidth = 1.4;
     ctx.shadowColor = color || "#ffffff";
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 3;
     ctx.beginPath();
     ctx.ellipse(0, 0, radius * (1 + pulse * 0.04), radius * 0.24, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.globalAlpha = 0.22;
+    ctx.globalAlpha = 0.10 * ornamentScale;
     ctx.beginPath();
     ctx.moveTo(-radius * 0.72, 0);
     ctx.lineTo(radius * 0.72, 0);
@@ -4250,27 +4284,29 @@ class CanvasRenderer {
 
   drawEnemyEncounterPhaseOverlay(ctx, scene, x, y, visuals, t) {
     if (!visuals || !visuals.active) return;
+    const ornamentScale = this.visualScale("ornament");
+    if (ornamentScale <= 0.05) return;
     const color = visuals.color || "#e74c3c";
     const secondary = visuals.secondary || color;
-    const intensity = Utils.clamp(visuals.intensity || 0.65, 0, 1);
+    const intensity = Utils.clamp(visuals.intensity || 0.65, 0, 1) * ornamentScale;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.shadowColor = color;
-    ctx.shadowBlur = 10 + intensity * 18;
+    ctx.shadowBlur = 3 + intensity * 7;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
     if (visuals.key === "forge") {
-      ctx.strokeStyle = this.hexToRgba("#ff6b35", 0.28 + intensity * 0.34);
-      ctx.fillStyle = this.hexToRgba("#e74c3c", 0.03 + intensity * 0.06);
-      ctx.lineWidth = 2 + intensity * 2;
+      ctx.strokeStyle = this.hexToRgba("#ff6b35", 0.10 + intensity * 0.18);
+      ctx.fillStyle = this.hexToRgba("#e74c3c", 0.012 + intensity * 0.026);
+      ctx.lineWidth = 1.4 + intensity;
       ctx.beginPath();
       ctx.ellipse(x, y + 54, 78 + intensity * 10, 18 + intensity * 3, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      for (let i = 0; i < 5; i++) {
-        const ox = -38 + i * 19;
+      for (let i = 0; i < 2; i++) {
+        const ox = -22 + i * 44;
         const phase = t * 5 + i * 1.7;
         ctx.beginPath();
         ctx.moveTo(x + ox, y + 38);
@@ -4278,39 +4314,39 @@ class CanvasRenderer {
         ctx.stroke();
       }
     } else if (visuals.key === "arcane") {
-      ctx.strokeStyle = this.hexToRgba(color, 0.24 + intensity * 0.32);
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        const r = 42 + i * 16 + Math.sin(t * 2.4 + i) * 3;
+      ctx.strokeStyle = this.hexToRgba(color, 0.08 + intensity * 0.18);
+      ctx.lineWidth = 1.3;
+      for (let i = 0; i < 2; i++) {
+        const r = 38 + i * 18 + Math.sin(t * 2.4 + i) * 2;
         ctx.beginPath();
         ctx.ellipse(x, y - 12, r, r * 0.34, t * 0.3 + i * 0.4, 0, Math.PI * 2);
         ctx.stroke();
       }
-      this.drawStageGlyph(ctx, x, y - 10, 22 + intensity * 8, secondary, t * 0.9, 0.28 + intensity * 0.20);
+      this.drawStageGlyph(ctx, x, y - 10, 18 + intensity * 6, secondary, t * 0.9, 0.10 + intensity * 0.12);
     } else if (visuals.key === "rain") {
-      ctx.strokeStyle = this.hexToRgba("#5dade2", 0.22 + intensity * 0.30);
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 7; i++) {
-        const ox = -58 + i * 18 + Math.sin(t * 3 + i) * 4;
+      ctx.strokeStyle = this.hexToRgba("#5dade2", 0.08 + intensity * 0.16);
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 3; i++) {
+        const ox = -34 + i * 34 + Math.sin(t * 3 + i) * 3;
         const top = y - 70 + (i % 3) * 8;
         ctx.beginPath();
         ctx.moveTo(x + ox, top);
         ctx.lineTo(x + ox - 18, top + 72);
         ctx.stroke();
       }
-      ctx.strokeStyle = this.hexToRgba(color, 0.28 + intensity * 0.28);
+      ctx.strokeStyle = this.hexToRgba(color, 0.10 + intensity * 0.16);
       ctx.beginPath();
       ctx.arc(x - 10, y - 6, 58 + Math.sin(t * 5) * 4, -0.35, Math.PI * 0.86);
       ctx.stroke();
     } else if (visuals.key === "rite") {
-      ctx.strokeStyle = this.hexToRgba("#f1c40f", 0.24 + intensity * 0.34);
-      ctx.fillStyle = this.hexToRgba(color, 0.04 + intensity * 0.05);
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = this.hexToRgba("#f1c40f", 0.08 + intensity * 0.18);
+      ctx.fillStyle = this.hexToRgba(color, 0.015 + intensity * 0.024);
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.roundRect(x - 54, y - 66, 108, 124, 14);
       ctx.fill();
       ctx.stroke();
-      ctx.strokeStyle = this.hexToRgba(secondary, 0.24 + intensity * 0.28);
+      ctx.strokeStyle = this.hexToRgba(secondary, 0.08 + intensity * 0.16);
       ctx.beginPath();
       ctx.moveTo(x - 42, y - 18);
       ctx.lineTo(x + 42, y - 18);
@@ -4318,14 +4354,14 @@ class CanvasRenderer {
       ctx.lineTo(x, y + 44);
       ctx.stroke();
     } else if (visuals.key === "dojo") {
-      ctx.strokeStyle = this.hexToRgba("#2fffd1", 0.24 + intensity * 0.36);
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = this.hexToRgba("#2fffd1", 0.08 + intensity * 0.18);
+      ctx.lineWidth = 1.6;
       for (let i = 0; i < 2; i++) {
         ctx.beginPath();
         ctx.arc(x, y + 6, 56 + i * 17 + Math.sin(t * 4 + i) * 3, -0.86, Math.PI * 1.06);
         ctx.stroke();
       }
-      ctx.strokeStyle = this.hexToRgba(secondary, 0.20 + intensity * 0.24);
+      ctx.strokeStyle = this.hexToRgba(secondary, 0.08 + intensity * 0.14);
       ctx.beginPath();
       ctx.moveTo(x - 56, y + 50);
       ctx.lineTo(x + 56, y + 50);
@@ -4333,8 +4369,8 @@ class CanvasRenderer {
       ctx.lineTo(x + 36, y + 36);
       ctx.stroke();
     } else {
-      ctx.strokeStyle = this.hexToRgba(color, 0.22 + intensity * 0.26);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = this.hexToRgba(color, 0.08 + intensity * 0.14);
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
       ctx.arc(x, y - 8, 62, 0, Math.PI * 2);
       ctx.stroke();
@@ -4370,6 +4406,8 @@ class CanvasRenderer {
 
   drawActorMotionLines(ctx, x, y, reaction, actor, color) {
     if (!reaction || !reaction.type) return;
+    const visualScale = this.visualScale("motionLines");
+    if (visualScale <= 0.05) return;
     const type = reaction.type;
     const progress = reaction.progress || 0;
     const fade = Math.max(0, 1 - progress);
@@ -4380,32 +4418,32 @@ class CanvasRenderer {
     ctx.save();
     ctx.strokeStyle = lineColor;
     ctx.shadowColor = lineColor;
-    ctx.shadowBlur = 14;
+    ctx.shadowBlur = 5;
     ctx.lineCap = "round";
 
     if (type === "attack" || type === "dodge") {
-      ctx.globalAlpha = 0.45 * fade;
+      ctx.globalAlpha = 0.36 * fade * visualScale;
       ctx.lineWidth = type === "attack" ? 4 : 3;
-      for (let i = 0; i < 3; i++) {
-        const yy = y - 34 + i * 22;
-        const tail = x - forward * (70 + i * 10);
-        const head = x - forward * (18 + i * 4);
+      for (let i = 0; i < 2; i++) {
+        const yy = y - 28 + i * 24;
+        const tail = x - forward * (58 + i * 8);
+        const head = x - forward * (18 + i * 3);
         ctx.beginPath();
         ctx.moveTo(tail, yy + Math.sin(progress * Math.PI + i) * 5);
         ctx.lineTo(head, yy - forward * 2);
         ctx.stroke();
       }
     } else if (type === "windup" || type === "cast") {
-      ctx.globalAlpha = (type === "windup" ? 0.38 : 0.28) * fade;
+      ctx.globalAlpha = (type === "windup" ? 0.28 : 0.20) * fade * visualScale;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(x + forward * 18, y - 12, 48 + Math.sin(progress * Math.PI) * 8, -0.7, 0.9);
       ctx.stroke();
     } else if (type === "hit" || type === "crit" || type === "stagger") {
-      ctx.globalAlpha = (type === "crit" ? 0.65 : 0.42) * fade;
+      ctx.globalAlpha = (type === "crit" ? 0.52 : 0.32) * fade * visualScale;
       ctx.lineWidth = type === "crit" ? 5 : 3;
-      for (let i = 0; i < 4; i++) {
-        const spread = (i - 1.5) * 16;
+      for (let i = 0; i < 3; i++) {
+        const spread = (i - 1) * 18;
         ctx.beginPath();
         ctx.moveTo(x - away * 8, y - 30 + spread);
         ctx.lineTo(x + away * (42 + i * 6), y - 40 + spread * 0.75);
@@ -4418,18 +4456,20 @@ class CanvasRenderer {
 
   drawActorPerformanceAfterimage(ctx, actor, x, y, color, performance, t) {
     if (!performance || performance.afterimageAlpha <= 0.02) return;
-    const count = Math.max(1, Math.min(3, performance.afterimageCount || 1));
+    const visualScale = this.visualScale("afterimage");
+    if (visualScale <= 0.05) return;
+    const count = Math.max(1, Math.min(2, performance.afterimageCount || 1));
     const forward = actor === "enemy" ? -1 : 1;
-    const alpha = performance.afterimageAlpha;
+    const alpha = performance.afterimageAlpha * visualScale;
     const width = actor === "enemy" ? 52 : 42;
     const height = actor === "enemy" ? 72 : 58;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.strokeStyle = color || "#ffffff";
-    ctx.fillStyle = this.hexToRgba(color || "#ffffff", 0.18);
+    ctx.fillStyle = this.hexToRgba(color || "#ffffff", 0.10);
     ctx.shadowColor = color || "#ffffff";
-    ctx.shadowBlur = 16;
+    ctx.shadowBlur = 6;
     for (let i = count; i >= 1; i--) {
       const ratio = i / count;
       const ox = -forward * (16 + i * 13 + (performance.stride || 0) * 0.2);
@@ -4654,10 +4694,12 @@ class CanvasRenderer {
 
   drawActorImpactReactionLayer(ctx, target, x, y, visuals, color, t) {
     if (!visuals || !visuals.active) return;
+    const impactScale = this.visualScale("impact");
+    if (impactScale <= 0.05) return;
 
     const enemy = target === "enemy";
     const direction = visuals.direction || (enemy ? 1 : -1);
-    const alpha = visuals.alpha || 0;
+    const alpha = (visuals.alpha || 0) * impactScale;
     if (alpha <= 0.02) return;
 
     const p = this.easeOutCubic(visuals.progress || 0);
@@ -4675,29 +4717,29 @@ class CanvasRenderer {
     ctx.save();
     ctx.translate(impactX, impactY);
     ctx.rotate(shockAngle);
-    ctx.globalAlpha = alpha * 0.88;
+    ctx.globalAlpha = alpha * 0.62;
     ctx.shadowColor = impactColor;
-    ctx.shadowBlur = visuals.critical ? 28 : 18;
+    ctx.shadowBlur = visuals.critical ? 12 : 8;
     const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, radius);
-    grad.addColorStop(0, this.hexToRgba("#ffffff", visuals.critical ? 0.92 : 0.78));
-    grad.addColorStop(0.35, this.hexToRgba(impactColor, visuals.spellLike ? 0.54 : 0.42));
+    grad.addColorStop(0, this.hexToRgba("#ffffff", visuals.critical ? 0.64 : 0.50));
+    grad.addColorStop(0.35, this.hexToRgba(impactColor, visuals.spellLike ? 0.30 : 0.24));
     grad.addColorStop(1, this.hexToRgba(impactColor, 0));
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.ellipse(0, 0, radius * (1.0 + p * 0.22), radius * (0.58 + pulse * 0.12), 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.62 + (visuals.critical ? 0.16 : 0));
-    ctx.lineWidth = visuals.heavy ? 5 : 3;
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.42 + (visuals.critical ? 0.10 : 0));
+    ctx.lineWidth = visuals.heavy ? 3 : 2;
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(-radius * 0.62, -7);
     ctx.lineTo(radius * (0.55 + p * 0.18), 9);
     ctx.stroke();
 
-    ctx.strokeStyle = this.hexToRgba(impactColor, visuals.critical ? 0.86 : 0.66);
-    ctx.lineWidth = visuals.heavy ? 3 : 2;
-    const shardCount = visuals.critical ? 9 : (visuals.heavy ? 7 : 5);
+    ctx.strokeStyle = this.hexToRgba(impactColor, visuals.critical ? 0.52 : 0.38);
+    ctx.lineWidth = visuals.heavy ? 2 : 1.5;
+    const shardCount = visuals.critical ? 5 : (visuals.heavy ? 4 : 3);
     for (let i = 0; i < shardCount; i++) {
       const side = i - (shardCount - 1) / 2;
       const spread = side * 0.23;
@@ -4711,8 +4753,8 @@ class CanvasRenderer {
     }
 
     if (visuals.critical) {
-      ctx.strokeStyle = this.hexToRgba("#f1c40f", 0.72);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = this.hexToRgba("#f1c40f", 0.42);
+      ctx.lineWidth = 1.4;
       ctx.rotate(-shockAngle + t * 0.5);
       ctx.beginPath();
       for (let i = 0; i < 8; i++) {
@@ -4726,18 +4768,18 @@ class CanvasRenderer {
 
     ctx.save();
     ctx.translate(x + direction * 8, groundY);
-    ctx.globalAlpha = alpha * (visuals.heavy ? 0.42 : 0.28);
-    ctx.fillStyle = this.hexToRgba(impactColor, 0.18);
-    ctx.strokeStyle = this.hexToRgba(impactColor, 0.46);
+    ctx.globalAlpha = alpha * (visuals.heavy ? 0.28 : 0.18);
+    ctx.fillStyle = this.hexToRgba(impactColor, 0.08);
+    ctx.strokeStyle = this.hexToRgba(impactColor, 0.28);
     ctx.shadowColor = impactColor;
-    ctx.shadowBlur = visuals.heavy ? 16 : 10;
-    ctx.lineWidth = visuals.heavy ? 3 : 2;
+    ctx.shadowBlur = visuals.heavy ? 7 : 4;
+    ctx.lineWidth = visuals.heavy ? 2 : 1.4;
     ctx.beginPath();
     ctx.ellipse(0, 0, radius * (0.75 + p * 0.48), Math.max(5, radius * 0.12), 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.lineCap = "round";
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const yy = -2 + i * 5;
       ctx.beginPath();
       ctx.moveTo(-direction * (radius * 0.08 + i * 4), yy);
@@ -4863,8 +4905,10 @@ class CanvasRenderer {
 
   drawActorIntentBadgeLayer(ctx, x, y, visuals, t) {
     if (!visuals || !visuals.active) return;
+    const ornamentScale = this.visualScale("ornament");
+    if (ornamentScale <= 0.05) return;
     const color = visuals.color || "#f1c40f";
-    const intensity = Utils.clamp(visuals.intensity || 0.5, 0, 1.2);
+    const intensity = Utils.clamp(visuals.intensity || 0.5, 0, 1.2) * ornamentScale;
     const progress = Utils.clamp(visuals.progress || 0, 0, 1);
     const pulse = 0.5 + Math.sin(t * 8 + progress * Math.PI) * 0.5;
     const bx = x + (visuals.x || 0);
@@ -4875,11 +4919,11 @@ class CanvasRenderer {
     ctx.globalCompositeOperation = "lighter";
     ctx.translate(bx, by);
     ctx.shadowColor = color;
-    ctx.shadowBlur = 10 + intensity * 12;
+    ctx.shadowBlur = 3 + intensity * 5;
 
-    ctx.fillStyle = this.hexToRgba("#071018", 0.55 + intensity * 0.12);
-    ctx.strokeStyle = this.hexToRgba(color, 0.42 + intensity * 0.32);
-    ctx.lineWidth = 2;
+    ctx.fillStyle = this.hexToRgba("#071018", 0.44 + intensity * 0.08);
+    ctx.strokeStyle = this.hexToRgba(color, 0.20 + intensity * 0.18);
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.arc(0, 0, radius + intensity * 2, 0, Math.PI * 2);
     ctx.fill();
@@ -4887,16 +4931,16 @@ class CanvasRenderer {
 
     const start = -Math.PI * 0.5;
     const end = start + Math.PI * 2 * progress;
-    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.62 + intensity * 0.18);
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = this.hexToRgba("#ffffff", 0.36 + intensity * 0.12);
+    ctx.lineWidth = 1.7;
     ctx.beginPath();
     ctx.arc(0, 0, radius + 4, start, end);
     ctx.stroke();
 
     if (visuals.kind === "attack" || visuals.kind === "cast") {
-      ctx.strokeStyle = this.hexToRgba(color, 0.32 + intensity * 0.24);
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = this.hexToRgba(color, 0.16 + intensity * 0.12);
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 2; i++) {
         const a = -0.7 + i * 0.7 + pulse * 0.15;
         ctx.beginPath();
         ctx.moveTo(Math.cos(a) * (radius + 7), Math.sin(a) * (radius + 7));
@@ -4904,8 +4948,8 @@ class CanvasRenderer {
         ctx.stroke();
       }
     } else if (visuals.kind === "defense") {
-      ctx.strokeStyle = this.hexToRgba(color, 0.46 + intensity * 0.22);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = this.hexToRgba(color, 0.26 + intensity * 0.12);
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.moveTo(0, -radius - 5);
       ctx.lineTo(radius + 6, 0);
@@ -4914,8 +4958,8 @@ class CanvasRenderer {
       ctx.closePath();
       ctx.stroke();
     } else if (visuals.kind === "hit") {
-      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.70);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.42);
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(-radius * 0.6, -radius * 0.6);
       ctx.lineTo(radius * 0.6, radius * 0.6);
@@ -4924,7 +4968,7 @@ class CanvasRenderer {
       ctx.stroke();
     }
 
-    ctx.fillStyle = visuals.kind === "hit" ? "#ffffff" : this.hexToRgba("#ffffff", 0.92);
+    ctx.fillStyle = visuals.kind === "hit" ? this.hexToRgba("#ffffff", 0.72) : this.hexToRgba("#ffffff", 0.78);
     ctx.font = visuals.kind === "qte" ? "bold 12px sans-serif" : "bold 16px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -5131,7 +5175,9 @@ class CanvasRenderer {
 
   drawPlayerDefenseIntentOverlay(ctx, scene, x, y, visuals, t) {
     if (!visuals || !visuals.active) return;
-    const alpha = visuals.inResponse ? 0.82 : 0.42;
+    const visualScale = this.visualScale("defenseIntent");
+    if (visualScale <= 0.05) return;
+    const alpha = (visuals.inResponse ? 0.68 : 0.18) * visualScale;
     const pulse = 0.78 + Math.sin(t * (visuals.inResponse ? 9 : 5)) * 0.10 + visuals.intensity * 0.18;
     const incomingColor = visuals.color || "#2ecc71";
 
@@ -5140,15 +5186,17 @@ class CanvasRenderer {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    ctx.strokeStyle = this.hexToRgba("#2ecc71", alpha * 0.28);
-    ctx.fillStyle = this.hexToRgba("#2ecc71", alpha * 0.035);
+    ctx.strokeStyle = this.hexToRgba("#2ecc71", alpha * (visuals.inResponse ? 0.24 : 0.12));
+    ctx.fillStyle = this.hexToRgba("#2ecc71", alpha * 0.02);
     ctx.shadowColor = "#2ecc71";
-    ctx.shadowBlur = visuals.inResponse ? 16 : 8;
-    ctx.lineWidth = visuals.inResponse ? 2.5 : 1.6;
-    ctx.beginPath();
-    ctx.ellipse(x + 10, y + 45, 58 + pulse * 6, 15 + pulse * 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    ctx.shadowBlur = visuals.inResponse ? 8 : 3;
+    ctx.lineWidth = visuals.inResponse ? 2 : 1.2;
+    if (visuals.inResponse) {
+      ctx.beginPath();
+      ctx.ellipse(x + 10, y + 45, 52 + pulse * 4, 12 + pulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
 
     if (visuals.dodge) {
       this.drawDefenseDodgeFootwork(ctx, x, y, alpha, t, visuals.inResponse);
@@ -5169,11 +5217,11 @@ class CanvasRenderer {
   drawDefenseDodgeFootwork(ctx, x, y, alpha, t, inResponse) {
     ctx.save();
     ctx.strokeStyle = this.hexToRgba("#2ecc71", alpha * (inResponse ? 0.60 : 0.34));
-    ctx.fillStyle = this.hexToRgba("#2ecc71", alpha * 0.09);
+    ctx.fillStyle = this.hexToRgba("#2ecc71", alpha * 0.045);
     ctx.shadowColor = "#2ecc71";
-    ctx.shadowBlur = inResponse ? 14 : 7;
+    ctx.shadowBlur = inResponse ? 6 : 2;
     ctx.lineWidth = inResponse ? 2.4 : 1.6;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const step = i + 1;
       const offset = step * 22;
       const bob = Math.sin(t * 7 + i) * 2;
@@ -5194,24 +5242,24 @@ class CanvasRenderer {
   drawDefenseParryArc(ctx, x, y, color, alpha, t, spellLike) {
     ctx.save();
     const parryColor = spellLike ? "#f1dcff" : "#f1c40f";
-    ctx.strokeStyle = this.hexToRgba(parryColor, alpha * 0.72);
+    ctx.strokeStyle = this.hexToRgba(parryColor, alpha * 0.60);
     ctx.shadowColor = color || parryColor;
-    ctx.shadowBlur = 16;
-    ctx.lineWidth = 3;
+    ctx.shadowBlur = 7;
+    ctx.lineWidth = 2.4;
     const cx = x + 44;
     const cy = y - 8;
     ctx.beginPath();
     ctx.arc(cx, cy, 36 + Math.sin(t * 8) * 2, -1.18, 1.10);
     ctx.stroke();
-    ctx.strokeStyle = this.hexToRgba("#ffffff", alpha * 0.36);
+    ctx.strokeStyle = this.hexToRgba("#ffffff", alpha * 0.20);
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(cx + 4, cy, 24, -1.05, 0.96);
     ctx.stroke();
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const a = -0.95 + i * 0.74 + Math.sin(t * 5 + i) * 0.04;
       const r = 40;
-      ctx.fillStyle = this.hexToRgba(parryColor, alpha * 0.62);
+      ctx.fillStyle = this.hexToRgba(parryColor, alpha * 0.46);
       ctx.beginPath();
       ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 3.5, 0, Math.PI * 2);
       ctx.fill();
@@ -5224,11 +5272,11 @@ class CanvasRenderer {
     const guardX = x + 58;
     const guardY = y - 5;
     const wobble = Math.sin(t * 7) * 2;
-    ctx.strokeStyle = this.hexToRgba(color || "#5dade2", alpha * 0.70);
-    ctx.fillStyle = this.hexToRgba(color || "#5dade2", alpha * 0.10);
+    ctx.strokeStyle = this.hexToRgba(color || "#5dade2", alpha * 0.58);
+    ctx.fillStyle = this.hexToRgba(color || "#5dade2", alpha * 0.055);
     ctx.shadowColor = color || "#5dade2";
-    ctx.shadowBlur = inResponse ? 18 : 10;
-    ctx.lineWidth = inResponse ? 3 : 2;
+    ctx.shadowBlur = inResponse ? 8 : 4;
+    ctx.lineWidth = inResponse ? 2.4 : 1.6;
     ctx.beginPath();
     ctx.roundRect(guardX - 16, guardY - 38 + wobble, 34, 76, 11);
     ctx.fill();
@@ -5249,11 +5297,11 @@ class CanvasRenderer {
     const cx = x + 34;
     const cy = y - 18;
     const radius = visuals.shieldEnchant ? 48 : 36;
-    ctx.strokeStyle = this.hexToRgba(color || "#9b59b6", alpha * 0.50);
-    ctx.fillStyle = this.hexToRgba(color || "#9b59b6", alpha * 0.045);
+    ctx.strokeStyle = this.hexToRgba(color || "#9b59b6", alpha * 0.34);
+    ctx.fillStyle = this.hexToRgba(color || "#9b59b6", alpha * 0.024);
     ctx.shadowColor = color || "#9b59b6";
-    ctx.shadowBlur = visuals.inResponse ? 18 : 10;
-    ctx.lineWidth = 2;
+    ctx.shadowBlur = visuals.inResponse ? 8 : 4;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.ellipse(cx, cy, radius, radius * 0.48, Math.sin(t * 1.8) * 0.22, 0, Math.PI * 2);
     ctx.fill();
@@ -5264,41 +5312,45 @@ class CanvasRenderer {
 
   drawPlayerStatusAuras(ctx, scene, x, y, color, visuals, t) {
     if (!visuals) return;
-    const heatAlpha = Utils.clamp(visuals.heatRatio, 0, 1);
-    const spellAlpha = Utils.clamp(visuals.spellRatio, 0, 1);
+    const stateDampen = scene && (scene.turnState === "enemy_turn" || scene.turnState === "attack_active") ? 0.72 : 1;
+    const visualScale = this.visualScale("statusAura") * stateDampen;
+    if (visualScale <= 0.05) return;
+    const heatAlpha = Utils.clamp(visuals.heatRatio, 0, 1) * visualScale;
+    const spellAlpha = Utils.clamp(visuals.spellRatio, 0, 1) * visualScale;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
     if (heatAlpha > 0.04) {
       const flameColor = visuals.heatRatio >= 0.85 ? "#ff4d2e" : "#e67e22";
-      ctx.strokeStyle = this.hexToRgba(flameColor, 0.18 + heatAlpha * 0.28);
-      ctx.fillStyle = this.hexToRgba(flameColor, 0.08 + heatAlpha * 0.10);
+      ctx.strokeStyle = this.hexToRgba(flameColor, 0.08 + heatAlpha * 0.16);
+      ctx.fillStyle = this.hexToRgba(flameColor, 0.035 + heatAlpha * 0.045);
       ctx.shadowColor = flameColor;
-      ctx.shadowBlur = 14 + heatAlpha * 12;
-      ctx.lineWidth = 2 + heatAlpha * 2;
+      ctx.shadowBlur = 5 + heatAlpha * 6;
+      ctx.lineWidth = 1.2 + heatAlpha * 1.4;
       ctx.beginPath();
       ctx.ellipse(x, y + 45, 48 + heatAlpha * 20, 13 + heatAlpha * 5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
-      for (let i = 0; i < 4; i++) {
-        const phase = t * (5.2 + i * 0.4) + i * 1.7;
-        const fx = x - 34 + i * 22 + Math.sin(phase) * 4;
+      for (let i = 0; i < 2; i++) {
+        const phase = t * (4.6 + i * 0.4) + i * 2.2;
+        const fx = x - 19 + i * 38 + Math.sin(phase) * 3;
         const fy = y + 28 - Math.abs(Math.sin(phase * 0.8)) * 12;
-        this.drawStatusFlame(ctx, fx, fy, 22 + heatAlpha * 16, flameColor, phase, 0.32 + heatAlpha * 0.38);
+        this.drawStatusFlame(ctx, fx, fy, 18 + heatAlpha * 10, flameColor, phase, 0.18 + heatAlpha * 0.24);
       }
     }
 
     if (spellAlpha > 0.04) {
       const spellColor = visuals.overload ? "#f39c12" : "#9b59b6";
-      this.drawStatusOrbit(ctx, x, y - 8, 42 + spellAlpha * 16, spellColor, t, 0.20 + spellAlpha * 0.34, visuals.overload ? 4 : 3);
+      this.drawStatusOrbit(ctx, x, y - 8, 36 + spellAlpha * 10, spellColor, t, 0.10 + spellAlpha * 0.20, visuals.overload ? 3 : 2);
       if (visuals.spellEnergy > 0) {
-        for (let i = 0; i < 3; i++) {
-          const phase = t * 1.8 + i * Math.PI * 2 / 3;
+        const sparkCount = visuals.overload ? 2 : 1;
+        for (let i = 0; i < sparkCount; i++) {
+          const phase = t * 1.6 + i * Math.PI * 2 / Math.max(1, sparkCount);
           const ox = x + Math.cos(phase) * (28 + spellAlpha * 18);
           const oy = y - 12 + Math.sin(phase) * 10;
-          this.drawStatusSpark(ctx, ox, oy, spellColor, 0.36 + spellAlpha * 0.28, 4 + spellAlpha * 4);
+          this.drawStatusSpark(ctx, ox, oy, spellColor, 0.18 + spellAlpha * 0.20, 3 + spellAlpha * 2);
         }
       }
     }
@@ -5308,16 +5360,19 @@ class CanvasRenderer {
 
   drawPlayerStatusOverlays(ctx, scene, x, y, color, visuals, t) {
     if (!visuals) return;
+    const stateDampen = scene && (scene.turnState === "enemy_turn" || scene.turnState === "attack_active") ? 0.76 : 1;
+    const visualScale = this.visualScale("statusAura") * stateDampen;
+    if (visualScale <= 0.05) return;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     if (visuals.shieldEnchant) {
       const shieldColor = "#9b59b6";
-      ctx.strokeStyle = this.hexToRgba(shieldColor, 0.78);
-      ctx.fillStyle = this.hexToRgba(shieldColor, 0.08);
+      ctx.strokeStyle = this.hexToRgba(shieldColor, 0.42 * visualScale);
+      ctx.fillStyle = this.hexToRgba(shieldColor, 0.04 * visualScale);
       ctx.shadowColor = shieldColor;
-      ctx.shadowBlur = 18;
-      ctx.lineWidth = 3;
+      ctx.shadowBlur = 7;
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(x + 42, y - 4, 42 + Math.sin(t * 7) * 3, -1.28, 1.18);
       ctx.stroke();
@@ -5330,18 +5385,18 @@ class CanvasRenderer {
 
     if (visuals.absorbReady) {
       const absorbColor = "#5dade2";
-      this.drawStatusOrbit(ctx, x, y - 18, 26, absorbColor, -t * 1.3, 0.46, 3);
-      this.drawStatusSpark(ctx, x, y - 20, absorbColor, 0.72, 8);
+      this.drawStatusOrbit(ctx, x, y - 18, 24, absorbColor, -t * 1.3, 0.24 * visualScale, 2);
+      this.drawStatusSpark(ctx, x, y - 20, absorbColor, 0.38 * visualScale, 5);
     }
 
     if (visuals.overload) {
       const overloadColor = "#f39c12";
-      ctx.strokeStyle = this.hexToRgba(overloadColor, 0.58 + Math.sin(t * 11) * 0.12);
+      ctx.strokeStyle = this.hexToRgba(overloadColor, (0.32 + Math.sin(t * 11) * 0.06) * visualScale);
       ctx.shadowColor = overloadColor;
-      ctx.shadowBlur = 22;
+      ctx.shadowBlur = 8;
       ctx.lineWidth = 2;
-      for (let i = 0; i < 5; i++) {
-        const yy = y - 35 + i * 15;
+      for (let i = 0; i < 3; i++) {
+        const yy = y - 28 + i * 18;
         ctx.beginPath();
         ctx.moveTo(x - 34 + Math.sin(t * 9 + i) * 4, yy);
         ctx.lineTo(x - 10 + Math.cos(t * 8 + i) * 5, yy + 7);
@@ -5354,40 +5409,42 @@ class CanvasRenderer {
 
   drawEnemyStatusAuras(ctx, scene, x, y, color, visuals, t) {
     if (!visuals) return;
+    const visualScale = this.visualScale("statusAura");
+    if (visualScale <= 0.05) return;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
     if (visuals.burn) {
       const burnColor = "#e74c3c";
-      ctx.strokeStyle = this.hexToRgba(burnColor, 0.46);
-      ctx.fillStyle = this.hexToRgba("#e67e22", 0.10);
+      ctx.strokeStyle = this.hexToRgba(burnColor, 0.22 * visualScale);
+      ctx.fillStyle = this.hexToRgba("#e67e22", 0.055 * visualScale);
       ctx.shadowColor = burnColor;
-      ctx.shadowBlur = 18;
-      ctx.lineWidth = 3;
+      ctx.shadowBlur = 7;
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.ellipse(x, y + 52, 62, 17, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 2; i++) {
         const phase = t * (5 + i * 0.35) + i * 1.4;
-        this.drawStatusFlame(ctx, x - 42 + i * 21 + Math.sin(phase) * 3, y + 38 - Math.abs(Math.sin(phase)) * 12, 26, burnColor, phase, 0.55);
+        this.drawStatusFlame(ctx, x - 22 + i * 44 + Math.sin(phase) * 2, y + 38 - Math.abs(Math.sin(phase)) * 10, 22, burnColor, phase, 0.32 * visualScale);
       }
     }
 
     if (visuals.armorBreak) {
       const crackColor = "#ff6b5f";
-      ctx.strokeStyle = this.hexToRgba(crackColor, 0.36 + Math.sin(t * 8) * 0.08);
+      ctx.strokeStyle = this.hexToRgba(crackColor, (0.22 + Math.sin(t * 8) * 0.04) * visualScale);
       ctx.shadowColor = crackColor;
-      ctx.shadowBlur = 12;
-      ctx.lineWidth = 2;
+      ctx.shadowBlur = 5;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.ellipse(x, y + 54, 70, 19, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
     if (visuals.stun) {
-      this.drawStatusOrbit(ctx, x, y - 80, 34, "#f1c40f", t * 2.2, 0.62, 5);
+      this.drawStatusOrbit(ctx, x, y - 80, 30, "#f1c40f", t * 2.2, 0.34 * visualScale, 3);
     }
 
     ctx.restore();
@@ -5395,16 +5452,18 @@ class CanvasRenderer {
 
   drawEnemyStatusOverlays(ctx, scene, x, y, color, visuals, t) {
     if (!visuals) return;
+    const visualScale = this.visualScale("statusAura");
+    if (visualScale <= 0.05) return;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
     if (visuals.armorBreak) {
       const crackColor = "#ff786d";
-      ctx.strokeStyle = this.hexToRgba(crackColor, 0.76);
+      ctx.strokeStyle = this.hexToRgba(crackColor, 0.46 * visualScale);
       ctx.shadowColor = crackColor;
-      ctx.shadowBlur = 14;
-      ctx.lineWidth = 3;
+      ctx.shadowBlur = 6;
+      ctx.lineWidth = 2;
       const cracks = [
         [[x - 18, y - 26], [x - 7, y - 8], [x - 15, y + 12]],
         [[x + 20, y - 18], [x + 6, y - 2], [x + 15, y + 22]],
@@ -5420,19 +5479,19 @@ class CanvasRenderer {
 
     if (visuals.burn) {
       const burnColor = "#ff6b2f";
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 2; i++) {
         const phase = t * 6 + i * 1.5;
-        this.drawStatusFlame(ctx, x - 24 + i * 16, y + 4 - Math.abs(Math.sin(phase)) * 10, 24, burnColor, phase, 0.48);
+        this.drawStatusFlame(ctx, x - 18 + i * 36, y + 4 - Math.abs(Math.sin(phase)) * 8, 20, burnColor, phase, 0.28 * visualScale);
       }
     }
 
     if (visuals.stun) {
       const starColor = "#f1c40f";
-      for (let i = 0; i < 5; i++) {
-        const phase = t * 2.6 + i * Math.PI * 2 / 5;
+      for (let i = 0; i < 3; i++) {
+        const phase = t * 2.3 + i * Math.PI * 2 / 3;
         const sx = x + Math.cos(phase) * 36;
         const sy = y - 82 + Math.sin(phase) * 9;
-        this.drawStatusStar(ctx, sx, sy, 5 + Math.sin(t * 8 + i) * 1.2, starColor, 0.72);
+        this.drawStatusStar(ctx, sx, sy, 4 + Math.sin(t * 8 + i) * 0.8, starColor, 0.42 * visualScale);
       }
     }
 
@@ -5467,8 +5526,8 @@ class CanvasRenderer {
     ctx.save();
     ctx.strokeStyle = this.hexToRgba(color || "#ffffff", alpha);
     ctx.shadowColor = color || "#ffffff";
-    ctx.shadowBlur = 14;
-    ctx.lineWidth = 2;
+    ctx.shadowBlur = 5;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.ellipse(x, y, radius, radius * 0.32, 0.14, 0, Math.PI * 2);
     ctx.stroke();
@@ -5476,7 +5535,7 @@ class CanvasRenderer {
       const phase = t + i * Math.PI * 2 / points;
       const px = x + Math.cos(phase) * radius;
       const py = y + Math.sin(phase) * radius * 0.32;
-      this.drawStatusSpark(ctx, px, py, color, alpha + 0.12, 3.5);
+      this.drawStatusSpark(ctx, px, py, color, alpha + 0.06, 2.8);
     }
     ctx.restore();
   }
@@ -5485,7 +5544,7 @@ class CanvasRenderer {
     ctx.save();
     ctx.fillStyle = this.hexToRgba(color || "#ffffff", alpha);
     ctx.shadowColor = color || "#ffffff";
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 5;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -5497,7 +5556,7 @@ class CanvasRenderer {
     ctx.translate(x, y);
     ctx.fillStyle = this.hexToRgba(color || "#f1c40f", alpha);
     ctx.shadowColor = color || "#f1c40f";
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 5;
     ctx.beginPath();
     for (let i = 0; i < 10; i++) {
       const r = i % 2 === 0 ? radius : radius * 0.45;
@@ -6877,8 +6936,10 @@ class CanvasRenderer {
 
   drawEnemyActionPersonalityLayer(ctx, visuals, t) {
     if (!visuals || !visuals.active) return;
+    const ornamentScale = this.visualScale("ornament");
+    if (ornamentScale <= 0.05) return;
     const color = visuals.color || "#e74c3c";
-    const intensity = Utils.clamp(visuals.intensity || 0.2, 0, 1.15);
+    const intensity = Utils.clamp(visuals.intensity || 0.2, 0, 1.15) * ornamentScale;
     const pulse = visuals.pulse || 0;
 
     ctx.save();
@@ -6886,43 +6947,44 @@ class CanvasRenderer {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.shadowColor = color;
-    ctx.shadowBlur = 10 + intensity * 14;
+    ctx.shadowBlur = 3 + intensity * 5;
 
     if (visuals.kind === "ritual-focus") {
       const anchor = visuals.anchor || { x: -68, y: -34 };
-      const radius = 20 + intensity * 11 + pulse * 3;
-      this.drawEnemyGlyph(ctx, anchor.x, anchor.y, radius, color, t);
-      ctx.strokeStyle = this.hexToRgba(color, 0.24 + intensity * 0.34);
-      ctx.lineWidth = 2;
+      const radius = 15 + intensity * 7 + pulse * 1.5;
+      this.drawEnemyGlyph(ctx, anchor.x, anchor.y, radius, color, t, 0.34 + intensity * 0.20);
+      ctx.strokeStyle = this.hexToRgba(color, 0.08 + intensity * 0.14);
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
       ctx.moveTo(-18, -16);
       ctx.quadraticCurveTo(-38, -42 - pulse * 10, anchor.x, anchor.y);
       ctx.stroke();
-      ctx.fillStyle = this.hexToRgba("#ffffff", 0.56 + intensity * 0.16);
-      for (let i = 0; i < (visuals.orbitCount || 3); i++) {
-        const a = t * (1.7 + intensity * 0.6) + i * Math.PI * 2 / Math.max(1, visuals.orbitCount || 3);
+      ctx.fillStyle = this.hexToRgba("#ffffff", 0.24 + intensity * 0.10);
+      const orbitCount = Math.min(2, visuals.orbitCount || 3);
+      for (let i = 0; i < orbitCount; i++) {
+        const a = t * (1.7 + intensity * 0.6) + i * Math.PI * 2 / Math.max(1, orbitCount);
         const ox = anchor.x + Math.cos(a) * (radius + 9);
         const oy = anchor.y + Math.sin(a) * (radius * 0.58);
         ctx.beginPath();
-        ctx.arc(ox, oy, 3.5 + intensity * 1.5, 0, Math.PI * 2);
+        ctx.arc(ox, oy, 2.4 + intensity, 0, Math.PI * 2);
         ctx.fill();
       }
     } else if (visuals.kind === "knife-speed") {
-      const count = visuals.afterimageCount || 3;
-      ctx.strokeStyle = this.hexToRgba(color, 0.18 + intensity * 0.28);
-      ctx.lineWidth = 2;
+      const count = Math.min(2, visuals.afterimageCount || 3);
+      ctx.strokeStyle = this.hexToRgba(color, 0.08 + intensity * 0.12);
+      ctx.lineWidth = 1.4;
       for (let i = 0; i < count; i++) {
         const shift = i * 13 + intensity * 10;
-        ctx.globalAlpha = 0.40 - i * 0.07;
+        ctx.globalAlpha = (0.22 - i * 0.05) * ornamentScale;
         ctx.beginPath();
         ctx.moveTo(18 + shift * 0.2, -36 + i * 8);
         ctx.quadraticCurveTo(-18 - shift, -12 + i * 6, -72 - shift * 0.35, 18 + i * 3);
         ctx.stroke();
       }
-      ctx.globalAlpha = 0.72;
-      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.42 + intensity * 0.26);
-      ctx.lineWidth = 2.5;
-      for (let i = 0; i < 2; i++) {
+      ctx.globalAlpha = 0.38 * ornamentScale;
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.22 + intensity * 0.12);
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 1; i++) {
         ctx.beginPath();
         ctx.arc(-44 - visuals.reach * 0.45, -4 + i * 18, 38 + i * 12, Math.PI * 0.72, Math.PI * 1.42);
         ctx.stroke();
@@ -6930,15 +6992,15 @@ class CanvasRenderer {
     } else if (visuals.kind === "ward-brace") {
       const guard = visuals.guardPower || intensity;
       const x = -60 - visuals.reach * 0.45;
-      ctx.fillStyle = this.hexToRgba(color, 0.06 + guard * 0.13);
-      ctx.strokeStyle = this.hexToRgba(color, 0.34 + guard * 0.34);
-      ctx.lineWidth = 3;
+      ctx.fillStyle = this.hexToRgba(color, 0.025 + guard * 0.05);
+      ctx.strokeStyle = this.hexToRgba(color, 0.14 + guard * 0.16);
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.roundRect(x - 26, -42, 45, 88, 10);
       ctx.fill();
       ctx.stroke();
-      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.18 + guard * 0.22);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = this.hexToRgba("#ffffff", 0.08 + guard * 0.12);
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
       ctx.moveTo(x - 18, -14);
       ctx.lineTo(x + 11, -14);
@@ -6946,7 +7008,7 @@ class CanvasRenderer {
       ctx.lineTo(x - 4, 32);
       ctx.stroke();
       if (visuals.pose === "bash") {
-        ctx.strokeStyle = this.hexToRgba(color, 0.32 + guard * 0.32);
+        ctx.strokeStyle = this.hexToRgba(color, 0.12 + guard * 0.16);
         ctx.beginPath();
         ctx.moveTo(x - 30, -24);
         ctx.lineTo(x - 58, 0);
@@ -6955,15 +7017,15 @@ class CanvasRenderer {
       }
     } else if (visuals.kind === "plate-breaker" || visuals.kind === "stone-breaker") {
       const weight = visuals.weightPower || intensity;
-      ctx.strokeStyle = this.hexToRgba(color, 0.22 + weight * 0.30);
-      ctx.lineWidth = visuals.kind === "plate-breaker" ? 4 : 3;
+      ctx.strokeStyle = this.hexToRgba(color, 0.08 + weight * 0.14);
+      ctx.lineWidth = visuals.kind === "plate-breaker" ? 2.2 : 1.8;
       if (visuals.pose === "overhead") {
         ctx.beginPath();
         ctx.moveTo(-18, -44);
         ctx.lineTo(-28 - visuals.reach * 0.2, -106);
         ctx.stroke();
-        ctx.strokeStyle = this.hexToRgba("#ffffff", 0.20 + weight * 0.22);
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = this.hexToRgba("#ffffff", 0.08 + weight * 0.10);
+        ctx.lineWidth = 1.3;
         ctx.beginPath();
         ctx.moveTo(-42, -96);
         ctx.lineTo(-28, -112);
@@ -6974,9 +7036,9 @@ class CanvasRenderer {
         ctx.arc(-44 - visuals.reach * 0.35, 6, 42 + visuals.reach * 0.16, Math.PI * 0.76, Math.PI * 1.28);
         ctx.stroke();
       }
-      ctx.strokeStyle = this.hexToRgba(color, 0.16 + weight * 0.20);
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = this.hexToRgba(color, 0.06 + weight * 0.10);
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 2; i++) {
         const y = 62 + i * 5;
         ctx.beginPath();
         ctx.moveTo(-50 + i * 18, y);
@@ -8594,7 +8656,7 @@ class CanvasRenderer {
   drawScreenFlash(scene) {
     const ctx = this.ctx;
     const f = scene.screenFlash;
-    const alpha = (f.timer / f.maxTime) * 0.45;
+    const alpha = (f.timer / f.maxTime) * 0.18 * this.visualScale("screenFlash");
     ctx.fillStyle = f.color;
     ctx.globalAlpha = alpha;
     ctx.fillRect(0, 0, this.width, this.height);

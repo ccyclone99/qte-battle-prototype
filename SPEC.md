@@ -1757,6 +1757,46 @@ Acceptance criteria:
 - Flow smoke covers early whiff punishment and active-frame profiles.
 - `node scripts\verify.js --skip-visual` passes.
 
+### R55 - Visual Noise Reduction, Completed
+
+Goal: keep the live counter-flow readable after the melee active-frame pass. The screen should still communicate timing, clash, hit, and follow-up state, but decorative glow, repeated particles, status auras, and resource trails should no longer compete with the current enemy node.
+
+Implemented direction:
+
+- `CanvasRenderer` now has a central `visualBudget` and `visualScale()` helper for non-critical combat effects.
+- Stage lighting, actor ground sigils, encounter phase ornaments, action-personality ornaments, intent badges, and screen flash now use explicit ornament/flash budgets.
+- Resource pulse trails are reduced to a low-priority HUD accent:
+  - fewer moving dots,
+  - lower lane alpha,
+  - smaller meter halo and amount tag.
+- Actor motion lines and afterimages are subdued:
+  - fewer strokes,
+  - lower shadow blur,
+  - lower alpha,
+  - at most two afterimages.
+- Enemy-turn defense intent cues are quieter outside the actual response window.
+  - The ground ellipse only appears during the response window.
+  - Dodge, parry, guard, and mirror readiness cues use lower glow and fewer markers.
+- Player and enemy status auras now use the same noise budget.
+  - Heat, burn, stun, absorb, overload, and shield enchant effects keep readable identity but draw fewer sparks/flames.
+  - Enemy-turn and active-attack states dampen player status auras further.
+- Contact impact feedback is preserved but less explosive:
+  - fewer spokes/rings,
+  - lower ground impulse alpha,
+  - lower shadow blur.
+- `ParticleSystem` and `EffectBurstSystem` now use reduced spawn density, alpha scale, and glow scale for generic hit/slash/fire/magic/status particles and bursts.
+- Static smoke now protects the visual budget and particle-density controls.
+- The asset cache key is bumped to `r62`.
+
+Acceptance criteria:
+
+- Enemy-turn counter timing remains visible, especially the current response window.
+- Melee attacks no longer read as a pile of cross-screen glow, trails, and decorative particles.
+- Resource gain/spend feedback remains visible but does not pull attention away from the fight.
+- Status effects remain identifiable without surrounding the actor in dense persistent effects.
+- Static smoke protects `visualBudget`, resource pulse scaling, afterimage scaling, motion-line scaling, and particle density.
+- `node scripts\verify.js --skip-visual` passes.
+
 ### R15 - Delayed Settlement Prototype, Superseded By R16
 
 Goal: prove that QTE input completion should not immediately settle combat. The player needs a visible attack, guard, or cast follow-through before HP, resources, statuses, and turn flow resolve.
