@@ -1629,6 +1629,134 @@ Acceptance criteria:
 - Flow smoke asserts enemy multi-node pressure can be canceled by attack coverage and still resolves damage at active-attack impact.
 - `node scripts\verify.js --skip-visual` passes; visual smoke remains frozen until the demo/browser coverage is re-scoped.
 
+### R52 - Enemy-Turn Sequential Counter QTE Nodes, Completed
+
+Goal: replace the old "press once to cover multiple enemy nodes" clash behavior with an enemy-chain-driven counter flow. A multi-hit enemy turn now asks the player to answer each incoming node separately, similar to a spell chain, and only opens the follow-up window after a key node or posture threshold is cleared.
+
+Implemented direction:
+
+- `StyleDatabase.current` now exposes `counterFlow` instead of `counterCoverage`.
+  - The default plan is still the only playable combat plan.
+  - It has no spell loadout, no combat arts, and no public style selection.
+- Weapons now carry `counterProfile` data.
+  - Dual blades have short startup/recovery and can answer quick melee nodes repeatedly.
+  - Greatsword has higher posture damage but slower recovery and prefers heavy/finisher nodes.
+  - Staff is reserved for spell/projectile-oriented counter behavior.
+- Enemy attacks now carry counter tags:
+  - `quick_melee`, `melee`, `heavy_melee`, `bash`, `spell_cast`, and `finisher`.
+  - Each attack declares whether it can be clashed, interrupted, guarded, or dodged, plus a compact player hint.
+- Enemy chain nodes now carry role/counter metadata:
+  - `role`
+  - `counterNode`
+  - `opensFollowupOnSuccess`
+- Melee clash now targets only the current incoming enemy active attack.
+  - The player must input again on the next enemy node.
+  - The enemy node is canceled at the player's counter impact frame, not at keypress.
+  - Damage and posture are applied at the player counter impact frame.
+- Spell interrupt still cancels the active spell chain, but also waits for the player's counter impact frame before canceling enemy attacks and dealing damage.
+- The fight remains in `enemy_turn` while counter active attacks resolve.
+  - This lets the next enemy node open its own response window instead of hiding the rest of the chain behind `attack_active`.
+- Follow-up opens only when:
+  - the current counter node is a finisher/key node,
+  - no enemy nodes remain, or
+  - accumulated counter posture reaches the current `counterFlow.postureToFollowup` threshold.
+- The enemy timing UI now labels the green region as a counter window and includes `A/S/D` in recommendations when attack clash or spell interrupt is valid.
+
+Acceptance criteria:
+
+- Starting the default battle opens `counter_dojo` on `bladeRushTriple`.
+- `bladeRushTriple` requires three separate weapon inputs to counter all three nodes.
+- The first weapon input cancels only the first enemy node and does not open follow-up.
+- The second weapon input cancels only the second enemy node and still does not open follow-up.
+- The third weapon input cancels the finisher node and opens `followup_turn`.
+- `spellDoubleCut` can be interrupted from the spell node without starting `counterspell_reversal`.
+- Spell interrupt damage and enemy-chain cancel happen at the counter attack impact, not at keypress.
+- Static smoke asserts enemy attacks declare counter tags and the battle code resolves `counterNodeTargetId` sequentially.
+- Flow smoke asserts the sequential `A -> A -> A -> followup_turn` path.
+
+### R53 - Counterflow Presentation Sync, Completed
+
+Goal: make the current enemy-turn counter plan readable on the first live screen. The player should see one current threat, one counter timing HUD, and one impact result, instead of overlapping demo/debug text, old enemy bars, broad stage lighting, floating damage spam, and turn banners.
+
+Implemented direction:
+
+- Enemy turns now use `drawCounterFlowHud()` as the primary timing UI.
+  - The old enemy attack bar is not drawn during the live counter-flow turn.
+  - The big turn banner is suppressed while an enemy attack chain is active.
+  - HUD title format is compact: chain name, current node count, and attack name.
+- `drawCounterFocusLayer()` adds a small world-space cue for the current incoming node.
+  - Pre-response uses a thin threat line and target ring.
+  - Response timing shifts the target ring to green.
+  - The full enemy-chain route remains in the HUD instead of being drawn across the battlefield.
+- Enemy active attacks in `enemy_turn` only render the current incoming node plus impact/reaction remnants.
+  - Future queued nodes stay hidden until they become current.
+  - The legacy `drawEnemyAttackMotion()` fallback is skipped when active enemy attacks are present.
+- Counter and interrupt damage numbers/log spam are suppressed for the small per-node settlement.
+  - The player sees clash/interrupt impact feedback, hit-stop, actor reactions, and one meaningful follow-up cue.
+- Hidden drawers now use `visibility: hidden`, so help/log/debug panels do not visually or accessibly leak into normal combat.
+- Blocking overlays pause battle/demo updates.
+  - The tutorial can stay open without the enemy turn progressing or damaging the player.
+- Enemy-turn stage lighting is subdued.
+  - The bright stage lane is reduced during chained counter pressure so it cannot be mistaken for an attack path.
+- The asset cache key is bumped to `r55`.
+
+Acceptance criteria:
+
+- Starting battle and waiting on the tutorial keeps player HP at `100/100`.
+- Closing the tutorial shows only top status text, the current enemy-turn HUD, and normal canvas visuals; hidden drawers stay hidden.
+- Enemy-chain turn start does not show the large center `敌方回合` banner.
+- The visible world cue corresponds to the current incoming node, while future chain nodes remain represented only as HUD pips.
+- Per-node clash/interrupt settlement does not flood the screen with repeated small damage numbers.
+- Static smoke protects the tutorial pause, compact counter HUD, hidden drawer visibility, old-motion fallback guard, and subdued enemy-stage lane.
+- `node scripts\verify.js --skip-visual` passes.
+
+### R54 - Melee Active-Frame Counter And Whiff Punish, Completed
+
+Goal: make enemy-turn counter pressure feel like melee. Attack keys should create a real swing with startup, active frames, and recovery. A clash succeeds when the player's weapon active frames overlap the enemy weapon active frames; pressing early should whiff and expose the player instead of behaving like a large green-button prompt.
+
+Implemented direction:
+
+- Weapon counter profiles now define:
+  - `startup`
+  - `activeDuration`
+  - `recovery`
+  - `whiffVulnerability`
+- Enemy counter windows are now short active contact windows.
+  - Easy keeps longer readable windup, but the live clash window is roughly `0.20s - 0.34s` depending on attack type.
+  - The old `hitTime + 0.28` large response cap is no longer the main success window.
+- `getCounterNodeOutcome()` now compares active intervals:
+  - player active start/end
+  - enemy active start/end
+  - overlap duration
+  - contact time versus impact time for Perfect
+- Early attack input now creates a real `counterEarlyWhiff` active attack.
+  - It does not cancel the enemy node.
+  - It locks the response until the enemy impact.
+  - If the enemy attack reaches impact, the player is hit.
+- Late input remains a failed counter attempt and does not cancel the enemy node.
+- Failed counters use `defenseMode = "failedCounter"` so old defense shortcuts cannot accidentally convert a whiff into a block.
+- Active-attack profiles now expose `activeStart`, `activeDuration`, and `activeEnd` for testing, debugging, and future renderer work.
+- Enemy melee rendering no longer relies on cross-screen threat lines.
+  - Melee focus cues are local chevrons near the player.
+  - Long trajectory/contact guide lines are skipped for enemy melee pressure.
+  - `drawMeleeActiveAttack()` branches by telegraph type: stab, slash, smash, and bash.
+  - Melee active attacks skip cinematic lane rendering; their reticle anchors to the target side instead of the path midpoint.
+  - Stage lane decoration is limited to player and follow-up turns so enemy pressure cannot read as a projectile lane.
+  - Projectiles and spells still keep path/beam visuals.
+- The asset cache key is bumped to `r61`.
+
+Acceptance criteria:
+
+- Pressing A/S/D too early in `bladeRushTriple` creates `counterEarlyWhiff`.
+- Early whiff does not cancel the enemy node.
+- Early whiff locks the response until enemy impact and is punished by HP damage.
+- Pressing A/S/D during active overlap still cancels one current enemy node.
+- Three correct node responses still open `followup_turn`.
+- Spell interrupt still works and does not start `counterspell_reversal`.
+- Static smoke protects active-frame profiles, early-whiff punishment, failed-counter defense isolation, and melee-path suppression.
+- Flow smoke covers early whiff punishment and active-frame profiles.
+- `node scripts\verify.js --skip-visual` passes.
+
 ### R15 - Delayed Settlement Prototype, Superseded By R16
 
 Goal: prove that QTE input completion should not immediately settle combat. The player needs a visible attack, guard, or cast follow-through before HP, resources, statuses, and turn flow resolve.

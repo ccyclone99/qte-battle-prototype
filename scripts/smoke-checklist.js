@@ -24,6 +24,7 @@ const rendererJs = fs.readFileSync(path.join(root, "js/renderer.js"), "utf8");
 const fxJs = fs.readFileSync(path.join(root, "js/fx.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
 const chainsJs = fs.readFileSync(path.join(root, "js/data/chains.js"), "utf8");
+const weaponsJs = fs.readFileSync(path.join(root, "js/data/weapons.js"), "utf8");
 const qteDebugJs = fs.readFileSync(path.join(root, "js/systems/qte-debug.js"), "utf8");
 const hitConfirmJs = fs.readFileSync(path.join(root, "js/systems/hit-confirm.js"), "utf8");
 const activeAttacksJs = fs.readFileSync(path.join(root, "js/systems/active-attacks.js"), "utf8");
@@ -87,15 +88,18 @@ check("absorb spell maps greatsword D to overflow_burst", SpellDatabase.absorb.c
 
 check("only default combat plan remains", Object.keys(StyleDatabase).length === 1 && !!StyleDatabase.current);
 check("default plan uses counter dojo", StyleDatabase.current.preferredEncounter === "counter_dojo");
-check("default plan is not a spell or style-chain bundle", StyleDatabase.current.spells.length === 0 && StyleDatabase.current.combatArts.length === 0 && !StyleDatabase.current.counterChain && StyleDatabase.current.counterCoverage.dualBlades === 3);
+check("default plan is not a spell or style-chain bundle", StyleDatabase.current.spells.length === 0 && StyleDatabase.current.combatArts.length === 0 && !StyleDatabase.current.counterChain && StyleDatabase.current.counterFlow && StyleDatabase.current.counterFlow.enabled);
 check("counter dojo is not an absorb resource dojo", !("startSpellEnergy" in EncounterDatabase.encounters.counter_dojo.modifiers) && !("absorbEnergyMul" in EncounterDatabase.encounters.counter_dojo.modifiers) && !("absorbDamageMul" in EncounterDatabase.encounters.counter_dojo.modifiers));
 check("main menu removes style select", !indexHtml.includes('id="style-select"') && !indexHtml.includes('id="style-choice-grid"'));
 check("main menu disables demo entry", indexHtml.includes('id="btn-demo" hidden disabled'));
 check("main menu starts default combat plan on enemy turn", mainJs.includes("DEFAULT_COMBAT_PLAN_ID = \"current\"") && mainJs.includes("applyDefaultCombatPlan()") && mainJs.includes("battle.applyStyle(DEFAULT_COMBAT_PLAN_ID)") && mainJs.includes("battle.startEnemyTurn()"));
 check("main menu labels current plan", indexHtml.includes("敌方回合反制") && styleCss.includes(".menu-static-value"));
+check("tutorial explains sequential counter flow", indexHtml.includes("逐节点拼刀") && indexHtml.includes("不能一次按键自动覆盖整条连段") && !indexHtml.includes("我方回合：按 <b>A / S / D</b> 发动对应 QTE 链"));
+check("blocking overlays pause combat updates", mainJs.includes("function isBlockingOverlayVisible()") && mainJs.includes("const pausedByOverlay = isBlockingOverlayVisible()") && mainJs.includes("!pausedByOverlay && appState === \"battle\""));
 check("enemy attack chains exist", EnemyDatabase.attackChains && EnemyDatabase.attackChains.bladeRushTriple && EnemyDatabase.attackChains.spellDoubleCut && EnemyDatabase.attackChains.shieldSpellRush && EnemyDatabase.attackChains.feintCrush && EnemyDatabase.attackChains.curseNeedle && EnemyDatabase.attackChains.knifeFlurry);
 check("counter dojo rotates varied pressure chains", ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"].every(id => EncounterDatabase.encounters.counter_dojo.attackPattern.includes(id)));
 check("enemy attacks declare telegraphs", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.telegraph && attack.telegraph.type && attack.telegraph.shape && attack.telegraph.pose && attack.telegraph.width));
+check("enemy attacks declare counter tags", Object.values(EnemyDatabase.attacks || {}).every(attack => attack.counter && attack.counter.type && attack.counter.hint));
 
 for (const id of ["caster", "armored", "swift", "shielded"]) {
   check(`enemy archetype exists: ${id}`, !!(EnemyDatabase.archetypes && EnemyDatabase.archetypes[id]));
@@ -140,6 +144,8 @@ check("renderer has enemy telegraph helpers", rendererJs.includes("getEnemyTeleg
 check("renderer has enemy chain intent helpers", rendererJs.includes("getEnemyChainIntentVisuals") && rendererJs.includes("drawEnemyChainIntentLayer") && rendererJs.includes("currentIndex") && rendererJs.includes("nextCount"));
 check("renderer has player qte chain intent helpers", rendererJs.includes("getPlayerQTEChainIntentVisuals") && rendererJs.includes("drawPlayerQTEChainIntentLayer") && rendererJs.includes("completedCount") && rendererJs.includes("hasBranch"));
 check("renderer suppresses enemy attack floating message", rendererJs.includes('scene.turnState === "enemy_turn"') && rendererJs.includes("scene.enemyAttackPhase !== \"none\""));
+check("renderer has compact counterflow presentation", rendererJs.includes("drawCounterFlowHud") && rendererJs.includes("drawCounterFocusLayer") && rendererJs.includes('scene.turnState === "player_turn" || scene.turnState === "followup_turn"') && rendererJs.includes("showStageLane"));
+check("renderer skips legacy enemy motion when active attack exists", rendererJs.includes("hasEnemyActiveAttack") && rendererJs.includes("!hasEnemyActiveAttack") && rendererJs.includes("drawEnemyAttackMotion"));
 check("renderer has player active attack helpers", rendererJs.includes("getPlayerActiveAttackDescriptor") && rendererJs.includes("drawPlayerMeleeActiveAttack") && rendererJs.includes("drawPlayerProjectileActiveAttack") && rendererJs.includes("drawPlayerSpellActiveAttack") && rendererJs.includes("drawPlayerPulseActiveAttack"));
 check("renderer has actor status visual helpers", rendererJs.includes("getActorStatusVisuals") && rendererJs.includes("drawPlayerStatusAuras") && rendererJs.includes("drawEnemyStatusOverlays") && rendererJs.includes("drawStatusFlame"));
 check("renderer has resource pulse helpers", rendererJs.includes("getResourcePulseVisuals") && rendererJs.includes("drawResourcePulseLayer") && rendererJs.includes("quadraticPoint"));
@@ -155,6 +161,7 @@ check("touch controls include mouse fallback", mainJs.includes('addEventListener
 check("touch controls use delegated hit mapping", mainJs.includes("getVirtualKeyFromEvent") && mainJs.includes("nearestDistance"));
 check("touch controls handle virtual ESC", mainJs.includes("handleVirtualSystemKey") && mainJs.includes('appState === "battle"'));
 check("hidden touch controls are inaccessible", indexHtml.includes('aria-hidden="true"') && styleCss.includes("visibility: hidden") && mainJs.includes("setTouchControlsVisible") && mainJs.includes('setAttribute("aria-hidden"'));
+check("hidden drawers are visually inaccessible", styleCss.includes(".drawer:not(.hidden)") && styleCss.includes("visibility: hidden") && styleCss.includes("visibility: visible"));
 check("demo system is not reachable from menu", indexHtml.includes('id="btn-demo" hidden disabled') && mainJs.includes("function startDemo()") && mainJs.includes("return;"));
 check("enemy readout renderer exists", rendererJs.includes("drawEnemyAttackReadout") && rendererJs.includes("推荐"));
 check("audio has R7 feedback cues", audioJs.includes("sfxWindowOpen") && audioJs.includes("sfxResourceGain") && audioJs.includes("sfxTransition"));
@@ -215,8 +222,14 @@ check("active attack emits reaction and impact visuals", activeAttacksJs.include
 check("battle commits qte active attacks", battleJs.includes('kind: "playerQTE"') && battleJs.includes("resolvePlayerQTEImpact") && battleJs.includes("finishPlayerQTEFlow"));
 check("battle commits enemy active attacks", battleJs.includes("commitEnemyActiveAttack") && battleJs.includes('kind: "enemyAttack"') && battleJs.includes("onActiveAttackReactionWindow"));
 check("battle supports enemy attack chains", battleJs.includes("startEnemyAttackChain") && battleJs.includes("EnemyDatabase.attackChains") && battleJs.includes("triggerClashCounter"));
-check("battle splits dual clash counter hits", battleJs.includes("buildClashCounterSegments") && battleJs.includes("commitClashCounterSegments") && battleJs.includes("dualClashFollow"));
+check("battle resolves counter nodes sequentially", battleJs.includes("counterNodeTargetId") && battleJs.includes("finishCounterNodeAttack") && battleJs.includes("shouldCounterNodeOpenFollowup"));
+check("battle resolves counters by active-frame overlap", battleJs.includes("playerActiveStart") && battleJs.includes("enemyActiveStart") && battleJs.includes("overlapStart") && battleJs.includes("getCounterPerfectWindow"));
+check("battle punishes early counter whiffs", battleJs.includes("triggerEarlyCounterAttempt") && battleJs.includes("counterEarlyWhiff") && battleJs.includes('defenseMode = "failedCounter"') && flowSmokeJs.includes("early counter whiff is punished by hit"));
+check("battle suppresses small counter node damage noise", battleJs.includes("suppressFloatingText: true") && battleJs.includes("suppressLog: true") && battleJs.includes("resolveCounterNodeImpact") && battleJs.includes("resolveSpellInterruptImpact"));
+check("active attack profiles expose active frames", activeAttacksJs.includes("activeStart") && activeAttacksJs.includes("activeDuration") && activeAttacksJs.includes("activeEnd"));
+check("weapon counter profiles include active and whiff tuning", weaponsJs.includes("activeDuration") && weaponsJs.includes("whiffVulnerability"));
 check("renderer draws target-anchored melee active attacks", rendererJs.includes("drawActiveAttacks") && rendererJs.includes("drawMeleeActiveAttack") && !rendererJs.includes("drawActiveAttackPrompt") && !rendererJs.includes("攻击实体推进中"));
+check("renderer suppresses projectile-like enemy melee lines", rendererJs.includes("meleeEnemyPressure") && rendererJs.includes("const melee = attack.profile && attack.profile.type === \"melee\"") && rendererJs.includes('meleeType === "stab"') && rendererJs.includes('meleeType === "smash"'));
 check("battle splits melee qte hits", battleJs.includes("buildQTEHitSegments") && battleJs.includes("commitSegmentedQTEActiveAttacks") && battleJs.includes("suppressFlowComplete") && battleJs.includes("suppressImpactSideEffects"));
 check("battle trims qte floating text noise", battleJs.includes('if (outcome !== "success")') && !battleJs.includes("% 连击`, 740, 300"));
 check("renderer suppresses qte stale overlays", rendererJs.includes("shouldDrawFloatingMessage") && rendererJs.includes("shouldDrawTurnBanner") && rendererJs.includes('scene.turnState !== "qte_running"') && visualSmokeJs.includes("battle qte suppresses stale overlays"));

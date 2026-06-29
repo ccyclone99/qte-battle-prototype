@@ -6,6 +6,17 @@ const WeaponDatabase = {
     color: "#e74c3c",
     normalAttack: 18,
     icon: "大",
+    counterProfile: {
+      recovery: 0.48,
+      startup: 0.16,
+      travel: 0.08,
+      activeDuration: 0.18,
+      whiffVulnerability: 1.25,
+      postureDamage: 18,
+      hpDamage: 5,
+      finisherPostureDamage: 28,
+      allowedCounterTypes: ["heavy_melee", "finisher", "spell_cast"]
+    },
     chains: {
       A: "greatsword_a_v2",
       S: "greatsword_s_v2",
@@ -20,6 +31,17 @@ const WeaponDatabase = {
     color: "#9b59b6",
     normalAttack: 14,
     icon: "法",
+    counterProfile: {
+      recovery: 0.38,
+      startup: 0.18,
+      travel: 0.10,
+      activeDuration: 0.13,
+      whiffVulnerability: 1.18,
+      postureDamage: 10,
+      hpDamage: 3,
+      finisherPostureDamage: 18,
+      allowedCounterTypes: ["spell_cast", "projectile"]
+    },
     chains: {
       A: "staff_a",
       S: "staff_s",
@@ -34,6 +56,17 @@ const WeaponDatabase = {
     color: "#2ecc71",
     normalAttack: 12,
     icon: "双",
+    counterProfile: {
+      recovery: 0.18,
+      startup: 0.07,
+      travel: 0.05,
+      activeDuration: 0.13,
+      whiffVulnerability: 1.08,
+      postureDamage: 14,
+      hpDamage: 4,
+      finisherPostureDamage: 22,
+      allowedCounterTypes: ["quick_melee", "melee", "finisher", "spell_cast"]
+    },
     chains: {
       A: "dualblades_a_v2",
       S: "dualblades_s_v2",

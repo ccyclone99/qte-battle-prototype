@@ -244,13 +244,17 @@ class ActiveAttackSystem {
   emitCancelVisual(attack, response) {
     const queue = this.owner && this.owner.effectQueue;
     if (!queue) return;
+    const color = response === "guard"
+      ? "#2ecc71"
+      : (response === "clash" ? "#f1c40f" : (response === "interrupt" ? "#9b59b6" : "#95a5a6"));
     queue.emit({
       type: "burst",
       kind: "ring",
       anchor: attack.target === "player" ? "playerCore" : "enemyCore",
-      color: response === "guard" ? "#2ecc71" : "#95a5a6",
-      radius: response === "guard" ? 54 : 42,
-      width: 3,
+      color,
+      coreColor: response === "clash" ? "#ffffff" : color,
+      radius: response === "guard" ? 54 : (response === "clash" ? 62 : 46),
+      width: response === "clash" ? 4 : 3,
       duration: 0.24,
       label: `active:${attack.id}:${response}`
     });
@@ -378,6 +382,8 @@ class ActiveAttackSystem {
       profile.travel = tl.travel ?? profile.travel;
       profile.reactionStart = tl.reactionStart;
       profile.reactionDuration = tl.reactionDuration ?? profile.reactionDuration;
+      profile.activeStart = tl.activeStart;
+      profile.activeDuration = tl.activeDuration ?? profile.activeDuration;
       profile.impactTime = tl.impactTime;
       profile.recovery = tl.recovery ?? profile.recovery;
     }
@@ -385,8 +391,11 @@ class ActiveAttackSystem {
     profile.travelStart = profile.startup;
     profile.impactTime = profile.impactTime ?? (profile.startup + profile.travel);
     profile.reactionStart = profile.reactionStart ?? Math.max(0, profile.impactTime - profile.reactionLead);
+    profile.activeDuration = profile.activeDuration ?? profile.active;
+    profile.activeStart = profile.activeStart ?? profile.reactionStart;
+    profile.activeEnd = profile.activeStart + profile.activeDuration;
     profile.reactionEnd = Math.min(profile.impactTime, profile.reactionStart + profile.reactionDuration);
-    profile.total = Math.max(profile.impactTime + profile.recovery, profile.reactionEnd + profile.recovery);
+    profile.total = Math.max(profile.impactTime + profile.recovery, profile.reactionEnd + profile.recovery, profile.activeEnd + profile.recovery);
     return profile;
   }
 }

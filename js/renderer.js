@@ -84,10 +84,7 @@ class CanvasRenderer {
     } else if (scene.turnState === "enemy_turn") {
       this.drawPlayerState(scene);
       this.drawStatusIcons(scene);
-      this.drawEnemyAttackBar(scene);
-      if (scene.enemyAttack) {
-        this.drawBigKeyPrompt(scene, scene.enemyAttack.responseKey, scene.enemyAttack.hint, 300, t);
-      }
+      this.drawCounterFlowHud(scene, t);
     } else if (scene.turnState === "qte_running" && scene.qteRunner) {
       this.drawPlayerState(scene);
       this.drawStatusIcons(scene);
@@ -183,6 +180,7 @@ class CanvasRenderer {
   drawWorldScene(scene, t) {
     this.drawCharacters(scene, t);
     this.drawAttackEffects(scene, t);
+    this.drawCounterFocusLayer(scene, t);
     this.drawHitConfirmOverlays(scene);
     this.drawCombatContactLayer(scene, t);
     if (scene.effectBursts) scene.effectBursts.render(this.ctx);
@@ -200,6 +198,7 @@ class CanvasRenderer {
 
   shouldDrawTurnBanner(scene) {
     if (!scene || !scene.turnBanner) return false;
+    if (scene.turnState === "enemy_turn" && scene.enemyAttackChain) return false;
     return scene.turnState !== "qte_running" && scene.turnState !== "attack_active";
   }
 
@@ -222,15 +221,18 @@ class CanvasRenderer {
         x: from.x + (to.x - from.x) * (active.progress || 0.5),
         y: from.y + (to.y - from.y) * (active.progress || 0.5)
       };
+      const meleePressure = profile.type === "melee";
       const phaseBoost = active.phase === "impact" ? 0.92 : (active.phase === "reaction" ? 0.66 : 0.46);
       return {
         kind: "activeAttack",
         source: active.source,
         phase: active.phase,
         color: profile.color || (active.source === "enemy" ? "#e74c3c" : "#f1c40f"),
+        type: profile.type || "",
+        meleePressure,
         from,
         to,
-        point,
+        point: meleePressure ? to : point,
         progress: active.progress || 0,
         intensity: phaseBoost,
         label: active.intent && (active.intent.visualEvent || active.intent.chainId || active.intent.kind)
@@ -688,7 +690,7 @@ class CanvasRenderer {
     if (intensity <= 0.02) return;
 
     this.drawCinematicLetterbox(ctx, intensity, focus.color);
-    this.drawCinematicLane(ctx, focus, t);
+    if (!focus.meleePressure) this.drawCinematicLane(ctx, focus, t);
     this.drawCinematicReticle(ctx, focus, t);
   }
 
@@ -1210,7 +1212,12 @@ class CanvasRenderer {
       ctx.restore();
     }
 
-    if (scene.enemyAttack && (scene.turnState === "enemy_turn" || scene.enemyAttackPhase === "hit")) {
+    const hasEnemyActiveAttack = scene.activeAttackSystem
+      && Array.isArray(scene.activeAttackSystem.active)
+      && scene.activeAttackSystem.active.some(attack => attack.source === "enemy" && attack.target === "player");
+    if (scene.enemyAttack
+      && !hasEnemyActiveAttack
+      && (scene.turnState === "enemy_turn" || scene.enemyAttackPhase === "hit")) {
       this.drawEnemyAttackMotion(ctx, scene, px, py, ex, ey, t);
     }
 
@@ -1221,9 +1228,17 @@ class CanvasRenderer {
     const system = scene.activeAttackSystem;
     if (!system || !Array.isArray(system.active) || system.active.length === 0) return;
     const ctx = this.ctx;
+    const incomingEnemy = scene && scene.getIncomingActiveAttack ? scene.getIncomingActiveAttack() : null;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     for (const attack of system.active) {
+      const enemyPressure = scene
+        && scene.turnState === "enemy_turn"
+        && attack.source === "enemy"
+        && attack.target === "player";
+      if (enemyPressure && attack !== incomingEnemy && attack.phase !== "reaction" && attack.phase !== "impact") {
+        continue;
+      }
       const profile = attack.profile || {};
       const color = profile.color || (attack.source === "enemy" ? "#e74c3c" : "#f1c40f");
       const from = this.getBattleAnchor(attack.intent.fromAnchor || attack.intent.anchor || (attack.source === "enemy" ? "enemyCore" : "playerHand"));
@@ -1236,7 +1251,10 @@ class CanvasRenderer {
       const pulse = 1 + Math.sin(t * 10) * 0.08;
       const descriptor = attack.source === "player" ? this.getPlayerActiveAttackDescriptor(attack) : null;
       const contactGuide = this.getActiveAttackContactGuide(attack, from, to, pos, color, progress, descriptor);
-      this.drawActiveAttackContactGuide(ctx, contactGuide, t);
+      const meleeEnemyPressure = enemyPressure && profile.type === "melee";
+      if (!meleeEnemyPressure && (!enemyPressure || attack.phase === "reaction" || attack.phase === "impact")) {
+        this.drawActiveAttackContactGuide(ctx, contactGuide, t);
+      }
 
       if (attack.source === "player") {
         if (profile.type === "projectile") {
@@ -1268,6 +1286,65 @@ class CanvasRenderer {
         ctx.setLineDash([]);
       }
     }
+    ctx.restore();
+  }
+
+  drawCounterFocusLayer(scene, t) {
+    const data = this.getCounterFlowHudData(scene);
+    if (!data || !data.active || scene.turnState !== "enemy_turn") return;
+
+    const attack = data.active;
+    const intent = attack.intent || {};
+    const color = data.metrics.inResponse ? "#2ecc71" : (data.color || "#e74c3c");
+    const from = attack.position || this.getBattleAnchor(intent.fromAnchor || intent.anchor || "enemyCore");
+    const to = this.getBattleAnchor(intent.toAnchor || "playerCore");
+    const pulse = 1 + Math.sin(t * 9) * 0.08;
+    const responseAlpha = data.metrics.inResponse ? 0.78 : 0.34;
+    const radius = data.metrics.inResponse ? 52 + Math.sin(t * 14) * 4 : 42;
+    const ctx = this.ctx;
+    const melee = attack.profile && attack.profile.type === "melee";
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    if (!melee) {
+      ctx.strokeStyle = this.hexToRgba(color, responseAlpha);
+      ctx.lineWidth = data.metrics.inResponse ? 4 : 2;
+      if (!data.metrics.inResponse) ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      const dir = from.x > to.x ? 1 : -1;
+      ctx.strokeStyle = this.hexToRgba(color, data.metrics.inResponse ? 0.58 : 0.26);
+      ctx.lineWidth = data.metrics.inResponse ? 3 : 1.5;
+      ctx.setLineDash(data.metrics.inResponse ? [] : [6, 9]);
+      for (let i = 0; i < 3; i++) {
+        const ox = dir * (38 + i * 17);
+        const oy = -28 + i * 18;
+        ctx.beginPath();
+        ctx.moveTo(to.x + ox, to.y + oy);
+        ctx.lineTo(to.x + ox - dir * 18, to.y + oy + 6);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+
+    ctx.translate(to.x, to.y);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = data.metrics.inResponse ? 22 : 10;
+    ctx.strokeStyle = this.hexToRgba(color, data.metrics.inResponse ? 0.9 : 0.45);
+    ctx.lineWidth = data.metrics.inResponse ? 5 : 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * pulse, -Math.PI * 0.82, Math.PI * 0.82);
+    ctx.stroke();
+
+    ctx.globalAlpha = data.metrics.inResponse ? 0.26 : 0.12;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(18, radius * 0.42), 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -1852,10 +1929,18 @@ class CanvasRenderer {
     const wind = Utils.clamp(progress, 0, 1);
     const swing = Math.sin(wind * Math.PI);
     const heavy = (profile.radius || 0) > 38 || String(attack.intent.weapon || "").includes("greatsword");
+    const sourceAttack = attack.intent && attack.intent.attack ? attack.intent.attack : null;
+    const telegraph = sourceAttack && sourceAttack.telegraph ? sourceAttack.telegraph : {};
+    const meleeType = telegraph.type || (heavy ? "smash" : "slash");
     const span = (heavy ? 124 : 92) + Math.min(18, hitCount * 4);
     const center = {
       x: to.x - approach * (heavy ? 34 : 28) + approach * swing * 8,
       y: to.y - (heavy ? 10 : 18) + alternate * (hitCount > 1 ? 7 : 0)
+    };
+    const enemyMelee = attack.source === "enemy";
+    const hand = {
+      x: from.x + approach * (enemyMelee ? 36 : 28),
+      y: from.y - (enemyMelee ? 34 : 40) + alternate * 4
     };
 
     ctx.lineCap = "round";
@@ -1863,17 +1948,17 @@ class CanvasRenderer {
 
     if (attack.phase === "startup") {
       const glow = 10 + Math.sin(t * 14 + hitIndex) * 3;
-      ctx.globalAlpha = 0.45;
+      ctx.globalAlpha = enemyMelee ? 0.28 : 0.45;
       ctx.strokeStyle = color;
-      ctx.lineWidth = heavy ? 6 : 4;
+      ctx.lineWidth = enemyMelee ? (heavy ? 4 : 2.5) : (heavy ? 6 : 4);
       ctx.shadowColor = color;
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = enemyMelee ? 7 : 14;
       ctx.beginPath();
-      ctx.moveTo(from.x - approach * 14, from.y - 34 * alternate);
-      ctx.quadraticCurveTo(from.x + approach * 20, from.y - 18 * alternate, from.x + approach * 38, from.y + 18 * alternate);
+      ctx.moveTo(hand.x - approach * 18, hand.y - 12 * alternate);
+      ctx.quadraticCurveTo(hand.x + approach * 12, hand.y - 6 * alternate, hand.x + approach * 34, hand.y + 14 * alternate);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(from.x + approach * 30, from.y - 10 * alternate, glow, 0, Math.PI * 2);
+      ctx.arc(hand.x + approach * 22, hand.y - 4 * alternate, glow * (enemyMelee ? 0.75 : 1), 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
@@ -1886,15 +1971,48 @@ class CanvasRenderer {
     ctx.lineWidth = attack.phase === "impact" || attack.resolved ? (heavy ? 10 : 8) : (heavy ? 7 : 5);
     ctx.shadowColor = color;
     ctx.shadowBlur = attack.phase === "impact" || attack.resolved ? 26 : 18;
-    ctx.beginPath();
-    ctx.moveTo(center.x - approach * span * 0.38, center.y - alternate * 48);
-    ctx.quadraticCurveTo(
-      center.x + approach * span * 0.05,
-      center.y - alternate * 8 - swing * 16,
-      center.x + approach * span * 0.48,
-      center.y + alternate * 40
-    );
-    ctx.stroke();
+
+    if (meleeType === "stab" || meleeType === "bash") {
+      const length = meleeType === "bash" ? 74 : 102;
+      const y = center.y - (meleeType === "bash" ? 2 : 18);
+      const startX = center.x + approach * length * 0.42;
+      const endX = center.x - approach * length * 0.45;
+      ctx.lineWidth = meleeType === "bash" ? 12 : (attack.phase === "impact" || attack.resolved ? 7 : 5);
+      ctx.beginPath();
+      ctx.moveTo(startX, y - alternate * 10);
+      ctx.lineTo(endX, y + alternate * 6);
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(startX + approach * 10, y - alternate * 14);
+      ctx.lineTo(endX - approach * 8, y + alternate * 2);
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = alpha;
+    } else if (meleeType === "smash") {
+      ctx.beginPath();
+      ctx.moveTo(center.x + approach * 42, center.y - 86);
+      ctx.quadraticCurveTo(center.x + approach * 10, center.y - 26 - swing * 22, center.x - approach * 30, center.y + 38);
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.32;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(center.x - approach * 28, center.y + 56, 42, 10, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(center.x - approach * span * 0.38, center.y - alternate * 48);
+      ctx.quadraticCurveTo(
+        center.x + approach * span * 0.05,
+        center.y - alternate * 8 - swing * 16,
+        center.x + approach * span * 0.48,
+        center.y + alternate * 40
+      );
+      ctx.stroke();
+    }
 
     if (hitCount > 1) {
       ctx.globalAlpha = alpha * 0.38;
@@ -2024,7 +2142,8 @@ class CanvasRenderer {
 
     const ctx = this.ctx;
     ctx.save();
-    for (const contact of contacts.slice(0, 5).reverse()) {
+    const limit = scene && scene.turnState === "enemy_turn" ? 2 : 5;
+    for (const contact of contacts.slice(0, limit).reverse()) {
       this.drawContactGroundImpulse(ctx, contact, t);
       if (contact.confirmed) {
         this.drawContactBodyImpact(ctx, contact, t);
@@ -2271,6 +2390,10 @@ class CanvasRenderer {
     return { type: "stab", shape: "line", pose: "lunge", width: 24 };
   }
 
+  isMeleeTelegraph(telegraph) {
+    return !!(telegraph && ["stab", "slash", "smash", "bash"].includes(telegraph.type));
+  }
+
   getEnemyTelegraphPoints(px, py, ex, ey) {
     return {
       source: { x: ex - 52, y: ey - 34 },
@@ -2296,6 +2419,12 @@ class CanvasRenderer {
     ctx.shadowBlur = response ? 20 : 11;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+
+    if (this.isMeleeTelegraph(telegraph)) {
+      this.drawEnemyMeleeTelegraphLane(ctx, telegraph, color, points, response, alpha, width, pulse, t);
+      ctx.restore();
+      return;
+    }
 
     if (telegraph.shape === "arc") {
       const r = 54 + width * 0.36;
@@ -2404,6 +2533,100 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  drawEnemyMeleeTelegraphLane(ctx, telegraph, color, points, response, alpha, width, pulse, t) {
+    const { source, target, playerFoot } = points;
+    const dir = source.x > target.x ? 1 : -1;
+    const type = telegraph.type || "stab";
+    const laneAlpha = response ? alpha : alpha * 0.86;
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = response ? 18 : 8;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (type === "stab") {
+      const startX = target.x + dir * (76 + width * 0.28);
+      const endX = target.x + dir * (18 + width * 0.10);
+      const y = target.y - 5;
+      ctx.globalAlpha = laneAlpha * 0.18;
+      ctx.lineWidth = response ? 14 : 9;
+      ctx.beginPath();
+      ctx.moveTo(startX, y);
+      ctx.lineTo(endX, y + Math.sin(t * 8) * 2);
+      ctx.stroke();
+      ctx.globalAlpha = laneAlpha * 0.86;
+      ctx.lineWidth = response ? 4 : 2;
+      ctx.setLineDash(response ? [12, 7] : [5, 9]);
+      ctx.beginPath();
+      ctx.moveTo(startX, y);
+      ctx.lineTo(endX, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(endX, y, response ? 6 : 4, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    if (type === "bash") {
+      const originX = target.x + dir * (82 + width * 0.18);
+      const originY = target.y + 18;
+      const innerX = target.x + dir * 20;
+      ctx.globalAlpha = laneAlpha * 0.14;
+      ctx.beginPath();
+      ctx.moveTo(originX, originY);
+      ctx.lineTo(innerX, target.y - 20);
+      ctx.lineTo(innerX, target.y + 48);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = laneAlpha * 0.78;
+      ctx.lineWidth = response ? 5 : 3;
+      ctx.setLineDash(response ? [13, 7] : [6, 9]);
+      ctx.beginPath();
+      ctx.moveTo(originX, originY);
+      ctx.lineTo(innerX, target.y - 20);
+      ctx.moveTo(originX, originY);
+      ctx.lineTo(innerX, target.y + 48);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      return;
+    }
+
+    if (type === "smash") {
+      const radius = 34 + width * 0.42 + Math.sin(t * 8) * 3;
+      ctx.globalAlpha = laneAlpha * 0.20;
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = laneAlpha * 0.88;
+      ctx.lineWidth = response ? 5 : 3;
+      ctx.setLineDash(response ? [12, 7] : [6, 9]);
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      return;
+    }
+
+    const r = 52 + width * 0.34;
+    const cx = target.x + dir * 8;
+    const cy = target.y + 5;
+    ctx.globalAlpha = laneAlpha * 0.76;
+    ctx.lineWidth = response ? 8 : 4;
+    ctx.setLineDash(response ? [16, 9] : [7, 10]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, Math.PI * 0.58, Math.PI * 1.38);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = laneAlpha * 0.24;
+    ctx.lineWidth = response ? 5 : 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 16 * pulse, Math.PI * 0.60, Math.PI * 1.35);
+    ctx.stroke();
+  }
+
   drawEnemyTelegraphHit(ctx, telegraph, color, px, py, ex, ey, progress, t) {
     const points = this.getEnemyTelegraphPoints(px, py, ex, ey);
     const { source, target, enemyCast, playerFoot } = points;
@@ -2419,6 +2642,12 @@ class CanvasRenderer {
     ctx.shadowColor = color;
     ctx.shadowBlur = 24;
     ctx.globalAlpha = alpha;
+
+    if (this.isMeleeTelegraph(telegraph)) {
+      this.drawEnemyMeleeTelegraphHit(ctx, telegraph, color, points, alpha, width, progress, t);
+      ctx.restore();
+      return;
+    }
 
     if (telegraph.shape === "arc") {
       ctx.lineWidth = 11;
@@ -2501,6 +2730,87 @@ class CanvasRenderer {
     ctx.restore();
   }
 
+  drawEnemyMeleeTelegraphHit(ctx, telegraph, color, points, alpha, width, progress, t) {
+    const { source, target, playerFoot } = points;
+    const dir = source.x > target.x ? 1 : -1;
+    const type = telegraph.type || "stab";
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 24;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (type === "stab") {
+      ctx.lineWidth = Math.max(7, width * 0.30);
+      ctx.beginPath();
+      ctx.moveTo(target.x + dir * (74 + progress * 10), target.y - 5);
+      ctx.lineTo(target.x + dir * 12, target.y - 5);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = alpha * 0.58;
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.82;
+      ctx.beginPath();
+      ctx.arc(target.x + dir * 10, target.y - 5, 11 + Math.sin(t * 20) * 2, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    if (type === "bash") {
+      const originX = target.x + dir * (82 + progress * 16);
+      const originY = target.y + 18;
+      const innerX = target.x + dir * 14;
+      ctx.globalAlpha = alpha * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(originX, originY);
+      ctx.lineTo(innerX, target.y - 22);
+      ctx.lineTo(innerX, target.y + 50);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(originX, originY);
+      ctx.lineTo(innerX, target.y + 10);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = alpha * 0.56;
+      ctx.stroke();
+      return;
+    }
+
+    if (type === "smash") {
+      const radius = 34 + width * 0.58 + progress * 20;
+      ctx.globalAlpha = alpha * 0.18;
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.arc(playerFoot.x, playerFoot.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = alpha * 0.60;
+      ctx.stroke();
+      return;
+    }
+
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.arc(target.x + dir * 8, target.y + 4, 58 + width * 0.32, Math.PI * 0.54, Math.PI * 1.34);
+    ctx.stroke();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = alpha * 0.58;
+    ctx.stroke();
+  }
+
   getEnemyChainIntentVisuals(scene) {
     const chain = scene && scene.enemyAttackChain;
     const activeSystem = scene && scene.activeAttackSystem;
@@ -2546,6 +2856,7 @@ class CanvasRenderer {
         responseProgress: Utils.clamp((elapsed - reactionStart) / Math.max(0.001, impactTime - reactionStart), 0, 1),
         timeToImpact,
         color: sourceAttack.color || (attack && attack.profile && attack.profile.color) || "#e74c3c",
+        type: telegraph.type || "strike",
         shape: telegraph.shape || "line",
         pose: telegraph.pose || "lunge",
         width: telegraph.width || 30
@@ -2612,7 +2923,7 @@ class CanvasRenderer {
       const radius = hot ? 12 : 8;
       const pipX = railX + (hot ? Math.sin(t * 8) * 2 : 0);
 
-      if (!resolved) {
+      if (!resolved && !this.isMeleeTelegraph(row)) {
         const routeAlpha = hot ? 0.18 : 0.08;
         ctx.save();
         ctx.globalAlpha = routeAlpha;
@@ -3117,7 +3428,9 @@ class CanvasRenderer {
 
     this.drawBattleStage(scene, t);
     this.drawCombatPhaseLighting(ctx, this.getCombatPhaseLighting(scene), t);
-    this.drawEnemyChainIntentLayer(ctx, this.getEnemyChainIntentVisuals(scene), t);
+    if (!(scene.turnState === "enemy_turn" && scene.enemyAttackChain)) {
+      this.drawEnemyChainIntentLayer(ctx, this.getEnemyChainIntentVisuals(scene), t);
+    }
     this.drawPlayerQTEChainIntentLayer(ctx, this.getPlayerQTEChainIntentVisuals(scene), t);
 
     // 玩家
@@ -3307,16 +3620,19 @@ class CanvasRenderer {
     }
     this.drawEncounterFloorDetails(ctx, theme, floorY, t);
 
-    const lanePulse = 0.45 + Math.sin(t * 2.2) * 0.08;
-    ctx.strokeStyle = this.hexToRgba(accent, lanePulse);
-    ctx.lineWidth = 2;
-    ctx.shadowColor = accent;
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.moveTo(160, floorY + 4);
-    ctx.quadraticCurveTo(this.width / 2, floorY + 34, this.width - 160, floorY + 4);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    const showStageLane = scene.turnState === "player_turn" || scene.turnState === "followup_turn";
+    if (showStageLane) {
+      const lanePulse = 0.45 + Math.sin(t * 2.2) * 0.08;
+      ctx.strokeStyle = this.hexToRgba(accent, lanePulse);
+      ctx.lineWidth = 2;
+      ctx.shadowColor = accent;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(160, floorY + 4);
+      ctx.quadraticCurveTo(this.width / 2, floorY + 34, this.width - 160, floorY + 4);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
 
     if (scene.turnState === "enemy_turn" && scene.enemyAttackPhase === "response") {
       ctx.fillStyle = this.hexToRgba("#2ecc71", 0.08 + Math.sin(t * 12) * 0.03);
@@ -3383,6 +3699,7 @@ class CanvasRenderer {
     }
 
     if (scene.turnState === "attack_active" && focus && focus.kind === "activeAttack") {
+      const meleePressure = !!focus.meleePressure;
       return {
         ...base,
         mode: "attack",
@@ -3390,9 +3707,10 @@ class CanvasRenderer {
         secondary: focus.source === "enemy" ? playerColor : enemyColor,
         intensity: Utils.clamp(focus.intensity || 0.54, 0.32, 0.92),
         progress: Utils.clamp(focus.progress || 0, 0, 1),
-        playerHot: focus.source === "player",
-        enemyHot: focus.source === "enemy",
-        centerHot: true,
+        playerHot: meleePressure || focus.source === "player",
+        enemyHot: meleePressure || focus.source === "enemy",
+        centerHot: !meleePressure,
+        meleePressure,
         laneDirection: focus.source === "enemy" ? -1 : 1
       };
     }
@@ -3400,6 +3718,8 @@ class CanvasRenderer {
     if (scene.turnState === "enemy_turn") {
       const metrics = scene.enemyAttack ? this.getEnemyTimingMetrics(scene, scene.enemyAttack) : null;
       const response = !!(metrics && metrics.inResponse);
+      const telegraph = scene.enemyAttack ? this.getEnemyTelegraph(scene.enemyAttack) : null;
+      const meleePressure = this.isMeleeTelegraph(telegraph);
       return {
         ...base,
         mode: "enemy",
@@ -3410,6 +3730,7 @@ class CanvasRenderer {
         enemyHot: true,
         playerHot: response,
         response,
+        meleePressure,
         laneDirection: -1
       };
     }
@@ -3457,14 +3778,62 @@ class CanvasRenderer {
       ctx.fill();
     };
 
+    const enemyMode = lighting.mode === "enemy";
     if (lighting.playerHot) {
-      drawFloorGlow(playerX, lighting.mode === "enemy" ? secondary : color, 0.12 + intensity * 0.16, 125 + intensity * 45, 42 + intensity * 14);
+      drawFloorGlow(
+        playerX,
+        enemyMode ? secondary : color,
+        enemyMode ? 0.035 + intensity * 0.045 : 0.12 + intensity * 0.16,
+        enemyMode ? 84 + intensity * 18 : 125 + intensity * 45,
+        enemyMode ? 24 + intensity * 6 : 42 + intensity * 14
+      );
     }
     if (lighting.enemyHot) {
-      drawFloorGlow(enemyX, color, 0.12 + intensity * 0.16, 135 + intensity * 52, 45 + intensity * 16);
+      drawFloorGlow(
+        enemyX,
+        color,
+        enemyMode ? 0.035 + intensity * 0.045 : 0.12 + intensity * 0.16,
+        enemyMode ? 88 + intensity * 18 : 135 + intensity * 52,
+        enemyMode ? 24 + intensity * 6 : 45 + intensity * 16
+      );
     }
-    if (lighting.centerHot) {
+    if (lighting.centerHot && !enemyMode) {
       drawFloorGlow(this.width / 2, secondary, 0.06 + intensity * 0.08, 170 + intensity * 70, 38 + intensity * 10);
+    }
+
+    if (lighting.mode === "enemy") {
+      if (!lighting.meleePressure) {
+        ctx.strokeStyle = this.hexToRgba(lighting.response ? secondary : color, lighting.response ? 0.22 : 0.11);
+        ctx.lineWidth = lighting.response ? 2.5 : 1.5;
+        ctx.shadowColor = lighting.response ? secondary : color;
+        ctx.shadowBlur = lighting.response ? 10 : 4;
+        ctx.setLineDash([8, 12]);
+        ctx.beginPath();
+        ctx.moveTo(enemyX, floorY + 24);
+        ctx.quadraticCurveTo(this.width / 2, floorY + 40, playerX, floorY + 24);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      if (lighting.response) {
+        ctx.strokeStyle = this.hexToRgba("#2ecc71", 0.30 + intensity * 0.18);
+        ctx.fillStyle = this.hexToRgba("#2ecc71", 0.03 + intensity * 0.035);
+        ctx.shadowColor = "#2ecc71";
+        ctx.shadowBlur = 16;
+        ctx.lineWidth = 2.25;
+        ctx.beginPath();
+        ctx.ellipse(playerX + 18, floorY + 4, 86 * pulse, 16 * pulse, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      ctx.restore();
+      return;
+    }
+
+    if (lighting.meleePressure) {
+      ctx.restore();
+      return;
     }
 
     ctx.strokeStyle = this.hexToRgba(color, 0.13 + intensity * 0.24);
@@ -7388,6 +7757,143 @@ class CanvasRenderer {
     ctx.fillText(pendingFollowUp ? "追加窗口" : "行动条", x + barW / 2, y + barH / 2);
   }
 
+  getCounterFlowHudData(scene) {
+    if (!scene || !scene.enemyAttack) return null;
+    const attack = scene.enemyAttack;
+    const active = scene.getIncomingActiveAttack
+      ? scene.getIncomingActiveAttack()
+      : (
+        scene.activeAttackSystem && scene.activeAttackSystem.active
+          ? scene.activeAttackSystem.active.find(item => item.intent && item.intent.kind === "enemyAttack" && item.target === "player")
+          : null
+      );
+    const metrics = this.getEnemyTimingMetrics(scene, attack, active);
+    if (!metrics) return null;
+
+    const chain = this.getEnemyChainIntentVisuals(scene);
+    const nodeIndex = attack.chainIndex !== undefined ? attack.chainIndex : (active && active.intent ? active.intent.chainIndex : 0);
+    const nodeCount = attack.chainCount || (chain && chain.count) || 1;
+    const chainName = attack.chainName || (scene.enemyAttackChain && scene.enemyAttackChain.name) || "敌方攻势";
+    const hint = scene.getEnemyCounterHint
+      ? scene.getEnemyCounterHint(attack)
+      : ((attack.counter && attack.counter.hint) || attack.hint || "观察敌方动作");
+    const counter = attack.counter || {};
+    const primaryAction = counter.canInterrupt
+      ? "打断"
+      : (counter.canClash ? "拼刀" : (counter.canGuard ? "格挡" : "闪避"));
+
+    return {
+      attack,
+      active,
+      metrics,
+      chain,
+      nodeIndex: Math.max(0, nodeIndex || 0),
+      nodeCount: Math.max(1, nodeCount || 1),
+      chainName,
+      hint,
+      primaryAction,
+      color: attack.color || metrics.stateColor || "#e74c3c"
+    };
+  }
+
+  drawCounterFlowHud(scene, t) {
+    const data = this.getCounterFlowHudData(scene);
+    if (!data) return;
+
+    const ctx = this.ctx;
+    const panelW = 650;
+    const panelH = 92;
+    const x = (this.width - panelW) / 2;
+    const y = this.layout.qteBarY - 18;
+    const color = data.color;
+    const metrics = data.metrics;
+    const inResponse = metrics.inResponse;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(7, 9, 15, 0.72)";
+    ctx.strokeStyle = this.hexToRgba(inResponse ? "#2ecc71" : color, inResponse ? 0.68 : 0.32);
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = inResponse ? "#2ecc71" : color;
+    ctx.shadowBlur = inResponse ? 14 : 4;
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    const attackName = String(data.attack.name || "敌方攻击").replace(/^\d+\/\d+\s*/, "");
+    const title = `${data.chainName} · 第 ${data.nodeIndex + 1}/${data.nodeCount} 段`;
+    const state = inResponse ? "现在" : "预兆";
+    this.drawTimingChip(ctx, x + 18, y + 18, state, inResponse ? "#2ecc71" : color, 56);
+    this.drawTimingChip(ctx, x + panelW - 112, y + 18, `距命中 ${metrics.timeToHit.toFixed(1)}s`, "#cfd0df", 96);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(this.truncateText(ctx, `${title} · ${attackName}`, panelW - 220), x + panelW / 2, y + 24);
+
+    const rows = data.chain && data.chain.active && Array.isArray(data.chain.rows)
+      ? data.chain.rows
+      : Array.from({ length: data.nodeCount }, (_, index) => ({ index, color, resolved: index < data.nodeIndex, hot: index === data.nodeIndex }));
+    const pipY = y + 50;
+    const pipStart = x + 54;
+    const pipEnd = x + panelW - 54;
+    const span = Math.max(1, rows.length - 1);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.beginPath();
+    ctx.moveTo(pipStart, pipY);
+    ctx.lineTo(pipEnd, pipY);
+    ctx.stroke();
+
+    for (const row of rows) {
+      const px = pipStart + (pipEnd - pipStart) * (row.index || 0) / span;
+      const current = (row.index || 0) === data.nodeIndex;
+      const resolved = row.resolved && !current;
+      const pipColor = current ? (inResponse ? "#2ecc71" : color) : (resolved ? "#7f8c8d" : "#48515f");
+      const radius = current ? 10 : 7;
+
+      ctx.save();
+      ctx.translate(px, pipY);
+      ctx.fillStyle = this.hexToRgba(pipColor, current ? 0.35 : 0.20);
+      ctx.strokeStyle = pipColor;
+      ctx.shadowColor = pipColor;
+      ctx.shadowBlur = current ? 12 : 0;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius + (current ? Math.sin(t * 8) * 1.5 : 0), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String((row.index || 0) + 1), 0, 0);
+      ctx.restore();
+    }
+
+    const barX = x + 34;
+    const barY = y + 68;
+    const barW = panelW - 68;
+    const barH = 8;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = "rgba(46, 204, 113, 0.25)";
+    const responseX = barX + barW * metrics.responseStartRatio;
+    ctx.fillRect(responseX, barY, barX + barW - responseX, barH);
+    ctx.fillStyle = this.hexToRgba(color, 0.88);
+    ctx.fillRect(barX, barY, barW * metrics.progress, barH);
+    ctx.fillStyle = "#e74c3c";
+    ctx.fillRect(barX + barW - 2, barY - 3, 4, barH + 6);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = inResponse ? "#2ecc71" : "#cfd0df";
+    ctx.fillText(this.truncateText(ctx, `${data.primaryAction} · ${data.hint}`, panelW - 80), x + panelW / 2, y + 78);
+    ctx.restore();
+  }
+
   drawEnemyAttackBar(scene) {
     const ctx = this.ctx;
     if (!scene.enemyAttack) return;
@@ -7487,7 +7993,7 @@ class CanvasRenderer {
     ctx.font = "12px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText("绿色窗口 = 可防御时机  红线 = 命中时刻", this.width / 2, y - 42);
+    ctx.fillText("绿色窗口 = 反制时机  红线 = 命中时刻", this.width / 2, y - 42);
 
     this.drawEnemyAttackReadout(scene, attack, x, y, barW, totalTime);
   }
@@ -7510,7 +8016,10 @@ class CanvasRenderer {
     const isHighThreat = attack.damage >= 30 || attack.stunOnHit || id.includes("heavy") || id.includes("curse");
     const threat = isHighThreat ? "高危" : (attack.windup <= 0.75 ? "快攻" : "中危");
     const threatColor = threat === "高危" ? "#e74c3c" : (threat === "快攻" ? "#2ecc71" : "#f1c40f");
-    const responseKeys = [...new Set((attack.allowedResponses || []).map(id => id === "guard" ? "F" : "SPACE"))].join(" / ") || "?";
+    const counter = attack.counter || {};
+    const attackKeys = counter.canClash || counter.canInterrupt ? ["A/S/D"] : [];
+    const defenseKeys = (attack.allowedResponses || []).map(id => id === "guard" ? "F" : "SPACE");
+    const responseKeys = [...new Set([...attackKeys, ...defenseKeys])].join(" / ") || "?";
     return { type, threat, threatColor, responseKeys };
   }
 
@@ -7563,7 +8072,7 @@ class CanvasRenderer {
     const accent = metrics.stateColor || "#e74c3c";
     const timeText = metrics.inResponse || metrics.hit
       ? `距命中 ${metrics.timeToHit.toFixed(1)}s`
-      : `距防御窗 ${metrics.timeToWindow.toFixed(1)}s`;
+      : `距反制窗 ${metrics.timeToWindow.toFixed(1)}s`;
 
     ctx.save();
     ctx.fillStyle = "rgba(6, 8, 14, 0.34)";
@@ -7600,7 +8109,7 @@ class CanvasRenderer {
     ctx.textBaseline = "bottom";
     ctx.font = "bold 10px sans-serif";
     ctx.fillStyle = "#2ecc71";
-    ctx.fillText("防御窗", windowX, y - 8);
+    ctx.fillText("反制窗", windowX, y - 8);
     ctx.fillStyle = "#e74c3c";
     ctx.fillText("命中", hitX - 18, y - 8);
     ctx.restore();

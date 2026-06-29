@@ -141,7 +141,7 @@ const EncounterDatabase = {
       enemyId: "caster",
       maxHp: 210,
       terrain: "错拍训练场",
-      intent: "敌人会轮换物理连斩、法术起手、盾压、重击和咒爆追击，适合测试拼刀覆盖、施法打断和双持多段覆盖。",
+      intent: "敌人会轮换物理连斩、法术起手、盾压、重击和咒爆追击，适合测试逐节点拼刀、施法打断和双持多段应对。",
       recommendedStyles: ["current"],
       attackPattern: ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"],
       phases: [
@@ -165,7 +165,7 @@ const EncounterDatabase = {
       ruleLines: [
         "不开局赠送法术能量；法术处理来自敌方回合的出刀打断。",
         "敌人同一回合会轮换多段物理、法术+近身、盾压和重击错拍。",
-        "当前方案使用双持覆盖多段；只有应对成功后的追击窗口可手动触发武器 QTE。"
+        "当前方案使用双持逐段应对多段攻势；只有应对成功后的追击窗口可手动触发武器 QTE。"
       ]
     }
   }

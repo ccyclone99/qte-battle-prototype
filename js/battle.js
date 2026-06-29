@@ -52,6 +52,7 @@ class BattleSystem {
     this.armorBreakTurns = 0;
     this.armorBreakActive = false;
     this.defenseTriggered = false;
+    this.defenseMode = null;
 
     // QTE
     this.qteRunner = null;
@@ -59,6 +60,7 @@ class BattleSystem {
     this.pendingFollowupContext = null;
     this.resolvingToFollowup = false;
     this.compressedPlayerTurn = false;
+    this.enemyCounterState = null;
 
     // 结算
     this.resolveTimer = 0;
@@ -342,6 +344,7 @@ class BattleSystem {
     this.enemyAttack = null;
     this.enemyAttackChain = null;
     this.enemyAttackPhase = "none";
+    this.enemyCounterState = null;
     this.enemyStunTimer = 0;
     this.enemyAttackCursor = 0;
     if (!options.fromEncounter) {
@@ -536,7 +539,7 @@ class BattleSystem {
       }
     }
 
-    if (this.enemyAttackPhase === "response" && active && !active.paused) {
+    if (active && !active.paused && !this.defenseTriggered) {
       this.consumeEnemyResponseInputs();
       if (this.turnState !== "enemy_turn") return;
     }
@@ -590,10 +593,31 @@ class BattleSystem {
 
   getEnemyActiveAttackTiming(attack, offset = 0) {
     const impactTime = offset + (attack ? attack.windup : 0) + (attack ? attack.hitTime : 0);
-    const readableCap = Utils.clamp((attack ? attack.hitTime : 0.2) + 0.28, 0.48, 0.92);
+    const readableCap = this.getEnemyCounterActiveDuration(attack);
     const responseDuration = Math.min(attack && attack.responseDuration ? attack.responseDuration : Difficulty.responseDuration(), readableCap);
     const responseStart = Math.max(0, impactTime - responseDuration);
     return { impactTime, responseStart, responseDuration };
+  }
+
+  getCounterDifficultyScale() {
+    const id = Difficulty.current || "normal";
+    return ({ easy: 1.24, normal: 1.0, hard: 0.82, extreme: 0.72 })[id] || 1.0;
+  }
+
+  getCounterPerfectWindow() {
+    const id = Difficulty.current || "normal";
+    return ({ easy: 0.11, normal: 0.09, hard: 0.07, extreme: 0.06 })[id] || 0.09;
+  }
+
+  getEnemyCounterActiveDuration(attack = {}) {
+    const counter = this.getAttackCounterProfile(attack);
+    const telegraph = attack.telegraph || {};
+    let base = 0.25;
+    if (counter.type === "quick_melee" || telegraph.type === "stab") base = 0.23;
+    if (counter.type === "heavy_melee" || telegraph.type === "smash") base = 0.30;
+    if (counter.type === "spell_cast" || this.isIncomingSpellAttack(attack)) base = 0.27;
+    if (counter.type === "bash" || telegraph.type === "bash") base = 0.24;
+    return Utils.clamp(base * this.getCounterDifficultyScale(), 0.16, 0.34);
   }
 
   commitActiveAttack(intent = {}) {
@@ -653,7 +677,7 @@ class BattleSystem {
       const chainText = sourceAttack && sourceAttack.chainCount > 1
         ? ` ${sourceAttack.chainIndex + 1}/${sourceAttack.chainCount}`
         : "";
-      this.setMessage(`敌方攻势${chainText}：命中前窗口按 SPACE/F，或用战技反制`);
+      this.setMessage(`敌方攻势${chainText}：${this.getEnemyCounterHint(sourceAttack)}`);
       this.triggerActorReaction("enemy", "windup", 1.0, {
         color: attack.profile.color || "#e74c3c",
         duration: Math.min(0.42, Math.max(0.24, attack.profile.reactionDuration || 0.3))
@@ -889,7 +913,7 @@ class BattleSystem {
       const attack = this.enemyAttack;
       if (!attack) return;
 
-      if (this.canEasternGuardNeutralize(key)) {
+      if (this.enemyAttackPhase === "response" && this.canEasternGuardNeutralize(key)) {
         this.input.consume();
         this.triggerEasternGuardNeutralize();
         return;
@@ -900,14 +924,17 @@ class BattleSystem {
         return;
       }
 
-      for (const defenseId of attack.allowedResponses || []) {
-        const defense = DefenseDatabase[defenseId];
-        if (defense && defense.key === key) {
-          const pressTime = this.enemyAttackTimer;
-          this.input.consume();
-          this.defenseTriggered = true;
-          this.triggerDefenseQTE(defenseId, pressTime);
-          return;
+      if (this.enemyAttackPhase === "response") {
+        for (const defenseId of attack.allowedResponses || []) {
+          const defense = DefenseDatabase[defenseId];
+          if (defense && defense.key === key) {
+            const pressTime = this.enemyAttackTimer;
+            this.input.consume();
+            this.defenseTriggered = true;
+            this.defenseMode = "defense";
+            this.triggerDefenseQTE(defenseId, pressTime);
+            return;
+          }
         }
       }
 
@@ -934,8 +961,7 @@ class BattleSystem {
     const attack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
     if (!incoming || !attack) return false;
 
-    const style = this.getCurrentStyle();
-    if (!this.hasAttackAnytime() && !(style && style.counterCoverage)) return false;
+    if (!this.canUseEnemyTurnCounterFlow()) return false;
     const chains = this.getEffectiveChains();
     if (!chains[key]) return false;
 
@@ -1051,24 +1077,169 @@ class BattleSystem {
     this.setMessage(this.getQTEStageMessage(chainConfig));
   }
 
-  getCounterCoverageCount() {
-    const style = this.getCurrentStyle();
-    const weapon = this.playerConfig.weapon || "";
-    const coverage = style && style.counterCoverage;
-    if (coverage) {
-      return coverage[weapon] || coverage.default || 1;
-    }
-    if (weapon === "dualBlades") return 2;
-    return 1;
+  getWeaponCounterProfile() {
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    return {
+      recovery: 0.28,
+      startup: 0.10,
+      travel: 0.06,
+      activeDuration: 0.12,
+      whiffVulnerability: 1.15,
+      postureDamage: 12,
+      hpDamage: 3,
+      finisherPostureDamage: 20,
+      allowedCounterTypes: ["quick_melee", "melee", "finisher"],
+      ...(weapon.counterProfile || {})
+    };
   }
 
-  getCounterCoverageTargets() {
-    const incoming = this.getIncomingActiveAttack();
-    if (!incoming) return [];
-    const count = Math.max(1, this.getCounterCoverageCount());
-    const attacks = this.getActiveEnemyAttacks()
-      .filter(attack => !attack.canceled && !attack.resolved);
-    return attacks.slice(0, count);
+  getAttackCounterProfile(attack = {}) {
+    const counter = attack.counter || {};
+    const id = attack.id || "";
+    const telegraph = attack.telegraph || {};
+    const isSpell = this.isIncomingSpellAttack(attack);
+    const type = counter.type
+      || (isSpell ? "spell_cast" : (id.includes("heavy") || telegraph.type === "smash" ? "heavy_melee" : (telegraph.type === "bash" ? "bash" : "melee")));
+
+    return {
+      type,
+      canClash: counter.canClash !== undefined ? !!counter.canClash : (!isSpell && type !== "bash"),
+      canInterrupt: counter.canInterrupt !== undefined ? !!counter.canInterrupt : isSpell,
+      canGuard: counter.canGuard !== undefined ? !!counter.canGuard : (attack.allowedResponses || []).includes("guard"),
+      canDodge: counter.canDodge !== undefined ? !!counter.canDodge : (attack.allowedResponses || []).includes("dodge"),
+      recommended: counter.recommended || [],
+      hint: counter.hint || attack.hint || ""
+    };
+  }
+
+  canUseEnemyTurnCounterFlow() {
+    const style = this.getCurrentStyle();
+    return !!(this.hasAttackAnytime() || (style && style.counterFlow && style.counterFlow.enabled));
+  }
+
+  getEnemyCounterHint(attack = null) {
+    if (!attack) return "A/S/D 拼刀；SPACE/F 防御";
+    const counter = this.getAttackCounterProfile(attack);
+    if (counter.hint) return counter.hint;
+    const parts = [];
+    if (counter.canClash || counter.canInterrupt) parts.push("A/S/D");
+    if (counter.canDodge) parts.push("SPACE");
+    if (counter.canGuard) parts.push("F");
+    return parts.length > 0 ? parts.join(" / ") : "观察敌方动作";
+  }
+
+  getCounterNodeOutcome(incoming, weaponProfile) {
+    const impactTime = incoming && incoming.profile ? incoming.profile.impactTime : 0;
+    const reactionStart = incoming && incoming.profile ? incoming.profile.reactionStart : 0;
+    const reactionSpan = Math.max(0.001, impactTime - reactionStart);
+    const elapsed = incoming ? incoming.elapsed : 0;
+    const reactionProgress = Utils.clamp((elapsed - reactionStart) / reactionSpan, 0, 1);
+    const timeToImpact = Math.max(0, impactTime - elapsed);
+    const sourceAttack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    const enemyActiveDuration = this.getEnemyCounterActiveDuration(sourceAttack);
+    const enemyActiveStart = Math.max(0, impactTime - enemyActiveDuration);
+    const enemyActiveEnd = impactTime + 0.035;
+    const playerActiveStart = elapsed + (weaponProfile.startup || 0.1);
+    const playerActiveEnd = playerActiveStart + (weaponProfile.activeDuration || 0.12);
+    const overlapStart = Math.max(playerActiveStart, enemyActiveStart);
+    const overlapEnd = Math.min(playerActiveEnd, enemyActiveEnd);
+    const overlap = overlapEnd - overlapStart;
+    const contactTime = overlap > 0
+      ? (overlapStart + overlapEnd) / 2
+      : (playerActiveStart + playerActiveEnd) / 2;
+    const perfectWindow = this.getCounterPerfectWindow();
+
+    if (playerActiveEnd < enemyActiveStart) {
+      return {
+        grade: "early",
+        reactionProgress,
+        timeToImpact,
+        perfect: false,
+        accepted: false,
+        enemyActiveStart,
+        enemyActiveEnd,
+        playerActiveStart,
+        playerActiveEnd,
+        contactTime,
+        overlap
+      };
+    }
+    if (playerActiveStart > enemyActiveEnd || elapsed >= impactTime) {
+      return {
+        grade: "late",
+        reactionProgress,
+        timeToImpact,
+        perfect: false,
+        accepted: false,
+        enemyActiveStart,
+        enemyActiveEnd,
+        playerActiveStart,
+        playerActiveEnd,
+        contactTime,
+        overlap
+      };
+    }
+
+    const perfect = Math.abs(contactTime - impactTime) <= perfectWindow;
+    if (perfect) {
+      return {
+        grade: "perfect",
+        reactionProgress,
+        timeToImpact,
+        perfect: true,
+        accepted: true,
+        enemyActiveStart,
+        enemyActiveEnd,
+        playerActiveStart,
+        playerActiveEnd,
+        contactTime,
+        overlap
+      };
+    }
+    return {
+      grade: "success",
+      reactionProgress,
+      timeToImpact,
+      perfect: false,
+      accepted: true,
+      enemyActiveStart,
+      enemyActiveEnd,
+      playerActiveStart,
+      playerActiveEnd,
+      contactTime,
+      overlap
+    };
+  }
+
+  getCounterAttackTimeline(incoming, weaponProfile, outcome) {
+    const timeToImpact = Math.max(0.08, outcome.timeToImpact || 0.16);
+    const desiredImpact = Utils.clamp(
+      (weaponProfile.startup || 0.1) + (weaponProfile.travel || 0.06),
+      0.07,
+      Math.max(0.075, timeToImpact - 0.025)
+    );
+    const startup = Math.max(0.02, weaponProfile.startup || (desiredImpact * 0.58));
+    const activeDuration = Math.max(0.06, weaponProfile.activeDuration || 0.12);
+    const contactDelay = outcome && outcome.accepted
+      ? Utils.clamp((outcome.contactTime || 0) - (incoming ? incoming.elapsed : 0), startup + activeDuration * 0.25, timeToImpact + 0.03)
+      : desiredImpact;
+    const travel = Math.max(0.035, Math.min(weaponProfile.travel || 0.06, Math.max(0.035, contactDelay - startup)));
+
+    return {
+      startup,
+      travel,
+      impactTime: startup + travel,
+      activeStart: startup,
+      activeDuration,
+      reactionStart: startup,
+      reactionDuration: activeDuration,
+      recovery: weaponProfile.recovery || 0.24
+    };
+  }
+
+  findActiveAttackById(id) {
+    if (!id || !this.activeAttackSystem || !Array.isArray(this.activeAttackSystem.active)) return null;
+    return this.activeAttackSystem.active.find(attack => attack && attack.id === id) || null;
   }
 
   cancelEnemyAttacks(attacks, reason = "clash") {
@@ -1083,55 +1254,51 @@ class BattleSystem {
   }
 
   triggerClashCounter(chainKey) {
-    const targets = this.getCounterCoverageTargets();
-    if (targets.length === 0) return;
+    const incoming = this.getIncomingActiveAttack();
+    const sourceAttack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    if (!incoming || !sourceAttack) return;
 
-    this.defenseTriggered = true;
-    this.playerState.currentState = "swordAttack";
-    this.input.clear();
-    this.cancelEnemyAttacks(targets, "clash");
-    const followupContext = { source: "clash", covered: targets.length };
-    this.pendingFollowupContext = followupContext;
-
+    const attackCounter = this.getAttackCounterProfile(sourceAttack);
     const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
-    const coveredSpell = targets.some(attack => this.isIncomingSpellAttack(attack.intent && attack.intent.attack));
-    const damage = Math.max(8, Math.floor((weapon.normalAttack || 10) + targets.length * 5 + (coveredSpell ? 4 : 0)));
-    const currentStyle = this.getCurrentStyle();
-    const isCrit = this.hasCombatArt("desslo") || !!(currentStyle && currentStyle.counterCrit);
-    const label = `clash:${chainKey}:${targets.map(attack => attack.intent.attackId || attack.id).join("+")}`;
-    const finishClash = () => {
-      if (this.checkEnemyDefeated()) return;
-      const context = this.pendingFollowupContext || followupContext;
-      this.pendingFollowupContext = null;
-      this.startResolvingToFollowup(context);
-    };
-
-    SFX.sfxCounter();
-    this.triggerActorReaction("player", "attack", targets.length > 1 ? 1.18 : 1.0, {
-      color: weapon.color || "#2ecc71",
-      duration: targets.length > 1 ? 0.42 : 0.30
-    });
-    this.spawnFloatingText(`拼刀 x${targets.length}`, 220, 300, "status");
-    this.log(`拼刀覆盖 ${targets.length} 段敌方攻势`);
-
-    const token = `${label}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`;
-    const segments = this.buildClashCounterSegments(targets, damage);
-    if (segments.length > 1) {
-      this.commitClashCounterSegments({
-        segments,
-        token,
-        label,
-        weapon,
-        isCrit,
-        followupContext,
-        finishClash
-      });
-      this.pendingFollowupContext = followupContext;
-      this.setMessage(`拼刀覆盖 ${targets.length} 段 · 双刃连续反击`);
+    const weaponProfile = this.getWeaponCounterProfile();
+    if (!attackCounter.canClash || !weaponProfile.allowedCounterTypes.includes(attackCounter.type)) {
+      this.triggerInvalidCounterAttempt(chainKey, incoming, attackCounter);
       return;
     }
 
-    this.commitActiveAttack({
+    const outcome = this.getCounterNodeOutcome(incoming, weaponProfile);
+    if (!outcome.accepted) {
+      if (outcome.grade === "early") {
+        this.triggerEarlyCounterAttempt(chainKey, incoming, outcome);
+      } else {
+        this.triggerLateCounterAttempt(chainKey, incoming, outcome);
+      }
+      return;
+    }
+
+    this.defenseTriggered = true;
+    this.defenseMode = "counter";
+    this.playerState.currentState = "swordAttack";
+    this.input.clear();
+    const nodeIndex = incoming.intent.chainIndex ?? 0;
+    const nodeCount = incoming.intent.chainCount || 1;
+    const isFinisher = nodeIndex >= nodeCount - 1 || (sourceAttack.counter && sourceAttack.counter.type === "finisher");
+    const postureDamage = Math.floor((isFinisher ? weaponProfile.finisherPostureDamage : weaponProfile.postureDamage) * (outcome.perfect ? 1.35 : 1));
+    const damage = Math.max(2, Math.floor((weaponProfile.hpDamage || 3) + (outcome.perfect ? 2 : 0) + (isFinisher ? 2 : 0)));
+    const currentStyle = this.getCurrentStyle();
+    const isCrit = this.hasCombatArt("desslo") || !!(currentStyle && currentStyle.counterCrit);
+    const label = `clash:${chainKey}:${sourceAttack.chainNodeId || sourceAttack.id || incoming.id}`;
+    const token = `${label}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`;
+    const timeline = this.getCounterAttackTimeline(incoming, weaponProfile, outcome);
+
+    SFX.sfxCounter();
+    this.triggerActorReaction("player", "attack", outcome.perfect ? 1.12 : 0.96, {
+      color: weapon.color || "#2ecc71",
+      duration: Math.max(0.20, Math.min(0.34, timeline.impactTime + 0.12))
+    });
+    this.log(`反制节点 ${nodeIndex + 1}/${nodeCount}：${sourceAttack.name} -> ${outcome.grade}`);
+
+    this.activeAttackSystem.commit({
       kind: "defenseCounter",
       source: "player",
       target: "enemy",
@@ -1144,12 +1311,24 @@ class BattleSystem {
       damage,
       label,
       visualEvent: label,
-      motion: targets.length > 1 ? "dualClash" : "clash",
+      motion: outcome.perfect ? "clashPerfect" : "clash",
       chainFamily: "counter",
       weapon: this.playerConfig.weapon,
       color: weapon.color || "#2ecc71",
-      followupContext,
-      onComplete: finishClash,
+      timeline,
+      counterNodeTargetId: incoming.id,
+      counterNode: {
+        chainId: incoming.intent.chainId || null,
+        chainName: sourceAttack.chainName || (this.enemyAttackChain && this.enemyAttackChain.name) || "",
+        nodeId: sourceAttack.chainNodeId || sourceAttack.id || incoming.id,
+        nodeIndex,
+        nodeCount,
+        outcome: outcome.grade,
+        postureDamage,
+        opensFollowupOnSuccess: isFinisher || !!sourceAttack.opensFollowupOnSuccess,
+        targetAttackId: sourceAttack.id
+      },
+      onComplete: attack => this.finishCounterNodeAttack(attack),
       damageIntent: {
         source: "player",
         target: "enemy",
@@ -1160,57 +1339,60 @@ class BattleSystem {
         damage,
         label,
         visualEvent: label,
-        motion: targets.length > 1 ? "dualClash" : "clash",
+        motion: outcome.perfect ? "clashPerfect" : "clash",
         chainFamily: "counter",
         weapon: this.playerConfig.weapon,
-        options: { isCrit }
+        options: { isCrit, suppressFloatingText: true, suppressLog: true }
       }
     });
-    this.setMessage(`拼刀覆盖 ${targets.length} 段 · 反击推进中`);
+    this.setMessage(`${outcome.perfect ? "完美拼刀" : "拼刀"} ${nodeIndex + 1}/${nodeCount} · 等待碰撞`);
   }
 
   triggerSpellInterrupt(chainKey) {
-    const coverageTargets = this.getCounterCoverageTargets();
-    if (coverageTargets.length === 0) return;
-
+    const incoming = this.getIncomingActiveAttack();
+    const sourceAttack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    if (!incoming || !sourceAttack) return;
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    const weaponProfile = this.getWeaponCounterProfile();
+    const outcome = this.getCounterNodeOutcome(incoming, weaponProfile);
+    if (!outcome.accepted) {
+      if (outcome.grade === "early") {
+        this.triggerEarlyCounterAttempt(chainKey, incoming, outcome);
+      } else {
+        this.triggerLateCounterAttempt(chainKey, incoming, outcome);
+      }
+      return;
+    }
     const activeEnemies = this.getActiveEnemyAttacks();
-    const incomingChainId = coverageTargets[0] && coverageTargets[0].intent ? coverageTargets[0].intent.chainId : null;
+    const incomingChainId = incoming && incoming.intent ? incoming.intent.chainId : null;
     const targets = activeEnemies.filter(attack => {
       if (!incomingChainId) return true;
       return attack.intent && attack.intent.chainId === incomingChainId;
     });
-    const interruptTargets = targets.length > 0 ? targets : coverageTargets;
+    const interruptTargets = targets.length > 0 ? targets : [incoming];
 
     const spellTargets = interruptTargets.filter(attack => this.isIncomingSpellAttack(attack.intent && attack.intent.attack));
-    const canceled = this.cancelEnemyAttacks(interruptTargets, "interrupt");
     this.defenseTriggered = true;
+    this.defenseMode = "counter";
     this.playerState.currentState = "swordAttack";
     this.input.clear();
     const followupContext = { source: "spellInterrupt", covered: interruptTargets.length };
-    this.pendingFollowupContext = followupContext;
 
-    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
     const damage = Math.max(10, Math.floor((weapon.normalAttack || 10) + 10 + spellTargets.length * 8));
     const currentStyle = this.getCurrentStyle();
     const isCrit = !!(currentStyle && currentStyle.counterCrit);
     const label = `interrupt:${chainKey}:${interruptTargets.map(attack => attack.intent.attackId || attack.id).join("+")}`;
     const token = `${label}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`;
-    const finishInterrupt = () => {
-      if (this.checkEnemyDefeated()) return;
-      const context = this.pendingFollowupContext || followupContext;
-      this.pendingFollowupContext = null;
-      this.startResolvingToFollowup(context);
-    };
+    const timeline = this.getCounterAttackTimeline(incoming, weaponProfile, outcome);
 
     SFX.sfxCounter();
     this.triggerActorReaction("player", "attack", 1.12, {
       color: weapon.color || "#2ecc71",
       duration: 0.36
     });
-    this.spawnFloatingText("施法打断", 220, 300, "status");
-    this.log(`出刀打断施法，取消 ${canceled.length} 段敌方动作`);
+    this.log(`出刀打断施法：锁定 ${interruptTargets.length} 段敌方动作`);
 
-    this.commitActiveAttack({
+    this.activeAttackSystem.commit({
       kind: "defenseCounter",
       source: "player",
       target: "enemy",
@@ -1227,8 +1409,10 @@ class BattleSystem {
       chainFamily: "counter",
       weapon: this.playerConfig.weapon,
       color: weapon.color || "#2ecc71",
-      followupContext,
-      onComplete: finishInterrupt,
+      timeline,
+      interruptTargetIds: interruptTargets.map(attack => attack.id),
+      interruptContext: followupContext,
+      onComplete: attack => this.finishSpellInterruptAttack(attack),
       damageIntent: {
         source: "player",
         target: "enemy",
@@ -1242,11 +1426,311 @@ class BattleSystem {
         motion: "spellInterrupt",
         chainFamily: "counter",
         weapon: this.playerConfig.weapon,
-        options: { isCrit }
+        options: { isCrit, suppressFloatingText: true, suppressLog: true }
       }
     });
-    this.setMessage(`出刀打断施法 · ${canceled.length} 段敌方动作被取消`);
-    this.pendingFollowupContext = followupContext;
+    this.setMessage(`出刀打断施法 · 等待命中`);
+  }
+
+  triggerInvalidCounterAttempt(chainKey, incoming, attackCounter) {
+    const sourceAttack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    const weaponProfile = this.getWeaponCounterProfile();
+    this.defenseTriggered = true;
+    this.defenseMode = "failedCounter";
+    this.playerState.currentState = "swordAttack";
+    this.input.clear();
+    this.triggerActorReaction("player", "attack", 0.78, {
+      color: weapon.color || "#95a5a6",
+      duration: 0.22
+    });
+    this.activeAttackSystem.commit({
+      kind: "defenseCounter",
+      source: "player",
+      target: "enemy",
+      token: `counter-whiff:${chainKey}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`,
+      attackType: "melee",
+      shape: "arc",
+      fromAnchor: "playerHand",
+      anchor: "playerHand",
+      toAnchor: "enemyCore",
+      damage: 0,
+      label: "counterWhiff",
+      visualEvent: "counterWhiff",
+      motion: "whiff",
+      chainFamily: "counter",
+      weapon: this.playerConfig.weapon,
+      color: weapon.color || "#95a5a6",
+      timeline: {
+        startup: 0.04,
+        travel: 0.05,
+        impactTime: 0.09,
+        reactionStart: 0.04,
+        reactionDuration: 0.05,
+        recovery: weaponProfile.recovery || 0.24
+      },
+      onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
+    });
+    this.setMessage(`${sourceAttack ? sourceAttack.name : "此段"}不能拼刀 · ${attackCounter.hint || "换防御"}`);
+  }
+
+  triggerEarlyCounterAttempt(chainKey, incoming, outcome = {}) {
+    const sourceAttack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    const weaponProfile = this.getWeaponCounterProfile();
+    this.defenseTriggered = true;
+    this.defenseMode = "failedCounter";
+    this.playerState.currentState = "swordAttack";
+    this.input.clear();
+    this.triggerActorReaction("player", "attack", 0.82, {
+      color: weapon.color || "#95a5a6",
+      direction: 1,
+      distance: 10,
+      duration: Math.max(0.22, Math.min(0.34, (weaponProfile.startup || 0.1) + (weaponProfile.activeDuration || 0.12)))
+    });
+    const startup = Math.max(0.02, weaponProfile.startup || 0.1);
+    const activeDuration = Math.max(0.06, weaponProfile.activeDuration || 0.12);
+    const recovery = Math.max(0.18, weaponProfile.recovery || 0.24);
+    this.activeAttackSystem.commit({
+      kind: "defenseCounter",
+      source: "player",
+      target: "enemy",
+      token: `counter-early:${chainKey}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`,
+      attackType: "melee",
+      shape: "arc",
+      fromAnchor: "playerHand",
+      anchor: "playerHand",
+      toAnchor: "enemyCore",
+      damage: 0,
+      label: "counterEarlyWhiff",
+      visualEvent: "counterEarlyWhiff",
+      motion: "whiff",
+      chainFamily: "counter",
+      weapon: this.playerConfig.weapon,
+      color: weapon.color || "#95a5a6",
+      timeline: {
+        startup,
+        travel: activeDuration * 0.45,
+        impactTime: startup + activeDuration * 0.45,
+        activeStart: startup,
+        activeDuration,
+        reactionStart: startup,
+        reactionDuration: activeDuration,
+        recovery
+      },
+      whiffContext: {
+        reason: "early",
+        targetAttackId: incoming ? incoming.id : null,
+        enemyActiveStart: outcome.enemyActiveStart,
+        playerActiveEnd: outcome.playerActiveEnd
+      },
+      onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
+    });
+    this.setMessage(`出刀过早 · ${sourceAttack ? sourceAttack.name : "敌方攻击"}还没进身`);
+    this.log(`反制过早：${sourceAttack ? sourceAttack.name : "unknown"}`);
+  }
+
+  triggerLateCounterAttempt(chainKey, incoming, outcome = {}) {
+    const sourceAttack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    const weaponProfile = this.getWeaponCounterProfile();
+    this.defenseTriggered = true;
+    this.defenseMode = "failedCounter";
+    this.playerState.currentState = "swordAttack";
+    this.input.clear();
+    this.triggerActorReaction("player", "attack", 0.7, {
+      color: weapon.color || "#95a5a6",
+      duration: 0.18
+    });
+    this.activeAttackSystem.commit({
+      kind: "defenseCounter",
+      source: "player",
+      target: "enemy",
+      token: `counter-late:${chainKey}:${this.enemyAttackCursor}:${Math.round(performance.now() * 1000)}`,
+      attackType: "melee",
+      shape: "arc",
+      fromAnchor: "playerHand",
+      anchor: "playerHand",
+      toAnchor: "enemyCore",
+      damage: 0,
+      label: "counterLate",
+      visualEvent: "counterLate",
+      motion: "late",
+      chainFamily: "counter",
+      weapon: this.playerConfig.weapon,
+      color: weapon.color || "#95a5a6",
+      timeline: {
+        startup: 0.05,
+        travel: 0.05,
+        impactTime: 0.10,
+        reactionStart: 0.05,
+        reactionDuration: 0.05,
+        recovery: weaponProfile.recovery || 0.24
+      },
+      onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
+    });
+    this.setMessage(`出刀过慢 · ${sourceAttack ? sourceAttack.name : "敌方攻击"}压到身前`);
+    this.log(`反制过晚：${sourceAttack ? sourceAttack.name : "unknown"}`);
+  }
+
+  finishFailedCounterAttempt(sourceAttack = null, options = {}) {
+    if (this.playerHp <= 0 || this.turnState === "game_over") return;
+    if (options.keepLockedUntilImpact) {
+      this.setMessage(sourceAttack ? `${sourceAttack.name}即将命中` : "破绽暴露");
+      return;
+    }
+    if (this.hasPendingEnemyActiveAttacks()) {
+      this.defenseTriggered = false;
+      this.defenseMode = null;
+      this.playerState.currentState = "idle";
+      this.setMessage(sourceAttack ? `${sourceAttack.name}后续压上` : "敌方连段继续");
+    }
+  }
+
+  resolveCounterNodeImpact(attack) {
+    const intent = attack.intent || {};
+    const target = this.findActiveAttackById(intent.counterNodeTargetId);
+    let canceled = false;
+    if (target && !target.canceled && !target.completed && !target.resolved) {
+      this.activeAttackSystem.cancel(target, "clash");
+      canceled = true;
+    }
+
+    const result = this.confirmDamage(intent.damageIntent || intent);
+    const node = intent.counterNode || {};
+    const state = this.enemyCounterState;
+    if (state && node.chainId && state.chainId === node.chainId) {
+      const already = state.resolvedNodes.some(item => item.nodeIndex === node.nodeIndex);
+      if (!already) {
+        state.resolvedNodes.push({
+          nodeIndex: node.nodeIndex,
+          nodeId: node.nodeId,
+          outcome: node.outcome,
+          canceled,
+          postureDamage: node.postureDamage || 0
+        });
+        state.successCount += canceled ? 1 : 0;
+        if (!canceled) state.failCount += 1;
+        if (canceled) state.postureDamage += node.postureDamage || 0;
+        if (!canceled) state.followupEligible = false;
+      }
+    }
+
+    attack.intent.counterNodeSucceeded = canceled;
+    attack.intent.counterNodeResult = { ...(result || {}), canceled };
+    if (canceled) {
+      this.hitStop = Math.max(this.hitStop, node.outcome === "perfect" ? 0.15 : 0.10);
+      this.screenShake = Math.max(this.screenShake, node.outcome === "perfect" ? 0.18 : 0.11);
+      this.triggerActorReaction("player", "attack", node.outcome === "perfect" ? 1.08 : 0.9, {
+        color: attack.intent.color || "#2ecc71",
+        direction: 1,
+        distance: node.outcome === "perfect" ? 16 : 10,
+        lift: 1,
+        duration: 0.20
+      });
+      this.triggerActorReaction("enemy", node.outcome === "perfect" ? "stagger" : "guard", node.outcome === "perfect" ? 1.05 : 0.86, {
+        color: node.outcome === "perfect" ? "#f1c40f" : "#ffffff",
+        direction: 1,
+        distance: node.outcome === "perfect" ? 24 : 14,
+        lift: node.outcome === "perfect" ? 5 : 2,
+        duration: 0.24
+      });
+      this.spawnParticles("slash", 480, 340, node.outcome === "perfect" ? 1.35 : 1.0);
+      if (node.outcome === "perfect") this.flashScreen("#f1c40f", 0.12);
+      this.setMessage(`${node.outcome === "perfect" ? "完美拼刀" : "拼刀"} ${node.nodeIndex + 1}/${node.nodeCount}`);
+    }
+    return result;
+  }
+
+  resolveSpellInterruptImpact(attack) {
+    const intent = attack.intent || {};
+    const targets = (intent.interruptTargetIds || [])
+      .map(id => this.findActiveAttackById(id))
+      .filter(Boolean);
+    const canceled = this.cancelEnemyAttacks(targets, "interrupt");
+    const result = this.confirmDamage(intent.damageIntent || intent);
+    attack.intent.interruptResolved = canceled.length > 0;
+    attack.intent.interruptCanceledCount = canceled.length;
+    this.hitStop = Math.max(this.hitStop, 0.16);
+    this.screenShake = Math.max(this.screenShake, 0.18);
+    this.triggerActorReaction("player", "attack", 1.08, {
+      color: attack.intent.color || "#2ecc71",
+      direction: 1,
+      distance: 18,
+      lift: 1,
+      duration: 0.24
+    });
+    this.triggerActorReaction("enemy", "stagger", 1.1, {
+      color: "#9b59b6",
+      direction: 1,
+      distance: 26,
+      lift: 5,
+      duration: 0.28
+    });
+    this.spawnFloatingText("打断", 220, 300, "status");
+    this.spawnParticles("slash", 480, 330, 1.2);
+    this.flashScreen("#9b59b6", 0.10);
+    this.log(`出刀打断施法，取消 ${canceled.length} 段敌方动作`);
+    return result;
+  }
+
+  shouldCounterNodeOpenFollowup(attack) {
+    const intent = attack.intent || {};
+    const node = intent.counterNode || {};
+    const state = this.enemyCounterState;
+    const style = this.getCurrentStyle();
+    const postureToFollowup = style && style.counterFlow ? style.counterFlow.postureToFollowup || 36 : 36;
+    return !!(
+      node.opensFollowupOnSuccess
+      || !this.hasPendingEnemyActiveAttacks()
+      || (state && state.postureDamage >= postureToFollowup)
+    );
+  }
+
+  finishCounterNodeAttack(attack) {
+    if (this.checkEnemyDefeated()) return;
+    const intent = attack.intent || {};
+    const node = intent.counterNode || {};
+    if (intent.counterNodeSucceeded && this.shouldCounterNodeOpenFollowup(attack)) {
+      this.pendingFollowupContext = null;
+      this.spawnFloatingText("破绽", 740, 260, "status");
+      this.startResolvingToFollowup({
+        source: "clash",
+        covered: this.enemyCounterState ? this.enemyCounterState.successCount : 1,
+        chainId: node.chainId || null,
+        nodeId: node.nodeId || null
+      });
+      return;
+    }
+
+    if (this.hasPendingEnemyActiveAttacks()) {
+      this.defenseTriggered = false;
+      this.defenseMode = null;
+      this.playerState.currentState = "idle";
+      this.setTurnState("enemy_turn");
+      this.setMessage(`敌方连段继续 · ${this.getEnemyCounterHint(this.enemyAttack)}`);
+      return;
+    }
+
+    this.startResolving(() => this.startEnemyTurn());
+  }
+
+  finishSpellInterruptAttack(attack) {
+    if (this.checkEnemyDefeated()) return;
+    if (attack && attack.intent && attack.intent.interruptResolved) {
+      this.pendingFollowupContext = null;
+      this.startResolvingToFollowup(attack.intent.interruptContext || { source: "spellInterrupt" });
+      return;
+    }
+    if (this.hasPendingEnemyActiveAttacks()) {
+      this.defenseTriggered = false;
+      this.defenseMode = null;
+      this.playerState.currentState = "idle";
+      this.setTurnState("enemy_turn");
+      this.setMessage("敌方法术未被打断 · 连段继续");
+      return;
+    }
+    this.startResolving(() => this.startEnemyTurn());
   }
 
   getClashCounterHitCount(targets) {
@@ -1977,6 +2461,12 @@ class BattleSystem {
 
   resolveAuxiliaryPlayerAttackImpact(attack) {
     const intent = attack.intent;
+    if (intent.counterNodeTargetId) {
+      return this.resolveCounterNodeImpact(attack);
+    }
+    if (intent.interruptTargetIds) {
+      return this.resolveSpellInterruptImpact(attack);
+    }
     const result = this.confirmDamage(intent.damageIntent || intent);
     if (result.confirmed && intent.effects) {
       ChainEffectSystem.applyResources(this, intent.effects, { playerY: 300 });
@@ -1987,7 +2477,7 @@ class BattleSystem {
 
   resolveEnemyActiveAttackImpact(attack) {
     const sourceAttack = attack.intent.attack || this.enemyAttack;
-    if (attack.canceled || (!attack.intent.chainId && this.defenseTriggered)) {
+    if (attack.canceled || (!attack.intent.chainId && this.defenseTriggered && this.defenseMode !== "failedCounter")) {
       return { confirmed: false, defended: true };
     }
     if (sourceAttack && this.tryAbsorbIncomingSpell(sourceAttack)) {
@@ -2052,6 +2542,11 @@ class BattleSystem {
       isSpell: this.isIncomingSpellAttack(sourceAttack),
       options: { attackId: sourceAttack && sourceAttack.id ? sourceAttack.id : attack.intent.attackId }
     });
+    if (this.defenseMode === "failedCounter") {
+      this.defenseTriggered = false;
+      this.defenseMode = null;
+      this.playerState.currentState = "idle";
+    }
     if (!result.died) this.setMessage("被击中");
     return result;
   }
@@ -2097,6 +2592,7 @@ class BattleSystem {
     if (this.checkEnemyDefeated()) return;
     if (this.hasPendingEnemyActiveAttacks()) {
       this.defenseTriggered = false;
+      this.defenseMode = null;
       this.qteRunner = null;
       this.playerState.currentState = "idle";
       this.setTurnState("enemy_turn");
@@ -2362,10 +2858,12 @@ class BattleSystem {
     this.showTurnBanner("敌方回合", "#e74c3c");
     this.actionBar = 0;
     this.defenseTriggered = false;
+    this.defenseMode = null;
     this.resetCombo();
     this.pendingFollowUp = false;
     this.pendingFollowupContext = null;
     this.enemyAttackChain = null;
+    this.enemyCounterState = null;
     this.playerState.currentState = "idle";
     this.input.clear();
 
@@ -2424,6 +2922,16 @@ class BattleSystem {
     }
 
     this.enemyAttackChain = { id: chainId, ...chain };
+    this.enemyCounterState = {
+      chainId,
+      chainName: chain.name || chainId,
+      nodeCount: chain.nodes.length,
+      resolvedNodes: [],
+      successCount: 0,
+      failCount: 0,
+      postureDamage: 0,
+      followupEligible: true
+    };
     const attacks = chain.nodes
       .map((node, index) => this.buildEnemyAttackChainNode(chainId, chain, node, index))
       .filter(Boolean);
@@ -2445,6 +2953,9 @@ class BattleSystem {
     attack.chainNodeId = node.id || `${index + 1}`;
     attack.chainIndex = index;
     attack.chainCount = chain.nodes.length;
+    attack.chainRole = node.role || "";
+    attack.counterNode = node.counterNode || "";
+    attack.opensFollowupOnSuccess = !!node.opensFollowupOnSuccess;
     attack.offset = Math.max(0, node.offset || 0);
     attack.name = `${attack.chainIndex + 1}/${attack.chainCount} ${attack.name}`;
     this.decorateEnemyAttackResponse(attack);
@@ -2491,7 +3002,9 @@ class BattleSystem {
     this.enemyAttack = null;
     this.enemyAttackChain = null;
     this.enemyAttackPhase = "none";
+    this.enemyCounterState = null;
     this.defenseTriggered = false;
+    this.defenseMode = null;
     this.qteRunner = null;
     this.pendingFollowUp = false;
     this.pendingFollowupContext = null;
@@ -2514,7 +3027,9 @@ class BattleSystem {
     this.enemyAttack = null;
     this.enemyAttackChain = null;
     this.enemyAttackPhase = "none";
+    this.enemyCounterState = null;
     this.defenseTriggered = false;
+    this.defenseMode = null;
     this.qteRunner = null;
     this.pendingFollowUp = false;
     this.pendingFollowupContext = null;
@@ -2798,7 +3313,7 @@ class BattleSystem {
       this.playerHp = Math.max(0, this.playerHp - amount);
       this.screenShake = Math.max(0.18, 0.18 + force * 0.06);
       this.hitStop = Math.max(0.10, 0.08 + force * 0.03);
-      this.floatingTexts.add(`-${amount}`, px, py - 40, "damage");
+      if (!options.suppressFloatingText) this.floatingTexts.add(`-${amount}`, px, py - 40, "damage");
       this.spawnParticles("hit", px, py, 1);
       if (this.effectQueue) {
         this.effectQueue.emit({
@@ -2824,7 +3339,7 @@ class BattleSystem {
       SFX.sfxHit();
       this.resetCombo();
       this.battleStats.hitsTaken++;
-      this.log(`玩家受到 ${amount} 伤害`);
+      if (!options.suppressLog) this.log(`玩家受到 ${amount} 伤害`);
       if (this.playerHp <= 0) {
         this.setTurnState("game_over");
         this.setMessage("战败…");
@@ -2839,7 +3354,7 @@ class BattleSystem {
       this.screenShake = options.isCrit ? Math.max(0.25, 0.18 + force * 0.06) : Math.max(0.14, 0.10 + force * 0.05);
       this.hitStop = options.isCrit ? Math.max(0.12, 0.08 + force * 0.035) : Math.max(0.07, 0.055 + force * 0.025);
       const textType = options.isCrit ? "crit" : "damage";
-      this.floatingTexts.add(`-${amount}`, ex, ey - 40, textType);
+      if (!options.suppressFloatingText) this.floatingTexts.add(`-${amount}`, ex, ey - 40, textType);
       this.spawnParticles(options.isCrit ? "slash" : "hit", ex, ey, options.isCrit ? 1.5 : 1);
       if (this.effectQueue) {
         this.effectQueue.emit({
@@ -2866,7 +3381,7 @@ class BattleSystem {
         this.setCameraZoom(1.15, 0.3);
         this.triggerImpactFrames(1);
       }
-      this.log(`敌人受到 ${amount} ${options.isCrit ? "暴击" : ""}伤害`);
+      if (!options.suppressLog) this.log(`敌人受到 ${amount} ${options.isCrit ? "暴击" : ""}伤害`);
       return false;
     }
   }

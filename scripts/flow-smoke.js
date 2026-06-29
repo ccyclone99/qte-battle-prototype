@@ -191,7 +191,7 @@ function verifyDefaultPlanScope() {
   assert("default plan S remains dual blade", chains.S === "dualblades_s_v2", chains.S || "none");
   assert("default plan D remains dual blade", chains.D === "dualblades_d_v2", chains.D || "none");
   assert("default plan has no counterspell chain", !style.counterChain, style.counterChain || "none");
-  assert("default plan keeps dual coverage", battle.getCounterCoverageCount() === 3, String(battle.getCounterCoverageCount()));
+  assert("default plan uses sequential counter flow", style.counterFlow && style.counterFlow.enabled && battle.getWeaponCounterProfile().recovery <= 0.2, JSON.stringify(style.counterFlow || {}));
   assert("counter dojo gives no spell energy", !("startSpellEnergy" in modifiers), String(modifiers.startSpellEnergy));
   assert("counter dojo gives no absorb boost", !("absorbEnergyMul" in modifiers) && !("absorbDamageMul" in modifiers), JSON.stringify(modifiers));
 }
@@ -342,7 +342,7 @@ function verifyEnemyActiveAttackTiming() {
   assert("enemy active attack starts", battle.activeAttackSystem.active.some(attack => attack.intent.kind === "enemyAttack"), "no enemy active");
   const active = battle.activeAttackSystem.active.find(attack => attack.intent.kind === "enemyAttack");
   const reactionLead = active.profile.impactTime - active.profile.reactionStart;
-  assert("enemy active reaction close to impact", reactionLead <= 0.95 && reactionLead >= 0.45, String(reactionLead));
+  assert("enemy active reaction close to impact", reactionLead <= 0.36 && reactionLead >= 0.16, String(reactionLead));
   tick(battle, 0.4);
   assert("enemy active attack no early damage", battle.playerHp === playerStart, `${battle.playerHp}/${playerStart}`);
   assert("enemy active attack reaches reaction", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
@@ -358,17 +358,40 @@ function verifyDefaultEnemyAttackChain() {
   assert("default reaches response", runUntil(battle, () => battle.enemyAttackPhase === "response", 4), battle.enemyAttackPhase);
 
   const enemyStart = battle.enemyHp;
-  input.injectKey("A", "press", { fresh: true });
-  tick(battle, 0.08);
-  input.injectKey("A", "release");
-  tick(battle, 0.08);
-  const canceledEnemies = battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled).length;
-  assert("default interrupt cancels covered nodes", canceledEnemies >= 2, String(canceledEnemies));
-  assert("default interrupt creates counter attack", battle.activeAttackSystem.active.some(attack => attack.intent.kind === "defenseCounter"), battle.turnState);
-  const clashCounters = battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "defenseCounter");
-  assert("default interrupt creates melee counter", clashCounters.length >= 1, `${clashCounters.length} hits`);
-  assert("default interrupt eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
-  assert("default interrupt opens followup turn", runUntil(battle, () => battle.turnState === "followup_turn", 8), battle.turnState);
+  const canceledByClash = () => battle.activeAttackSystem.recent.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled && attack.defenderResponse === "clash").length;
+  const currentNodeIndex = () => {
+    const incoming = battle.getIncomingActiveAttack();
+    return incoming && incoming.intent ? incoming.intent.chainIndex : -1;
+  };
+
+  assert("default first counter node is first chain node", currentNodeIndex() === 0, String(currentNodeIndex()));
+  tap(input, battle, "A");
+  assert("default first node creates one melee counter", battle.activeAttackSystem.recent.some(attack => attack.intent.kind === "defenseCounter" && attack.intent.counterNodeTargetId), battle.turnState);
+  assert("default first node cancels only one enemy node", runUntil(battle, () => canceledByClash() === 1, 4), String(canceledByClash()));
+  assert("default first node does not open followup", battle.turnState !== "followup_turn", battle.turnState);
+  assert("default second counter window opens", runUntil(battle, () => battle.enemyAttackPhase === "response" && currentNodeIndex() === 1, 5), `${battle.enemyAttackPhase}/${currentNodeIndex()}`);
+
+  tap(input, battle, "A");
+  assert("default second node cancels exactly two total nodes", runUntil(battle, () => canceledByClash() === 2, 4), String(canceledByClash()));
+  assert("default third counter window opens", runUntil(battle, () => battle.enemyAttackPhase === "response" && currentNodeIndex() === 2, 5), `${battle.enemyAttackPhase}/${currentNodeIndex()}`);
+
+  tap(input, battle, "A");
+  assert("default third node cancels all three nodes", runUntil(battle, () => canceledByClash() === 3, 4), String(canceledByClash()));
+  assert("default sequential counters damage enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
+  assert("default sequential counters open followup turn", runUntil(battle, () => battle.turnState === "followup_turn", 8), battle.turnState);
+}
+
+function verifyEarlyCounterWhiffPunish() {
+  const { input, battle } = createDefaultBattle();
+  const playerStart = battle.playerHp;
+  assert("early counter setup enemy chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
+
+  tap(input, battle, "A");
+  const earlyCounter = battle.activeAttackSystem.recent.find(attack => attack.intent.kind === "defenseCounter" && attack.intent.motion === "whiff");
+  assert("early counter creates whiff attack", !!earlyCounter && earlyCounter.intent.label === "counterEarlyWhiff", earlyCounter ? earlyCounter.intent.label : "none");
+  assert("early counter does not cancel enemy node immediately", !battle.activeAttackSystem.recent.some(attack => attack.intent.kind === "enemyAttack" && attack.canceled && attack.defenderResponse === "clash"), "unexpected clash cancel");
+  assert("early counter locks defense until impact", battle.defenseTriggered && battle.defenseMode === "failedCounter", `${battle.defenseTriggered}/${battle.defenseMode}`);
+  assert("early counter whiff is punished by hit", runUntil(battle, () => battle.playerHp < playerStart, 5), `${battle.playerHp}/${playerStart}`);
 }
 
 function verifySpellInterruptEnemyTurn() {
@@ -401,14 +424,14 @@ function verifySpellInterruptEnemyTurn() {
   const enemyStart = battle.enemyHp;
   input.injectKey("A", "press", { fresh: true });
   tick(battle, 0.08);
+  assert("spell interrupt holds hp before impact", battle.enemyHp === enemyStart, `${battle.enemyHp}/${enemyStart}`);
   input.injectKey("A", "release");
   tick(battle, 0.08);
-  assert("spell interrupt does not start qte", battle.turnState === "attack_active" && !battle.qteRunner, battle.turnState);
-  assert("spell interrupt cancels enemy chain nodes", battle.activeAttackSystem.active.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled).length >= 2, String(battle.activeAttackSystem.active.length));
-  const spellInterruptCounter = battle.activeAttackSystem.active.find(attack => attack.intent.kind === "defenseCounter");
+  assert("spell interrupt does not start qte", battle.turnState !== "qte_running" && !battle.qteRunner, battle.turnState);
+  assert("spell interrupt cancels enemy chain nodes", runUntil(battle, () => battle.activeAttackSystem.recent.filter(attack => attack.intent.kind === "enemyAttack" && attack.canceled && attack.defenderResponse === "interrupt").length >= 2, 4), String(battle.activeAttackSystem.recent.length));
+  const spellInterruptCounter = battle.activeAttackSystem.recent.find(attack => attack.intent.kind === "defenseCounter" && attack.intent.interruptTargetIds);
   assert("spell interrupt creates counter attack", !!spellInterruptCounter, battle.turnState);
-  assert("spell interrupt counter carries followup", !!(spellInterruptCounter.intent && spellInterruptCounter.intent.followupContext), JSON.stringify(spellInterruptCounter.intent && spellInterruptCounter.intent.followupContext));
-  assert("spell interrupt holds hp before impact", battle.enemyHp === enemyStart, `${battle.enemyHp}/${enemyStart}`);
+  assert("spell interrupt counter carries followup", !!(spellInterruptCounter.intent && spellInterruptCounter.intent.interruptContext), JSON.stringify(spellInterruptCounter.intent && spellInterruptCounter.intent.interruptContext));
   assert("spell interrupt eventually damages enemy", runUntil(battle, () => battle.enemyHp < enemyStart, 8), `${battle.enemyHp}/${enemyStart}`);
   assert("spell interrupt counter completes", counterCompleted || runUntil(battle, () => counterCompleted, 8), battle.turnState);
   assert("spell interrupt opens followup turn", followupOpened || runUntil(battle, () => battle.turnState === "followup_turn", 8), battle.turnState);
@@ -440,7 +463,8 @@ function verifyAllDamageChainsResolveActiveProfiles() {
       damage: sim.effects.damage,
       weapon: chain.family === "dualBlades" ? "dualBlades" : (chain.family === "greatsword" ? "greatsword" : "staff")
     });
-    assert(`active profile ${chainId}`, !!profile.type && profile.impactTime > 0 && profile.total > profile.impactTime, JSON.stringify(profile));
+  assert(`active profile ${chainId}`, !!profile.type && profile.impactTime > 0 && profile.total > profile.impactTime, JSON.stringify(profile));
+    assert(`active frame profile ${chainId}`, profile.activeStart !== undefined && profile.activeDuration > 0 && profile.activeEnd > profile.activeStart, JSON.stringify(profile));
   }
 }
 
@@ -525,6 +549,7 @@ try {
   verifyActiveAttackQteResolution();
   verifyEnemyActiveAttackTiming();
   verifyDefaultEnemyAttackChain();
+  verifyEarlyCounterWhiffPunish();
   verifySpellInterruptEnemyTurn();
   verifyActiveAttackHitStopFreeze();
   verifyAllDamageChainsResolveActiveProfiles();

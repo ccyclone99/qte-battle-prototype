@@ -385,7 +385,7 @@ function updateBattleUI() {
   } else if (battle.turnState === "enemy_turn") {
     turnText = "敌方回合";
     turnClass = "enemy";
-    helpHtml = `<div><b>A/S/D</b> 拼刀/打断施法</div><div><b>SPACE</b> 闪避/弹反 <b>F</b> 格挡</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
+    helpHtml = `<div><b>A/S/D</b> 逐节点拼刀/打断施法</div><div><b>SPACE</b> 闪避/弹反 <b>F</b> 格挡</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "qte_running") {
     turnText = "QTE";
     turnClass = "qte";
@@ -564,13 +564,20 @@ function currentScene() {
   return null;
 }
 
+function isBlockingOverlayVisible() {
+  return (tutorialOverlay && tutorialOverlay.style.display !== "none")
+    || (gameOverOverlay && gameOverOverlay.style.display !== "none");
+}
+
 function loop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
 
-  if (appState === "battle" && battle) {
+  const pausedByOverlay = isBlockingOverlayVisible();
+
+  if (!pausedByOverlay && appState === "battle" && battle) {
     battle.update(dt);
-  } else if (appState === "demo" && demo) {
+  } else if (!pausedByOverlay && appState === "demo" && demo) {
     demo.update(dt);
     if (demo.returnToMenu) {
       demo.returnToMenu = false;

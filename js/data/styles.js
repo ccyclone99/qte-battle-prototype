@@ -4,7 +4,7 @@ const StyleDatabase = {
     key: "",
     number: "",
     name: "反制战斗方案",
-    description: "敌方回合内出刀拼刀或打断施法；双持用连续判定覆盖多段，应对成功后进入追击窗口，才可触发武器 QTE 暴击。",
+    description: "敌方回合内逐节点拼刀或打断施法；双持依靠更短恢复连续应对快攻链，应对关键节点成功后进入追击窗口，才可触发武器 QTE 暴击。",
     icon: "反",
     color: "#16a085",
     weapon: "dualBlades",
@@ -16,11 +16,11 @@ const StyleDatabase = {
     manualQteCrit: true,
     counterCrit: true,
     autoAttackNoBonus: true,
-    counterCoverage: {
-      dualBlades: 3,
-      greatsword: 1,
-      staff: 1,
-      default: 1
+    counterFlow: {
+      enabled: true,
+      postureToFollowup: 36,
+      allowWeaponKeys: true,
+      openFollowupOnSpellInterrupt: true
     }
   }
 };

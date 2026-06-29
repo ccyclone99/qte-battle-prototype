@@ -195,13 +195,15 @@ body {
   z-index: 25;
   pointer-events: none;
   opacity: 0;
+  visibility: hidden;
   transform: translateY(-8px);
-  transition: opacity 0.2s, transform 0.2s;
+  transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
   overflow: hidden;
 }
 
 .drawer:not(.hidden) {
   opacity: 1;
+  visibility: visible;
   transform: translateY(0);
   pointer-events: auto;
 }

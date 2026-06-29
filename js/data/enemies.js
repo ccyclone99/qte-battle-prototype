@@ -96,6 +96,14 @@ const EnemyDatabase = {
         pose: "lunge",
         width: 18
       },
+      counter: {
+        type: "quick_melee",
+        canClash: true,
+        canGuard: false,
+        canDodge: true,
+        recommended: ["A", "SPACE"],
+        hint: "A 拼刀 / SPACE 闪避"
+      },
       hint: "短预警，可闪避/弹反 [SPACE]"
     },
     thrust: {
@@ -112,6 +120,14 @@ const EnemyDatabase = {
         pose: "lunge",
         width: 24
       },
+      counter: {
+        type: "finisher",
+        canClash: true,
+        canGuard: false,
+        canDodge: true,
+        recommended: ["A", "SPACE"],
+        hint: "A 拼刀打断 / SPACE 闪避"
+      },
       hint: "可闪避 [SPACE] / 弹反 [SPACE]"
     },
     slash: {
@@ -127,6 +143,14 @@ const EnemyDatabase = {
         shape: "arc",
         pose: "sweep",
         width: 42
+      },
+      counter: {
+        type: "melee",
+        canClash: true,
+        canGuard: true,
+        canDodge: true,
+        recommended: ["A", "F", "SPACE"],
+        hint: "A 拼刀 / F 举盾 / SPACE 闪避"
       },
       hint: "可闪避 [SPACE] / 格挡 [F]"
     },
@@ -145,6 +169,14 @@ const EnemyDatabase = {
         pose: "overhead",
         width: 68
       },
+      counter: {
+        type: "heavy_melee",
+        canClash: true,
+        canGuard: false,
+        canDodge: true,
+        recommended: ["A", "SPACE"],
+        hint: "精准 A 拼重击 / SPACE 闪避"
+      },
       hint: "只能闪避 [SPACE]"
     },
     spellCast: {
@@ -161,6 +193,15 @@ const EnemyDatabase = {
         shape: "glyph",
         pose: "cast",
         width: 44
+      },
+      counter: {
+        type: "spell_cast",
+        canClash: false,
+        canInterrupt: true,
+        canGuard: false,
+        canDodge: true,
+        recommended: ["A", "SPACE"],
+        hint: "A 出刀打断 / SPACE 咒还"
       },
       hint: "可弹反打断 [SPACE]"
     },
@@ -179,6 +220,15 @@ const EnemyDatabase = {
         pose: "cast",
         width: 30
       },
+      counter: {
+        type: "spell_cast",
+        canClash: false,
+        canInterrupt: true,
+        canGuard: false,
+        canDodge: true,
+        recommended: ["A", "SPACE"],
+        hint: "A 出刀打断 / SPACE 咒还"
+      },
       hint: "法术飞弹，可弹反 [SPACE]"
     },
     curseBurst: {
@@ -195,6 +245,15 @@ const EnemyDatabase = {
         shape: "circle",
         pose: "cast",
         width: 76
+      },
+      counter: {
+        type: "spell_cast",
+        canClash: false,
+        canInterrupt: true,
+        canGuard: true,
+        canDodge: true,
+        recommended: ["A", "F", "SPACE"],
+        hint: "A 打断 / F 格挡 / SPACE 咒还"
       },
       hint: "高威胁法术，可弹反/格挡"
     },
@@ -213,6 +272,14 @@ const EnemyDatabase = {
         pose: "bash",
         width: 58
       },
+      counter: {
+        type: "bash",
+        canClash: false,
+        canGuard: true,
+        canDodge: true,
+        recommended: ["F", "SPACE"],
+        hint: "不能拼刀；F 举盾 / SPACE 闪避"
+      },
       hint: "可闪避 [SPACE] / 格挡 [F]"
     }
   },
@@ -221,22 +288,22 @@ const EnemyDatabase = {
     bladeRushTriple: {
       name: "压步三连",
       icon: "三",
-      description: "纯物理三段压迫；用于让开局立即进入拼刀判断，并测试双持连续覆盖多段快攻。",
+      description: "纯物理三段压迫；用于测试敌方回合内逐节点拼刀，而不是一次输入覆盖多段。",
       nodes: [
-        { id: "jab", attackId: "quickStab", offset: 0 },
-        { id: "sweep", attackId: "slash", offset: 0.42 },
-        { id: "lunge", attackId: "thrust", offset: 0.84 }
+        { id: "jab", attackId: "quickStab", offset: 0, role: "opener", counterNode: "clash_light" },
+        { id: "sweep", attackId: "slash", offset: 0.56, role: "pressure", counterNode: "clash_or_guard" },
+        { id: "lunge", attackId: "thrust", offset: 1.12, role: "finisher", counterNode: "clash_finisher", opensFollowupOnSuccess: true }
       ]
     },
 
     spellDoubleCut: {
       name: "秘术双斩压制",
       icon: "連",
-      description: "法术起手压反应，接两段近身快攻；用于测试咒还反制、拼刀覆盖和双持连续攻击。",
+      description: "法术起手压反应，接两段近身快攻；用于测试施法打断、逐节点拼刀和双持连续攻击。",
       nodes: [
-        { id: "cast", attackId: "arcaneBolt", offset: 0 },
-        { id: "firstCut", attackId: "quickStab", offset: 1.02 },
-        { id: "secondCut", attackId: "quickStab", offset: 1.38 }
+        { id: "cast", attackId: "arcaneBolt", offset: 0, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true },
+        { id: "firstCut", attackId: "quickStab", offset: 1.08, role: "pressure", counterNode: "clash_light" },
+        { id: "secondCut", attackId: "quickStab", offset: 1.52, role: "finisher", counterNode: "clash_finisher", opensFollowupOnSuccess: true }
       ]
     },
 
@@ -245,9 +312,9 @@ const EnemyDatabase = {
       icon: "盾",
       description: "盾击压近身距离，随后接法术飞弹与横扫；用于测试格挡、拼刀和施法打断的选择差异。",
       nodes: [
-        { id: "bash", attackId: "shieldBash", offset: 0 },
-        { id: "bolt", attackId: "arcaneBolt", offset: 0.78 },
-        { id: "sweep", attackId: "slash", offset: 1.18 }
+        { id: "bash", attackId: "shieldBash", offset: 0, role: "opener", counterNode: "guard_or_dodge" },
+        { id: "bolt", attackId: "arcaneBolt", offset: 0.9, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true },
+        { id: "sweep", attackId: "slash", offset: 1.34, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true }
       ]
     },
 
@@ -256,8 +323,8 @@ const EnemyDatabase = {
       icon: "重",
       description: "短刺骗反应后接重砸；用于测试不能只按同一节奏处理所有敌方回合。",
       nodes: [
-        { id: "feint", attackId: "quickStab", offset: 0 },
-        { id: "crush", attackId: "heavySmash", offset: 0.72 }
+        { id: "feint", attackId: "quickStab", offset: 0, role: "feint", counterNode: "clash_light" },
+        { id: "crush", attackId: "heavySmash", offset: 0.86, role: "finisher", counterNode: "heavy_clash", opensFollowupOnSuccess: true }
       ]
     },
 
@@ -266,19 +333,19 @@ const EnemyDatabase = {
       icon: "咒",
       description: "慢速咒爆接近身追刺，再补一枚飞弹；用于测试法术打断与后续追击覆盖。",
       nodes: [
-        { id: "curse", attackId: "curseBurst", offset: 0 },
-        { id: "needle", attackId: "quickStab", offset: 1.05 },
-        { id: "bolt", attackId: "arcaneBolt", offset: 1.52 }
+        { id: "curse", attackId: "curseBurst", offset: 0, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true },
+        { id: "needle", attackId: "quickStab", offset: 1.14, role: "pressure", counterNode: "clash_light" },
+        { id: "bolt", attackId: "arcaneBolt", offset: 1.72, role: "finisher", counterNode: "spell_interrupt", opensFollowupOnSuccess: true }
       ]
     },
 
     knifeFlurry: {
       name: "连环快斩",
       icon: "双",
-      description: "短间隔双物理攻击；单手需要防御组合，双持可用连续拼刀覆盖。",
+      description: "短间隔双物理攻击；单手需要防御组合，双持可用连续拼刀逐段处理。",
       nodes: [
-        { id: "left", attackId: "quickStab", offset: 0 },
-        { id: "right", attackId: "slash", offset: 0.42 }
+        { id: "left", attackId: "quickStab", offset: 0, role: "opener", counterNode: "clash_light" },
+        { id: "right", attackId: "slash", offset: 0.5, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true }
       ]
     }
   }
