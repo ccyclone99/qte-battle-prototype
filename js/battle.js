@@ -3645,7 +3645,7 @@ class BattleSystem {
   }
 
   spawnParticles(type, x, y, intensity) {
-    this.particles.emit(type, x, y, intensity);
+    this.particles.emit(type, x, y, (intensity || 1) * 0.48);
   }
 
   triggerActorReaction(target, type, intensity = 1, options = {}) {
@@ -3680,11 +3680,12 @@ class BattleSystem {
   }
 
   shakeScreen(amount) {
-    this.screenShake = amount;
+    this.screenShake = Math.max(this.screenShake || 0, (amount || 0) * 0.48);
   }
 
   flashScreen(color, duration) {
-    this.screenFlash = { color, timer: duration, maxTime: duration };
+    const scaledDuration = Math.max(0.04, (duration || 0.15) * 0.34);
+    this.screenFlash = { color, timer: scaledDuration, maxTime: scaledDuration };
   }
 
   showTurnBanner(text, color = "#f1c40f") {

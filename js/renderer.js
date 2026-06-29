@@ -14,16 +14,17 @@ class CanvasRenderer {
       demoTitleY: 62
     };
     this.visualBudget = {
-      cinematic: 0.56,
-      counterFocus: 0.62,
-      defenseIntent: 0.58,
-      motionLines: 0.44,
-      afterimage: 0.24,
-      statusAura: 0.42,
-      resourcePulse: 0.30,
-      impact: 0.62,
-      ornament: 0.36,
-      screenFlash: 0.32
+      cinematic: 0.38,
+      counterFocus: 0.32,
+      defenseIntent: 0.28,
+      motionLines: 0.18,
+      afterimage: 0.08,
+      statusAura: 0.20,
+      resourcePulse: 0.12,
+      impact: 0.34,
+      ornament: 0.16,
+      screenFlash: 0.08,
+      cameraShake: 0.50
     };
     const dpr = window.devicePixelRatio || 1;
     const displayWidth = 1280;
@@ -167,7 +168,7 @@ class CanvasRenderer {
     const zoom = scene && scene.cameraZoom ? scene.cameraZoom : 1;
     const zoomDelta = Math.abs(zoom - 1);
     const active = shake > 0.001 || zoomDelta > 0.001;
-    const amp = shake * 18;
+    const amp = shake * 18 * this.visualScale("cameraShake");
     const dx = active ? (Math.sin(t * 58.7) * 0.72 + Math.sin(t * 91.3) * 0.28) * amp : 0;
     const dy = active ? (Math.cos(t * 47.9) * 0.66 + Math.sin(t * 77.1) * 0.22) * amp * 0.58 : 0;
 
@@ -1545,16 +1546,19 @@ class CanvasRenderer {
 
   drawActiveAttackContactGuide(ctx, guide, t) {
     if (!guide || !guide.active) return;
+    const guideScale = this.visualScale("impact");
+    if (guideScale <= 0.05) return;
     const color = guide.color || (guide.source === "enemy" ? "#e74c3c" : "#f1c40f");
-    const alpha = guide.alpha || 0.5;
+    const alpha = (guide.alpha || 0.5) * guideScale;
     const pulse = 1 + Math.sin(t * 9 + guide.hitIndex) * 0.08;
+    const glowScale = Utils.clamp(0.35 + guideScale * 0.65, 0.35, 1);
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.shadowColor = color;
-    ctx.shadowBlur = guide.phase === "impact" ? 22 : 12;
+    ctx.shadowBlur = (guide.phase === "impact" ? 22 : 12) * glowScale;
 
     ctx.strokeStyle = this.hexToRgba(color, alpha * 0.34);
     ctx.fillStyle = this.hexToRgba(color, alpha * 0.05);
@@ -1616,13 +1620,15 @@ class CanvasRenderer {
     const radius = guide.isMelee ? guide.radius * 0.45 : guide.radius * 0.38;
     const x = guide.targetPoint.x - guide.approach * (guide.isMelee ? 18 : 0);
     const y = guide.targetPoint.y + wobble * 0.25;
+    const guideScale = this.visualScale("impact");
+    const glowScale = Utils.clamp(0.35 + guideScale * 0.65, 0.35, 1);
 
     ctx.save();
     ctx.strokeStyle = this.hexToRgba(color, alpha * (guide.phase === "impact" ? 0.62 : 0.38));
     ctx.fillStyle = this.hexToRgba(color, alpha * 0.04);
     ctx.lineWidth = guide.phase === "impact" ? 3 : 1.6;
     ctx.shadowColor = color;
-    ctx.shadowBlur = guide.phase === "impact" ? 18 : 8;
+    ctx.shadowBlur = (guide.phase === "impact" ? 18 : 8) * glowScale;
     ctx.beginPath();
     ctx.arc(x, y, radius, Math.PI * 0.64, Math.PI * 1.36);
     ctx.stroke();

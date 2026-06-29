@@ -28,6 +28,7 @@ const weaponsJs = fs.readFileSync(path.join(root, "js/data/weapons.js"), "utf8")
 const qteDebugJs = fs.readFileSync(path.join(root, "js/systems/qte-debug.js"), "utf8");
 const hitConfirmJs = fs.readFileSync(path.join(root, "js/systems/hit-confirm.js"), "utf8");
 const activeAttacksJs = fs.readFileSync(path.join(root, "js/systems/active-attacks.js"), "utf8");
+const effectsJs = fs.readFileSync(path.join(root, "js/systems/effects.js"), "utf8");
 const resourcesJs = fs.readFileSync(path.join(root, "js/systems/resources.js"), "utf8");
 const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
 const readmeMd = fs.readFileSync(path.join(root, "README.md"), "utf8");
@@ -146,7 +147,7 @@ check("renderer has actor damage visual helpers", rendererJs.includes("getActorD
 check("renderer has actor impact reaction helpers", rendererJs.includes("getActorImpactReactionVisuals") && rendererJs.includes("drawActorImpactReactionLayer") && rendererJs.includes("slashLike") && rendererJs.includes("spellLike"));
 check("renderer has timing readability helpers", rendererJs.includes("getQTEReadabilityMetrics") && rendererJs.includes("drawQTEReadabilityPanel") && rendererJs.includes("getEnemyTimingMetrics") && rendererJs.includes("drawEnemyTimingPanel"));
 check("renderer has combat contact performance helpers", rendererJs.includes("getCombatContactEvents") && rendererJs.includes("drawCombatContactLayer") && rendererJs.includes("drawContactBodyImpact") && rendererJs.includes("drawContactGroundImpulse"));
-check("renderer has active attack contact guide helpers", rendererJs.includes("getActiveAttackContactGuide") && rendererJs.includes("drawActiveAttackContactGuide") && rendererJs.includes("drawActiveAttackTargetBracket"));
+check("renderer has active attack contact guide helpers", rendererJs.includes("getActiveAttackContactGuide") && rendererJs.includes("drawActiveAttackContactGuide") && rendererJs.includes("drawActiveAttackTargetBracket") && rendererJs.includes('const guideScale = this.visualScale("impact")'));
 check("renderer has player defense intent helpers", rendererJs.includes("getPlayerDefenseIntentVisuals") && rendererJs.includes("drawPlayerDefenseIntentOverlay") && rendererJs.includes("drawDefenseDodgeFootwork") && rendererJs.includes("drawDefenseGuardPlane") && rendererJs.includes("drawDefenseMirrorReadiness"));
 check("renderer has player equipment model helpers", rendererJs.includes("getPlayerModelProfile") && rendererJs.includes("drawPlayerBackGear") && rendererJs.includes("drawPlayerArmorAccents") && rendererJs.includes("drawPlayerLoadoutDetails") && rendererJs.includes("drawPlayerHeadgear"));
 check("renderer has weapon silhouette material helpers", rendererJs.includes("getWeaponSilhouetteProfile") && rendererJs.includes("drawWeaponGrip") && rendererJs.includes('family: "heavy-blade"') && rendererJs.includes('family: "twin-blade"') && rendererJs.includes('family: "focus-staff"'));
@@ -164,8 +165,9 @@ check("renderer skips legacy enemy motion when active attack exists", rendererJs
 check("renderer has player active attack helpers", rendererJs.includes("getPlayerActiveAttackDescriptor") && rendererJs.includes("drawPlayerMeleeActiveAttack") && rendererJs.includes("drawPlayerProjectileActiveAttack") && rendererJs.includes("drawPlayerSpellActiveAttack") && rendererJs.includes("drawPlayerPulseActiveAttack"));
 check("renderer has actor status visual helpers", rendererJs.includes("getActorStatusVisuals") && rendererJs.includes("drawPlayerStatusAuras") && rendererJs.includes("drawEnemyStatusOverlays") && rendererJs.includes("drawStatusFlame"));
 check("renderer has resource pulse helpers", rendererJs.includes("getResourcePulseVisuals") && rendererJs.includes("drawResourcePulseLayer") && rendererJs.includes("quadraticPoint"));
-check("renderer has visual noise budget", rendererJs.includes("this.visualBudget") && rendererJs.includes("visualScale(kind") && rendererJs.includes('this.visualScale("resourcePulse")') && rendererJs.includes('this.visualScale("afterimage")') && rendererJs.includes('this.visualScale("motionLines")') && rendererJs.includes('this.visualScale("ornament")') && rendererJs.includes('this.visualScale("screenFlash")'));
-check("particles use reduced density budget", fxJs.includes("this.density = 0.58") && fxJs.includes("actualCount") && fxJs.includes("alphaScale") && fxJs.includes("glowScale"));
+check("renderer has visual noise budget", rendererJs.includes("this.visualBudget") && rendererJs.includes("visualScale(kind") && rendererJs.includes('this.visualScale("resourcePulse")') && rendererJs.includes('this.visualScale("afterimage")') && rendererJs.includes('this.visualScale("motionLines")') && rendererJs.includes('this.visualScale("ornament")') && rendererJs.includes('this.visualScale("screenFlash")') && rendererJs.includes('this.visualScale("cameraShake")'));
+check("particles use reduced density budget", fxJs.includes("this.density = 0.28") && fxJs.includes("this.alphaScale = 0.38") && fxJs.includes("actualCount") && fxJs.includes("glowScale"));
+check("effect queue scales visual noise", effectsJs.includes("noiseBudget") && effectsJs.includes("scaleBurstEvent") && effectsJs.includes("screenFlash: 0.34") && effectsJs.includes("screenShake: 0.48"));
 check("renderer dedupes status icons", rendererJs.includes("const seen = new Set()") && rendererJs.includes("addIcon(`${status.target}:${status.id}`"));
 check("renderer has node-timed action helper", rendererJs.includes("getActionTiming"));
 check("renderer supports node pose tags", rendererJs.includes("getCurrentPose") && rendererJs.includes("node.pose"));

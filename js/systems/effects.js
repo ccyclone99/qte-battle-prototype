@@ -5,6 +5,17 @@ class EffectEventQueue {
     this.pending = [];
     this.recent = [];
     this.maxRecent = 16;
+    this.noiseBudget = {
+      particles: 0.48,
+      burstAlpha: 0.52,
+      burstRadius: 0.78,
+      burstLength: 0.76,
+      burstWidth: 0.68,
+      burstGlow: 0.34,
+      burstDuration: 0.72,
+      screenFlash: 0.34,
+      screenShake: 0.48
+    };
   }
 
   emit(event) {
@@ -41,7 +52,9 @@ class EffectEventQueue {
     if (event.type === "particles") {
       const pos = this.resolveAnchor(event.anchor || event.target || event.source);
       if (this.owner.particles) {
-        this.owner.particles.emit(event.preset || "status", pos.x, pos.y, event.intensity || 1);
+        const budget = this.noiseBudget || {};
+        const scale = Number.isFinite(budget.particles) ? budget.particles : 1;
+        this.owner.particles.emit(event.preset || "status", pos.x, pos.y, (event.intensity || 1) * scale);
       }
       return;
     }
@@ -50,7 +63,7 @@ class EffectEventQueue {
       const pos = this.resolveAnchor(event.anchor || event.target || event.source);
       const target = event.toAnchor ? this.resolveAnchor(event.toAnchor) : null;
       if (this.owner.effectBursts) {
-        this.owner.effectBursts.emit(event, pos, target);
+        this.owner.effectBursts.emit(this.scaleBurstEvent(event), pos, target);
       }
       return;
     }
@@ -75,16 +88,23 @@ class EffectEventQueue {
     }
 
     if (event.type === "screenFlash") {
+      const flashScale = this.noiseBudget && Number.isFinite(this.noiseBudget.screenFlash)
+        ? this.noiseBudget.screenFlash
+        : 1;
+      const duration = Math.max(0.04, (event.duration || 0.15) * flashScale);
       this.owner.screenFlash = {
         color: event.color || "#ffffff",
-        timer: event.duration || 0.15,
-        maxTime: event.duration || 0.15
+        timer: duration,
+        maxTime: duration
       };
       return;
     }
 
     if (event.type === "screenShake") {
-      this.owner.screenShake = Math.max(this.owner.screenShake || 0, event.amount || event.intensity || 0.1);
+      const shakeScale = this.noiseBudget && Number.isFinite(this.noiseBudget.screenShake)
+        ? this.noiseBudget.screenShake
+        : 1;
+      this.owner.screenShake = Math.max(this.owner.screenShake || 0, (event.amount || event.intensity || 0.1) * shakeScale);
       return;
     }
 
@@ -96,6 +116,23 @@ class EffectEventQueue {
     if (event.type === "impact" && this.owner.triggerImpactFrames) {
       this.owner.triggerImpactFrames(event.count || 1);
     }
+  }
+
+  scaleBurstEvent(event) {
+    const budget = this.noiseBudget || {};
+    const scaled = { ...event };
+    const scaleNumber = (key, scaleKey, min = 0) => {
+      if (!Number.isFinite(scaled[key])) return;
+      const scale = Number.isFinite(budget[scaleKey]) ? budget[scaleKey] : 1;
+      scaled[key] = Math.max(min, scaled[key] * scale);
+    };
+    scaleNumber("radius", "burstRadius", 6);
+    scaleNumber("length", "burstLength", 8);
+    scaleNumber("width", "burstWidth", 1);
+    scaleNumber("glow", "burstGlow", 0);
+    scaleNumber("duration", "burstDuration", 0.05);
+    scaled.alpha = (Number.isFinite(scaled.alpha) ? scaled.alpha : 1) * (Number.isFinite(budget.burstAlpha) ? budget.burstAlpha : 1);
+    return scaled;
   }
 
   emitTransition(transition) {

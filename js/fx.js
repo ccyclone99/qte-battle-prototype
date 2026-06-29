@@ -1,8 +1,8 @@
 class ParticleSystem {
   constructor() {
     this.particles = [];
-    this.density = 0.58;
-    this.alphaScale = 0.66;
+    this.density = 0.28;
+    this.alphaScale = 0.38;
   }
 
   clear() {
@@ -128,8 +128,8 @@ class ParticleSystem {
 class EffectBurstSystem {
   constructor() {
     this.bursts = [];
-    this.alphaScale = 0.62;
-    this.glowScale = 0.45;
+    this.alphaScale = 0.36;
+    this.glowScale = 0.20;
   }
 
   clear() {

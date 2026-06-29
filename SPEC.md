@@ -1797,6 +1797,38 @@ Acceptance criteria:
 - Static smoke protects `visualBudget`, resource pulse scaling, afterimage scaling, motion-line scaling, and particle density.
 - `node scripts\verify.js --skip-visual` passes.
 
+### R57 - Effects Noise Follow-up, Completed
+
+Goal: reduce the remaining visual noise after R56 so melee spacing, weapon contact, and actor motion stay readable. Feedback should still confirm hits, clashes, spell releases, and resource changes, but effects should no longer compete with the bodies.
+
+Completed in `r64`:
+
+- Renderer `visualBudget` is reduced again:
+  - lower cinematic/counter/defense cue intensity,
+  - lower motion line and afterimage strength,
+  - lower status aura and resource pulse strength,
+  - lower impact and ornament intensity,
+  - much lower screen flash intensity,
+  - reduced camera shake amplitude.
+- `ParticleSystem` density is reduced from `0.58` to `0.28`.
+- Particle alpha is reduced from `0.66` to `0.38`.
+- `EffectBurstSystem` alpha is reduced from `0.62` to `0.36`.
+- `EffectBurstSystem` glow is reduced from `0.45` to `0.20`.
+- `EffectEventQueue` now applies a `noiseBudget` to all queued particles, bursts, screen flashes, and screen shakes.
+  - Large registered skill effects are automatically toned down without editing each effect definition.
+  - Burst radius/length/width/duration/glow/alpha are scaled before render.
+- Active attack contact guides now share the lower `impact` budget, so melee contact rings and target brackets do not stay at pre-R57 brightness.
+- Direct battle helpers now scale `spawnParticles`, `flashScreen`, and `shakeScreen`, covering effects that bypass the queue.
+- Static smoke now protects the lower particle baseline, queued-effect noise scaling, and contact-guide budget scaling.
+
+Acceptance criteria:
+
+- Contact/hit/clash confirmation remains visible.
+- Particle clouds, persistent glows, screen flashes, and camera shake are noticeably quieter than R56.
+- Enemy melee approach and body spacing remain the primary visual read.
+- `node scripts\smoke-checklist.js` passes.
+- `node scripts\flow-smoke.js` passes.
+
 ### R56 - Melee Staging And Contact Timeline, Completed
 
 Goal: make enemy-turn counter combat read as actual melee contact instead of distant actors resolving a timing bar. The fight should feel slower because bodies move, weapons commit, contact happens, and recovery breathes. The bottom timing HUD remains available, but the primary cue should be animation, spacing, and the weapon contact frame.
