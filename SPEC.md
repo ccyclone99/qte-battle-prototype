@@ -1797,6 +1797,115 @@ Acceptance criteria:
 - Static smoke protects `visualBudget`, resource pulse scaling, afterimage scaling, motion-line scaling, and particle density.
 - `node scripts\verify.js --skip-visual` passes.
 
+### R58 - Visual Diet And Animation Hit Feel, Completed
+
+Goal: move combat readability away from stacked VFX and back into animation. The player-facing fight should read from actor spacing, windup, weapon swing, contact pause, and hit reaction. Effects become confirmation, not explanation.
+
+Scope:
+
+- Completed in `r65`:
+
+- `CanvasRenderer` now owns a default-off `visualPolicy` for nonessential combat layers.
+- Default combat view removes nonessential persistent actor layers:
+  - actor ground sigils,
+  - footwork guide marks,
+  - performance afterimages,
+  - actor status auras and status overlays,
+  - actor intent badges,
+  - player defense intent overlay,
+  - actor motion lines,
+  - actor body damage marks,
+  - decorative model/head/body symbols.
+- Default combat view keeps the readable combat base:
+  - player/enemy body silhouette,
+  - equipped weapon silhouette,
+  - actual melee approach/recovery pose,
+  - short contact spark/slash only after a confirmed hit.
+- Default combat view moves explanatory timing layers to debug-only:
+  - active attack contact guides,
+  - target brackets,
+  - counter focus circles and response rings.
+- Default combat view disables explanatory combat ornaments:
+  - large `<` / `>` body marks,
+  - flashing side arcs,
+  - surrounding magic circles,
+  - enemy attack intent icons,
+  - enemy personality/action overlay glyphs,
+  - player weapon action decoration layer,
+  - large active melee attack trails,
+  - active attack reaction rings around the target,
+  - combat phase lighting ornaments such as floor response ellipses and lane arcs,
+  - player/enemy chain intent path overlays,
+  - legacy fixed-position player weapon trails.
+- Contact visuals are simplified:
+  - confirmed hits keep a small contact spark/slash at body contact,
+  - ground shock rings are removed from ordinary combat,
+  - whiff rings are removed from ordinary combat,
+  - particles and burst effects remain reserved for spells, heavy impacts, phase changes, and finishers.
+- Hit feel is strengthened through animation rather than more effects:
+  - stronger attack lunge/commit pose,
+  - clearer target recoil and lift on hit,
+  - slightly longer contact hit-stop for melee and critical hits,
+  - lower but more physical camera shake,
+  - brief contact spark only at confirmed impact.
+- Weapon silhouettes keep their shape but use reduced glow so curved weapons do not read as independent VFX arcs.
+- Ordinary damage no longer emits large burst effects by default; burst effects are reserved for crits, high-force impacts, or high-damage hits.
+- Actor reaction rings are removed from normal reactions; attack/hit/crit/stagger feedback now comes from silhouette movement, rotation, scaling, and contact spark.
+- Melee active attacks no longer emit reaction/cancel ring bursts when their response window opens or a melee action is canceled; timing is carried by the bottom counter HUD and body motion instead.
+- Static smoke must protect that visual diet toggles exist and are applied at the render call sites.
+
+Acceptance criteria:
+
+- In a normal enemy-turn melee clash, the primary read is body proximity + weapon arc + short impact spark.
+- The frame should no longer contain ground sigils, status aura rings, defense intent circles, target brackets, afterimages, counter focus rings, body `<` / `>` marks, flashing side arcs, enemy attack icons, or decorative caster circles in the default player view.
+- Hit confirmation still feels stronger than R57 through recoil, hit-stop, and a sharper impact pose.
+- Debug QTE drawer may still expose diagnostic overlays.
+- `node scripts\smoke-checklist.js` passes.
+- `node scripts\flow-smoke.js` passes.
+- `node scripts\verify.js --skip-visual` passes.
+
+### R59 - Melee Pose Readability, Completed
+
+Goal: make enemy and player melee attacks read as authored body motion instead of a sliding rectangle with a weapon attached. The fight should show preparation, commitment, contact, and recovery through body lean, limb reach, foot placement, and weapon angle.
+
+Scope:
+
+- Completed in `r66`:
+
+- Add a renderer-side melee pose sampler for active melee attacks:
+  - windup / load,
+  - strike / contact,
+  - recovery / pullback.
+- Player and enemy silhouettes use the sampled pose rather than a single `sin(progress)` pulse.
+- Enemy active melee now overrides archetype idle/cast posing, so caster enemies executing a melee chain draw melee lunge/sweep/overhead body motion instead of spell-channel arms.
+- Enemy telegraph types map to authored body poses:
+  - `stab` / `quick_melee` -> lunge,
+  - `slash` / generic melee -> sweep,
+  - `smash` / `heavy_melee` -> overhead,
+  - `bash` -> shield bash.
+- Weapon silhouettes stay attached to hands and rotate through readable attack arcs:
+  - dual blades cross and separate across the strike,
+  - heavy blades lift before contact and pull through after contact,
+  - enemy sweep/stab/overhead poses commit in different directions,
+  - non-armored/caster melee enemies still draw a simple hand weapon during active melee so the attack no longer reads as empty-body motion.
+- Body motion remains effect-light:
+  - no new rings,
+  - no large trails,
+  - no extra body glyphs,
+  - only the existing bottom timing HUD carries response information.
+- Melee contact impact no longer draws radial body glows or surrounding arcs; it keeps only a compact contact slash and small core spark. Spell/projectile contact can still use a controlled glow.
+- Active melee attack impact events no longer emit burst geometry; player/enemy body contact feedback comes from pose, hit-stop, recoil, and the compact contact layer.
+- Player back-gear ornaments, including the old dual-blade curved back arcs, are treated as model decorations and are default-off in combat.
+
+Acceptance criteria:
+
+- Enemy melee windup visibly differs from strike and recovery.
+- Player counter swing visibly differs from idle, guard, and hit reaction.
+- Weapon position looks connected to hand/arm instead of floating beside the actor.
+- `node scripts\smoke-checklist.js` passes.
+- `node scripts\flow-smoke.js` passes.
+- `node scripts\verify.js --skip-visual` passes.
+
 ### R57 - Effects Noise Follow-up, Completed
 
 Goal: reduce the remaining visual noise after R56 so melee spacing, weapon contact, and actor motion stay readable. Feedback should still confirm hits, clashes, spell releases, and resource changes, but effects should no longer compete with the bodies.
@@ -2886,6 +2995,27 @@ Acceptance criteria:
 - Renderer exposes player weapon action helper methods.
 - Static smoke protects greatsword, dual-blade, counter-blade, and staff action kinds.
 - Visual smoke verifies the live greatsword attack branch and synthetic dual-blade / staff branches.
+
+### R60 Melee Readability And Visual Diet Pass, Completed
+
+Goal: melee should read as bodies and hand-held weapons entering contact, not as ranged arcs, hitbox circles, or floating VFX.
+
+Implemented direction:
+
+- Active melee root motion remains the main source of actor approach. Renderer melee pose offsets are limited to stance/body compensation so actors do not cross through each other at contact.
+- `CanvasRenderer.sampleActiveMeleePose()` drives windup, strike, contact, and recovery body poses for both player and enemy active melee attacks.
+- Caster enemies performing melee are drawn with melee arms and a hand-held weapon instead of caster-channel idle arms.
+- Dual blades now render each `dualBlades` silhouette call as one short hand-held blade. Dual wielding is produced by two hand attachments, not by one call drawing two curved blades.
+- Player back-gear ornaments, active melee trails, enemy telegraph hit arcs, combat ground impulses, hitbox overlays, and old model decorations are default-off.
+- Normal melee and enemy melee no longer emit legacy `slash` burst arcs. Melee contact is represented by actor pose, root motion, hit stop, reaction movement, damage text, and compact contact sparks only.
+- Hit-confirm overlays are no longer tied to the QTE text drawer. They are debug-only via `window.__SHOW_HIT_CONFIRM_OVERLAY = true`.
+- The asset cache key is bumped to `r67`.
+
+Acceptance criteria:
+
+- Enemy and player melee screenshots show no default hitbox circle, red telegraph arc, decorative back arcs, or legacy slash burst.
+- Static smoke protects the melee pose sampler, caster melee override, dual-blade single-blade silhouette, hit-confirm debug gate, and removal of legacy melee slash bursts.
+- `node scripts\verify.js --skip-visual` and targeted CDP screenshots pass after the visual diet.
 
 ## 22. Verification Commands
 

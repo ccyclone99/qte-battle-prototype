@@ -246,6 +246,7 @@ class ActiveAttackSystem {
   emitReactionVisual(attack) {
     const queue = this.owner && this.owner.effectQueue;
     if (!queue) return;
+    if (attack.profile && attack.profile.type === "melee") return;
     queue.emit({
       type: "burst",
       kind: "ring",
@@ -301,23 +302,14 @@ class ActiveAttackSystem {
       return;
     }
 
-    queue.emit({
-      type: "burst",
-      kind: "slash",
-      anchor: targetAnchor,
-      color,
-      secondaryColor: "#ffffff",
-      length: p.radius && p.radius > 40 ? 142 : 104,
-      width: p.radius && p.radius > 40 ? 9 : 6,
-      angle: attack.source === "enemy" ? 0.65 : -0.45,
-      duration: 0.22,
-      label: `active:${attack.id}:meleeImpact`
-    });
+    // Melee contact is rendered by the actor pose and compact contact layer.
+    // Do not emit burst geometry here; large arcs make melee read like ranged VFX.
   }
 
   emitCancelVisual(attack, response) {
     const queue = this.owner && this.owner.effectQueue;
     if (!queue) return;
+    if (attack.profile && attack.profile.type === "melee") return;
     const color = response === "guard"
       ? "#2ecc71"
       : (response === "clash" ? "#f1c40f" : (response === "interrupt" ? "#9b59b6" : "#95a5a6"));

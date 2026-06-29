@@ -377,13 +377,13 @@ class ActorReactionSystem {
   trigger(target, type = "hit", intensity = 1, options = {}) {
     if (!Object.prototype.hasOwnProperty.call(this.reactions, target)) return;
     const durationByType = {
-      hit: 0.24,
-      crit: 0.34,
-      attack: 0.28,
+      hit: 0.30,
+      crit: 0.42,
+      attack: 0.32,
       windup: 0.32,
       guard: 0.28,
       dodge: 0.26,
-      stagger: 0.32,
+      stagger: 0.40,
       cast: 0.24
     };
     this.reactions[target] = {
@@ -441,37 +441,38 @@ class ActorReactionSystem {
     let ringAlpha = 0;
 
     if (reaction.type === "hit" || reaction.type === "crit" || reaction.type === "stagger") {
-      const strength = reaction.distance || (reaction.type === "crit" ? 44 : (reaction.type === "stagger" ? 30 : 24));
-      const lift = reaction.lift ?? (reaction.type === "crit" ? 8 : 5);
-      offsetX = away * strength * intensity * punch;
-      offsetY = -lift * intensity * punch;
-      scale = 1 + (reaction.type === "crit" ? 0.12 : 0.06) * punch;
-      rotation = away * (reaction.type === "crit" ? 0.16 : 0.09) * punch;
-      flashAlpha = (reaction.type === "crit" ? 0.55 : 0.38) * fade;
+      const strength = reaction.distance || (reaction.type === "crit" ? 58 : (reaction.type === "stagger" ? 42 : 34));
+      const lift = reaction.lift ?? (reaction.type === "crit" ? 14 : (reaction.type === "stagger" ? 10 : 8));
+      const recoil = Math.sin(progress * Math.PI) * (1 - progress * 0.18);
+      offsetX = away * strength * intensity * recoil;
+      offsetY = -lift * intensity * recoil;
+      scale = 1 + (reaction.type === "crit" ? 0.13 : 0.07) * recoil;
+      rotation = away * (reaction.type === "crit" ? 0.20 : 0.12) * recoil;
+      flashAlpha = (reaction.type === "crit" ? 0.32 : 0.20) * fade;
     } else if (reaction.type === "attack") {
-      offsetX = forward * 32 * intensity * punch;
-      offsetY = -3 * intensity * punch;
-      scale = 1 + 0.05 * punch;
-      rotation = forward * 0.10 * punch;
-      ringAlpha = 0.20 * fade;
+      offsetX = forward * 42 * intensity * punch;
+      offsetY = -4 * intensity * punch;
+      scale = 1 + 0.06 * punch;
+      rotation = forward * 0.13 * punch;
+      ringAlpha = 0;
     } else if (reaction.type === "windup") {
       offsetX = -forward * 14 * intensity * punch;
       offsetY = -4 * intensity * punch;
       scale = 1 + 0.035 * punch;
       rotation = -forward * 0.06 * punch;
-      ringAlpha = 0.28 * fade;
+      ringAlpha = 0;
     } else if (reaction.type === "guard") {
       offsetX = away * 8 * intensity * punch;
       scale = 1 + 0.05 * punch;
-      ringAlpha = 0.55 * fade;
+      ringAlpha = 0;
     } else if (reaction.type === "dodge") {
       offsetX = -38 * intensity * punch;
       offsetY = -4 * punch;
       scale = 0.98 + 0.04 * punch;
-      ringAlpha = 0.35 * fade;
+      ringAlpha = 0;
     } else if (reaction.type === "cast") {
       scale = 1 + 0.05 * punch;
-      ringAlpha = 0.35 * fade;
+      ringAlpha = 0;
     }
 
     return {

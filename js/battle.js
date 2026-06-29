@@ -2858,20 +2858,6 @@ class BattleSystem {
       color: weapon.color || "#f1c40f",
       duration: 0.28
     });
-    if (this.effectQueue) {
-      this.effectQueue.emit({
-        type: "burst",
-        kind: "slash",
-        anchor: "enemyCore",
-        color: weapon.color || "#f1c40f",
-        secondaryColor: "#ffffff",
-        length: 96,
-        width: 5,
-        angle: -0.35,
-        duration: 0.22,
-        label: "normalAttack"
-      });
-    }
     const token = `normal:${this.playerConfig.weapon}:${Math.round(performance.now() * 1000)}`;
     this.commitActiveAttack({
       kind: "normalAttack",
@@ -3246,18 +3232,8 @@ class BattleSystem {
       });
       return;
     }
-    this.effectQueue.emit({
-      type: "burst",
-      kind: "slash",
-      anchor: "playerCore",
-      color,
-      secondaryColor: "#ffffff",
-      length: isHeavy ? 154 : 112,
-      width: isHeavy ? 10 : 6,
-      angle: isHeavy ? 0.95 : 0.25,
-      duration: 0.26,
-      label: `enemy:${id}`
-    });
+    // Melee attacks are now expressed by actor root motion and weapon poses.
+    // Keep old arc bursts out of normal melee so it does not read like ranged VFX.
   }
 
   buildQTEHitMeta(effects = {}, context = {}) {
@@ -3381,12 +3357,13 @@ class BattleSystem {
 
     if (target === "player") {
       const force = impact ? impact.force : 1.1;
+      const majorImpact = force >= 1.35 || amount >= 22;
       this.playerHp = Math.max(0, this.playerHp - amount);
-      this.screenShake = Math.max(0.18, 0.18 + force * 0.06);
-      this.hitStop = Math.max(0.10, 0.08 + force * 0.03);
+      this.screenShake = Math.max(0.14, 0.12 + force * 0.045);
+      this.hitStop = Math.max(0.14, 0.10 + force * 0.045);
       if (!options.suppressFloatingText) this.floatingTexts.add(`-${amount}`, px, py - 40, "damage");
-      this.spawnParticles("hit", px, py, 1);
-      if (this.effectQueue) {
+      this.spawnParticles("hit", px, py, majorImpact ? 0.55 : 0.22);
+      if (this.effectQueue && majorImpact) {
         this.effectQueue.emit({
           type: "burst",
           kind: "spark",
@@ -3402,11 +3379,11 @@ class BattleSystem {
       this.triggerActorReaction("player", "hit", force, {
         color: "#e74c3c",
         direction: impact ? impact.direction : -1,
-        distance: impact ? impact.distance : 28,
-        lift: impact ? impact.lift : 6,
-        duration: impact ? Math.max(0.24, 0.18 + force * 0.08) : undefined
+        distance: impact ? Math.max(impact.distance || 0, 34) : 36,
+        lift: impact ? Math.max(impact.lift || 0, 8) : 9,
+        duration: impact ? Math.max(0.30, 0.22 + force * 0.09) : 0.30
       });
-      this.flashScreen("#e74c3c", 0.15);
+      if (majorImpact) this.flashScreen("#e74c3c", 0.12);
       SFX.sfxHit();
       this.resetCombo();
       this.battleStats.hitsTaken++;
@@ -3420,14 +3397,15 @@ class BattleSystem {
       return false;
     } else {
       const force = impact ? impact.force : (options.isCrit ? 1.35 : 1);
+      const majorImpact = !!options.isCrit || force >= 1.35 || amount >= 28;
       this.enemyHp = Math.max(0, this.enemyHp - amount);
       this.battleStats.damageDealt += amount;
-      this.screenShake = options.isCrit ? Math.max(0.25, 0.18 + force * 0.06) : Math.max(0.14, 0.10 + force * 0.05);
-      this.hitStop = options.isCrit ? Math.max(0.12, 0.08 + force * 0.035) : Math.max(0.07, 0.055 + force * 0.025);
+      this.screenShake = options.isCrit ? Math.max(0.20, 0.14 + force * 0.055) : Math.max(0.11, 0.08 + force * 0.035);
+      this.hitStop = options.isCrit ? Math.max(0.17, 0.11 + force * 0.045) : Math.max(0.11, 0.085 + force * 0.035);
       const textType = options.isCrit ? "crit" : "damage";
       if (!options.suppressFloatingText) this.floatingTexts.add(`-${amount}`, ex, ey - 40, textType);
-      this.spawnParticles(options.isCrit ? "slash" : "hit", ex, ey, options.isCrit ? 1.5 : 1);
-      if (this.effectQueue) {
+      this.spawnParticles(options.isCrit ? "slash" : "hit", ex, ey, majorImpact ? (options.isCrit ? 0.85 : 0.50) : 0.20);
+      if (this.effectQueue && majorImpact) {
         this.effectQueue.emit({
           type: "burst",
           kind: "spark",
@@ -3443,9 +3421,9 @@ class BattleSystem {
       this.triggerActorReaction("enemy", options.isCrit ? "crit" : "hit", force, {
         color: options.isCrit ? "#f1c40f" : "#ffffff",
         direction: impact ? impact.direction : 1,
-        distance: impact ? impact.distance : (options.isCrit ? 42 : 26),
-        lift: impact ? impact.lift : (options.isCrit ? 8 : 5),
-        duration: impact ? Math.max(options.isCrit ? 0.30 : 0.23, 0.17 + force * 0.08) : undefined
+        distance: impact ? Math.max(impact.distance || 0, options.isCrit ? 52 : 34) : (options.isCrit ? 58 : 36),
+        lift: impact ? Math.max(impact.lift || 0, options.isCrit ? 12 : 8) : (options.isCrit ? 14 : 9),
+        duration: impact ? Math.max(options.isCrit ? 0.38 : 0.30, 0.22 + force * 0.09) : (options.isCrit ? 0.40 : 0.30)
       });
       SFX.sfxSlash();
       if (options.isCrit) {

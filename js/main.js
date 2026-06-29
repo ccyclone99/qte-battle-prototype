@@ -533,7 +533,7 @@ function updateDemoUI() {
 function updateQTEDebugUI() {
   const scene = currentScene();
   if (scene) {
-    scene.showHitConfirmOverlay = !qteDebugDrawer.classList.contains("hidden");
+    scene.showHitConfirmOverlay = window.__SHOW_HIT_CONFIRM_OVERLAY === true;
   }
   if (!scene || !scene.getQTEDebugLines) {
     setQTEDebugHtml("<div>当前没有可调试的 QTE 场景。</div>");
