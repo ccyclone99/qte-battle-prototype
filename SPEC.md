@@ -3017,6 +3017,329 @@ Acceptance criteria:
 - Static smoke protects the melee pose sampler, caster melee override, dual-blade single-blade silhouette, hit-confirm debug gate, and removal of legacy melee slash bursts.
 - `node scripts\verify.js --skip-visual` and targeted CDP screenshots pass after the visual diet.
 
+### R61 Prototype Retention And Combat Comprehension Pass, In Progress
+
+Goal: the public combat build can stay focused on the counter-flow prototype, but the broader QTE chain prototype must remain available as formal-game reference material.
+
+Project constraint:
+
+- The QTE Chain Prototype System is reference-critical. Do not delete chain data, the chain runner, demo-mode code, simulation scripts, timing scripts, balance scripts, validation scripts, effect definitions, or documentation unless an equivalent replacement is committed in the same change.
+- Public gameplay may hide menu entry points for old demo/style chains while the counter-flow prototype is active.
+- Hidden public entry points are not removal. `DemoMode`, `QTEChainRunner`, spell chains, weapon chains, follow-up chains, and prototype verification scripts remain prototype reference assets.
+- Smoke checks must protect this prototype reference surface so future cleanup does not accidentally remove formal-game reference material.
+
+Implemented direction:
+
+- `BattleSystem` now keeps a lightweight combat telemetry stream separate from existing battle stats.
+- Recorded events include early counter, late counter, invalid counter, counter commit, clash success/miss, spell interrupt, follow-up opened/used/missed, normal attack, player hit, and enemy hit.
+- QTE debug output shows a compact `实战记录` line, one context-sensitive advice line, and recent combat events, so tuning work can distinguish comprehension failure from timing failure.
+- Battle result summaries include counter-flow stats and an advice line: clash count, early/late mistakes, spell interrupts, follow-up openings, and the next correction to try.
+- `scripts/smoke-checklist.js` now protects QTE prototype retention and combat telemetry surfaces.
+
+Six priority track status:
+
+1. 新手理解与失败反馈: started through early/late/invalid telemetry, result summary, and context-sensitive advice.
+2. 实战数据记录: started through combat telemetry counters and recent event lines.
+3. 武器差异强化: telemetry now records active weapon for later single-hand / dual-blade tuning comparisons.
+4. 追击回合存在感: follow-up opened/used/missed telemetry and missed-follow-up advice are in place before visual/audio pass.
+5. 更新视觉测试体系: smoke now protects prototype retention and telemetry; next pass can expand visual smoke for reduced-VFX melee clarity.
+6. 暂缓大重构但开始拆 Renderer 边界: deferred for the next scoped pass; current change avoids renderer churn.
+
+Acceptance criteria:
+
+- Public demo entry can remain hidden, but QTE chain prototype data, `DemoMode`, `QTEChainRunner`, and prototype scripts are still present.
+- Static smoke fails if core prototype chain IDs or validation/simulation scripts are removed.
+- QTE debug drawer shows combat telemetry and advice without adding more always-on battle-screen text.
+- Battle result summary reports counter-flow comprehension stats and one next-step suggestion.
+
+### R62 QTE Prototype Reference Archive, Completed
+
+Goal: finish the first pass of QTE prototype organization so the chain system can be handed to the formal game as reference material even while public demo entry points stay frozen.
+
+Implemented direction:
+
+- Added `docs/qte-prototype-reference.md` as the permanent QTE prototype index.
+- Documented the prototype retention contract, public freeze rules, runtime files, data files, validation commands, chain catalog, chain data contract, runner lifecycle, extension checklist, and known import gaps.
+- Updated `README.md` to point at the QTE prototype reference.
+- Updated `docs/manual-playtest-checklist.md` so manual QA no longer expects old style `6` / style `7` / demo replay entry points.
+- Updated static smoke to fail if the QTE prototype reference document disappears or stops mentioning the retained core surface.
+
+Acceptance criteria:
+
+- `docs/qte-prototype-reference.md` exists and lists retained chains, runner files, demo code, data files, and validation scripts.
+- Static smoke protects the reference doc, `DemoMode`, `QTEChainRunner`, key prototype chains, and prototype scripts.
+- Manual playtest docs describe the current public counter-flow route and frozen demo entry instead of old public style/demo flows.
+- Public UI remains allowed to hide demo/style entry points.
+
+Verification:
+
+- `node scripts\smoke-checklist.js`
+- `node scripts\sim-chain.js flame_blade perfect`
+- `node scripts\sim-chain.js overflow_burst perfect`
+
+### R63 Persistent Guard Stance Spec, Completed
+
+Goal: implement the missing "hold shield anytime" mechanic so guarding becomes a continuous stance, not only a response-window QTE.
+
+Scope:
+
+- Press/hold `F` enters `guard_stance` during enemy turn, recovery/player turn, and follow-up turn unless a higher-priority QTE or active attack owns input.
+- Releasing `F` exits guard after a short recovery.
+- Guard stance persists across enemy multi-node chains until broken, released, canceled by dodge, or interrupted by heavy punishment.
+- Guard collision uses enemy active attack contact frames instead of immediate input resolution.
+- Guard success should reduce or nullify damage based on attack type, guard stability, and timing.
+- Early held guard should be valid but not free: sustained guard can drain stamina/posture or increase guard-break risk.
+- While guarding, allowed lateral dodge input should remain available for styles or weapons that support shield-dodge behavior.
+
+Implemented direction:
+
+- `BattleSystem` now owns `guardStance` with active/recovery/broken timers, shield stability, last result, and last prevented damage.
+- `updatePersistentGuard(dt)` processes held/released `F` in enemy, player, follow-up, and resolving states while QTE/active attacks keep input priority.
+- Enemy active attack impact now calls `resolvePersistentGuardImpact` before normal player damage, so guard is settled at the authored contact frame.
+- Releasing `F` before contact exits guard and removes protection.
+- Low stability can break on heavy contact; guard blocks, breaks, and guard-dodges are recorded in combat telemetry.
+
+Acceptance criteria:
+
+- Holding `F` before enemy response can block a later eligible melee node at contact.
+- Releasing `F` before contact removes guard protection.
+- Shield bash / heavy attacks can pressure or break guard differently from light slashes.
+- Guard stance has visible actor pose, shield plane, recoil, hit-stop, and clear failure state.
+- Flow smoke covers held-before-contact, release-before-contact, and guard-break cases.
+- QTE debug reports guard stance state and last guard result.
+
+Verification:
+
+- `node scripts\flow-smoke.js` covers persistent guard block, release-before-contact, and low-stability guard break.
+
+### R64 Weapon Differentiation Spec, Completed
+
+Goal: make weapon family choice mechanically visible in enemy-turn response and follow-up rhythm.
+
+Scope:
+
+- Dual Blades: shortest recovery, can answer fast two-hit chains with consecutive counter windows, lower single-hit posture damage.
+- One-hand/shield style: strongest guard stability and guard-to-dodge flexibility, weaker pure chain offense.
+- Greatsword: slower startup/recovery, high posture damage, stronger finisher interruption, vulnerable to fast feints.
+- Staff: weaker clash, stronger spell interrupt/absorb/counterspell routes once spell systems are re-exposed.
+- Telemetry must break down early/late/invalid/clash/follow-up results by weapon.
+
+Implemented direction:
+
+- Existing Greatsword, Staff, and Dual Blades now have explicit `guardProfile` data in addition to counter timing data.
+- Added internal `swordShield` weapon profile for single-hand/shield tuning without reopening public weapon/style menus.
+- Dual Blades keep the fastest counter recovery, Greatsword keeps the strongest finisher posture pressure, Staff is biased toward spell/projectile response, and Sword/Shield owns the highest guard stability.
+- Balance audit now prints `Counter pressure by weapon` for counter-dojo pressure coverage.
+
+Acceptance criteria:
+
+- `knifeFlurry` feels easier with Dual Blades than Greatsword.
+- Shield pressure chains reward guard/dodge combinations more than repeated attack input.
+- Heavy finisher chains reward Greatsword if the player commits correctly.
+- Balance script reports per-weapon counter pressure summaries.
+- Manual playtest can describe each weapon's defensive identity without reading implementation notes.
+
+Verification:
+
+- `node scripts\flow-smoke.js` checks weapon profile separation.
+- `node scripts\check-balance.js --strict` prints per-weapon counter pressure and passes with no warnings.
+
+### R65 Follow-Up Turn Presentation Spec, Completed
+
+Goal: make the special follow-up turn feel like a deliberate reward state instead of a hidden or confusing player turn.
+
+Scope:
+
+- Follow-up opening receives a distinct banner, short slowdown, audio cue, and actor pose transition.
+- Follow-up prompt uses compact A/S/D weapon QTE affordance without reintroducing old full style UI.
+- Automatic attack fallback remains, but should be visually framed as "missed opportunity" rather than normal player control.
+- Result summary and telemetry continue to show opened/used/missed counts.
+
+Implemented direction:
+
+- `startFollowupTurn` now derives a source-aware banner for clash, spell interrupt, guard stance, guard dodge, stun, and generic enemy weakness.
+- Follow-up opening triggers a compact flash, actor anticipation reaction, audio window cue, telemetry event, and player-facing feedback.
+- Missed follow-up now records feedback that the fallback is an unbonused automatic attack.
+
+Acceptance criteria:
+
+- A player can identify why follow-up opened: clash finisher, posture break, spell interrupt, defense stun, or old chain stun.
+- Missing the follow-up window gives a clear but low-noise feedback cue.
+- Starting A/S/D follow-up QTE shows actor anticipation before timing bar ownership.
+- Visual smoke covers follow-up opening and follow-up QTE entry.
+
+Verification:
+
+- `node scripts\flow-smoke.js` covers follow-up gating and source-aware follow-up telemetry.
+- `node scripts\visual-smoke.js` covers default follow-up QTE entry.
+
+### R66 Player-Facing Feedback And Tutorial Spec, Completed
+
+Goal: convert debug-only understanding into player-facing onboarding and failure correction.
+
+Scope:
+
+- Keep the QTE debug drawer for developers.
+- Add short, non-intrusive public feedback for early counter, late counter, invalid counter, missed follow-up, and successful interrupt.
+- Tutorial copy should explain enemy-turn first, sequential nodes, follow-up gating, and demo freeze.
+- Avoid permanent text clutter during melee contact.
+
+Implemented direction:
+
+- Help/tutorial copy now explains held `F` guard, contact-frame settlement, sequential enemy nodes, follow-up gating, and no free player QTE.
+- Combat messages and `lastPlayerFeedback` distinguish early counter, late counter, invalid counter, guard block, guard break, missed follow-up, and successful follow-up opening.
+- QTE debug remains the detailed developer channel; public battle text stays compact.
+
+Acceptance criteria:
+
+- First-run tutorial explains current public controls without old style numbers.
+- Early/late/invalid feedback can be understood without opening debug.
+- Result screen gives one next-step suggestion.
+- Smoke checks tutorial text does not mention manual style QTE chains as public first-order flow.
+
+Verification:
+
+- `node scripts\smoke-checklist.js` protects tutorial/help copy and feedback surfaces.
+
+### R67 Combat Telemetry Export Spec, Completed
+
+Goal: make the current in-memory combat telemetry useful for tuning across manual playtests.
+
+Scope:
+
+- Keep lightweight in-memory counters for runtime display.
+- Add optional export/copy of compact JSON after battle.
+- Include weapon, encounter, difficulty, early/late/invalid counts, clash success/miss, spell interrupt count, follow-up opened/used/missed, player hits, enemy hits, and result.
+- Do not transmit data externally; export remains local/manual.
+
+Implemented direction:
+
+- Added `getCombatTelemetryExport()` and `getCombatTelemetryExportText()` on `BattleSystem`.
+- Added `window.exportCombatTelemetry()` as the local browser/debug entry point.
+- Export payload includes schema, local-only flag, style, weapon, encounter, enemy, difficulty, HP, counters, guard snapshot, battle stats, and recent events.
+- QTE debug advertises the local export entry without sending data anywhere.
+
+Acceptance criteria:
+
+- Result screen or debug drawer can produce a compact telemetry payload.
+- Exported payload is deterministic enough for diffing and playtest notes.
+- No personal/browser data is included.
+- Smoke or flow test validates payload shape.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates telemetry schema and required fields.
+
+### R68 Visual And Manual Test Sync Spec, Completed
+
+Goal: keep automated and manual tests aligned with the current public build instead of historical demo/style flows.
+
+Scope:
+
+- `visual-smoke.js` should cover current public menu, default counter-flow, follow-up QTE, virtual controls, player active attack, enemy telegraph, enemy chain intent, result summary, and mobile menu.
+- Manual checklist should not ask testers to use hidden public demo/style entry points.
+- Historical demo expectations belong only in QTE prototype reference notes.
+
+Implemented direction:
+
+- Manual checklist now validates current public counter-flow, persistent guard, follow-up source banner, telemetry export hint, and damage-path audit.
+- Static smoke protects against reintroducing obsolete public style `6`/`7` checklist expectations.
+- Visual smoke remains aligned to the current public menu, follow-up QTE, virtual controls, active attacks, enemy telegraph, result summary, and mobile menu.
+
+Acceptance criteria:
+
+- `node scripts\visual-smoke.js` passes after public-flow changes.
+- Smoke fails if manual checklist reintroduces obsolete style `6` / style `7` public requirements.
+- Visual smoke artifact names describe current public flows.
+
+Verification:
+
+- `node scripts\smoke-checklist.js`
+- `node scripts\visual-smoke.js`
+
+### R69 Renderer Boundary Extraction Spec, Completed
+
+Goal: start reducing renderer risk without a broad rewrite.
+
+Scope:
+
+- Extract pure helper groups only when tests already cover them.
+- Candidate boundaries: QTE HUD/readability, actor rig/profile, active attack drawing, encounter stage theme, debug overlays.
+- Keep gameplay state mutation out of renderer modules.
+- Avoid changing visual output in the extraction commit unless explicitly scoped.
+
+Implemented direction:
+
+- Added `js/systems/render-state.js` with pure `RenderStateHelpers`.
+- `Renderer` now uses `RenderStateHelpers.shouldShowPlayerStageLane(scene)` for one turn-state presentation boundary.
+- Existing defense intent visuals also read guard stance through `RenderStateHelpers.getGuardStance(scene)`.
+- No gameplay mutation was moved into renderer helpers.
+
+Acceptance criteria:
+
+- First extraction moves one helper group behind a module or namespace boundary.
+- Visual smoke before/after screenshots remain behaviorally equivalent.
+- No combat timing, hit confirm, damage, input, or AI logic changes in the extraction.
+
+Verification:
+
+- `node scripts\smoke-checklist.js` protects helper loading and renderer usage.
+
+### R70 Armor And Shield Depth Spec, Completed
+
+Goal: decide whether armor/shield should become explicit combat stats instead of only status multipliers and encounter modifiers.
+
+Scope:
+
+- Add explicit armor/shield stats only if playtesting shows current status-only pressure is too flat.
+- Prototype possible values: armor HP, guard stability, posture, guard-break threshold, damage type modifiers.
+- Ensure armor/shield stats do not obscure the current QTE/counter readability.
+
+Implemented direction:
+
+- Added explicit `defenseStats` to armored and shielded enemy archetypes.
+- `BattleSystem.applyEnemyDefenseStats` applies armor and shield mitigation only to eligible enemy damage intake.
+- Armor break reduces armor flat mitigation; shield mitigation can ignore spell/DOT/bypass-shield damage.
+- Mitigation events are recorded in combat telemetry and battle logs.
+
+Acceptance criteria:
+
+- Armor or shield pressure creates a decision change, not just longer HP bars.
+- Balance script reports armor/shield outliers.
+- Result summary can explain armor/shield contribution if it changes outcome.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates shielded enemy melee mitigation and telemetry.
+
+### R71 Hit Confirm Completion Audit Spec, Completed
+
+Goal: close the remaining question of whether all damage must be hit-confirmed.
+
+Scope:
+
+- Audit all player/enemy damage paths.
+- Identify remaining fallback direct-damage cases and classify them as intentional, legacy, or bug.
+- Convert bug/legacy direct damage to active attack or explicit resolved status damage.
+- Keep status DOT/resource backlash rules readable if they intentionally bypass hitbox collision.
+
+Implemented direction:
+
+- Added `getDamagePathAudit()` and `getDamagePathAuditLines()` on `BattleSystem`.
+- Audit classifies player QTE, enemy active attacks, normal attacks, counter/auxiliary attacks, and persistent guard leaks as hit-confirmed paths.
+- Status/resource backlash remains explicitly classified as intentional direct damage.
+- Hit confirm now passes `isSpell`, `isDot`, and `bypassShield` metadata through to damage application for the armor/shield layer.
+
+Acceptance criteria:
+
+- Smoke or flow test covers every public damage category.
+- Debug hit-confirm overlay remains optional.
+- SPEC states which damage types are collision-confirmed and which are intentionally not.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates damage-path audit presence and hit-confirmed public damage categories.
+
 ## 22. Verification Commands
 
 ```powershell
@@ -3061,24 +3384,17 @@ Manual browser smoke test:
 - Open `http://localhost:8765/`.
 - Confirm main menu HUD is hidden.
 - In the main menu, leave `遭遇` on auto for one run, then repeat once with a named encounter override.
-- Enter demo mode.
-- Open Showcase and run Fire branch comparison.
-- Run enemy-turn Showcase and confirm type/danger/recommended key/countdown are visible.
-- Run Counterflow Showcase and confirm the two-lane enemy/player node track is visible.
-- Open spell demos.
-- Run Fire v2 entry.
-- Press `R` on the result preview and confirm the same Fire v2 entry replays.
-- Run Absorb active-chain entry.
-- Run `flow-smoke.js` to cover battle style `6`, battle style `7`, Fire v2 demo playback, spell-list paging, and `overflow_burst` end to end.
-- Run `visual-smoke.js` to cover main menu, Showcase, enemy readout, battle style `6`, battle style `7`, result replay, and mobile landscape screenshots.
-- Cycle demo style to Dual Blades and run a V2 weapon chain.
-- Cycle demo style to Greatsword and run a V2 weapon chain.
-- In battle, select a Greatsword style and confirm the QTE debug drawer shows V2 chain data.
-- In battle, select style `6` on auto encounter and confirm the selection screen/log shows `熔炉守门人`.
-- In battle, select style `7` on auto encounter and confirm the QTE debug drawer shows `秘术回廊`.
-- Open QTE debug during a tagged chain and confirm `姿态：state / motion` is visible.
-- In battle, select `6` Fire Greatsword and run `flame_blade`.
-- In battle, select `7` Mirror Blades, gain energy with `S`, then run `overflow_burst`.
+- Confirm the public menu has no style grid/dropdown and `效果演示` is hidden/disabled.
+- Start battle and confirm it enters the default enemy-turn counter-flow plan without pressing `1-8`.
+- During enemy physical chains, press `A/S/D` inside active windows and confirm each node resolves separately.
+- During enemy spell nodes, press `A/S/D` and confirm spell interruption opens a follow-up window after the authored attack lands.
+- In follow-up window, press `A/S/D` and confirm a weapon QTE starts; repeat once with no input and confirm automatic attack fallback.
+- Press `T` and confirm QTE debug shows encounter lines, `实战记录`, and one `建议：...` line.
+- Run `node scripts\sim-chain.js flame_blade perfect` to confirm retained fire/weapon prototype chains still execute.
+- Run `node scripts\sim-chain.js overflow_burst perfect` to confirm retained absorb/spender prototype chains still execute.
+- Run `flow-smoke.js` to cover default counter-flow, follow-up gating, active attack impact, early counter punishment, and spell interruption.
+- Run `visual-smoke.js` to cover the current public menu, default follow-up QTE, virtual controls, combat active attacks, enemy telegraph, enemy chain intent, result summary, and mobile menu.
+- Check `docs/qte-prototype-reference.md` when changing QTE chain data, runner behavior, demo retention, or prototype validation scripts.
 - Confirm no console errors.
 
 ## 23. Open Questions

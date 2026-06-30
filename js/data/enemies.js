@@ -51,6 +51,13 @@ const EnemyDatabase = {
         gear: "greatsword",
         armor: "plate"
       },
+      defenseStats: {
+        armor: 3,
+        armorDamageMul: 0.92,
+        armorBreakFlatMul: 0.35,
+        shield: 0,
+        posture: 78
+      },
       attacks: ["heavySmash", "shieldBash", "slash"]
     },
     swift: {
@@ -76,6 +83,14 @@ const EnemyDatabase = {
         build: "guard",
         gear: "shield",
         armor: "ward"
+      },
+      defenseStats: {
+        armor: 1,
+        armorDamageMul: 0.96,
+        armorBreakFlatMul: 0.5,
+        shield: 5,
+        shieldDamageMul: 0.82,
+        posture: 92
       },
       attacks: ["shieldBash", "slash", "arcaneBolt"]
     }

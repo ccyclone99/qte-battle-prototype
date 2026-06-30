@@ -65,7 +65,15 @@ class HitConfirmSystem {
     this.confirmedTokens.add(tokenKey);
     const impact = this.buildImpact(record, intent);
     const died = damage > 0
-      ? this.owner.applyDamage(target, damage, { ...(intent.options || {}), hitConfirmed: true, hitToken: token, impact })
+      ? this.owner.applyDamage(target, damage, {
+        ...(intent.options || {}),
+        hitConfirmed: true,
+        hitToken: token,
+        impact,
+        isSpell: !!intent.isSpell,
+        isDot: !!intent.isDot,
+        bypassShield: !!intent.bypassShield
+      })
       : false;
     return { confirmed: true, duplicate: false, overlap: true, damage, died, record };
   }

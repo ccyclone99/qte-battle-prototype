@@ -17,6 +17,16 @@ const WeaponDatabase = {
       finisherPostureDamage: 28,
       allowedCounterTypes: ["heavy_melee", "finisher", "spell_cast"]
     },
+    guardProfile: {
+      maxStability: 72,
+      sustainDrain: 4.8,
+      blockCostMul: 1.05,
+      damageMul: 0.42,
+      heavyDamageMul: 0.68,
+      breakDamageMul: 0.82,
+      counterDamage: 2,
+      canGuardTypes: ["melee", "heavy_melee", "finisher"]
+    },
     chains: {
       A: "greatsword_a_v2",
       S: "greatsword_s_v2",
@@ -41,6 +51,17 @@ const WeaponDatabase = {
       hpDamage: 3,
       finisherPostureDamage: 18,
       allowedCounterTypes: ["spell_cast", "projectile"]
+    },
+    guardProfile: {
+      maxStability: 62,
+      sustainDrain: 3.8,
+      blockCostMul: 1.10,
+      damageMul: 0.55,
+      spellDamageMul: 0.45,
+      breakDamageMul: 0.88,
+      canGuardSpell: true,
+      counterDamage: 0,
+      canGuardTypes: ["spell_cast", "projectile"]
     },
     chains: {
       A: "staff_a",
@@ -67,10 +88,57 @@ const WeaponDatabase = {
       finisherPostureDamage: 22,
       allowedCounterTypes: ["quick_melee", "melee", "finisher", "spell_cast"]
     },
+    guardProfile: {
+      maxStability: 48,
+      sustainDrain: 6.0,
+      blockCostMul: 1.25,
+      damageMul: 0.68,
+      heavyDamageMul: 0.92,
+      breakDamageMul: 1.0,
+      counterDamage: 1,
+      canGuardTypes: ["quick_melee"]
+    },
     chains: {
       A: "dualblades_a_v2",
       S: "dualblades_s_v2",
       D: "dualblades_d_v2"
+    }
+  },
+
+  swordShield: {
+    key: "F",
+    name: "单手剑盾",
+    description: "持盾稳定，举盾与闪避联动",
+    color: "#5dade2",
+    normalAttack: 14,
+    icon: "盾",
+    counterProfile: {
+      recovery: 0.30,
+      startup: 0.11,
+      travel: 0.06,
+      activeDuration: 0.15,
+      whiffVulnerability: 1.10,
+      postureDamage: 12,
+      hpDamage: 3,
+      finisherPostureDamage: 20,
+      allowedCounterTypes: ["quick_melee", "melee", "bash", "finisher"]
+    },
+    guardProfile: {
+      maxStability: 118,
+      sustainDrain: 2.2,
+      blockCostMul: 0.72,
+      damageMul: 0.12,
+      heavyDamageMul: 0.38,
+      bashDamageMul: 0.48,
+      breakDamageMul: 0.70,
+      counterDamage: 4,
+      shieldDodge: true,
+      canGuardTypes: ["quick_melee", "melee", "heavy_melee", "bash", "finisher"]
+    },
+    chains: {
+      A: "greatsword_a_v2",
+      S: "parry",
+      D: "guard"
     }
   }
 };

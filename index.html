@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QTE Battle Prototype</title>
-  <link rel="stylesheet" href="style.css?v=r67">
+  <link rel="stylesheet" href="style.css?v=r68">
 </head>
 <body>
   <div id="game-container">
@@ -73,7 +73,7 @@
         <ul>
           <li>当前版本只保留敌方回合反制方案，开始后直接进入战斗</li>
           <li>敌方回合：绿色反制窗出现时按 <b>A / S / D</b> 逐节点拼刀或打断施法</li>
-          <li><b>SPACE</b> 可闪避/弹反，<b>F</b> 可格挡；不是所有敌方节点都能拼刀</li>
+          <li><b>F</b> 可提前按住举盾，命中接触帧才结算；<b>SPACE</b> 可闪避/弹反</li>
           <li>敌方多段攻击需要逐段应对，不能一次按键自动覆盖整条连段</li>
           <li>成功处理关键节点后进入追击窗口，此时才可按 <b>A / S / D</b> 发动武器 QTE</li>
           <li>指令完成后会先播放动作和碰撞，命中帧到达时才结算伤害</li>
@@ -153,31 +153,32 @@
     <button id="touch-toggle" class="touch-toggle" title="虚拟按键 V">⌨</button>
   </div>
 
-  <script src="js/utils.js?v=r67"></script>
-  <script src="js/difficulty.js?v=r67"></script>
-  <script src="js/audio.js?v=r67"></script>
-  <script src="js/fx.js?v=r67"></script>
-  <script src="js/input.js?v=r67"></script>
-  <script src="js/data/chains.js?v=r67"></script>
-  <script src="js/data/weapons.js?v=r67"></script>
-  <script src="js/data/spells.js?v=r67"></script>
-  <script src="js/data/combatArts.js?v=r67"></script>
-  <script src="js/data/styles.js?v=r67"></script>
-  <script src="js/data/defenses.js?v=r67"></script>
-  <script src="js/data/enemies.js?v=r67"></script>
-  <script src="js/data/encounters.js?v=r67"></script>
-  <script src="js/data/effects.js?v=r67"></script>
-  <script src="js/systems/effects.js?v=r67"></script>
-  <script src="js/systems/statuses.js?v=r67"></script>
-  <script src="js/systems/resources.js?v=r67"></script>
-  <script src="js/systems/hit-confirm.js?v=r67"></script>
-  <script src="js/systems/active-attacks.js?v=r67"></script>
-  <script src="js/systems/qte-debug.js?v=r67"></script>
-  <script src="js/systems/chain-effects.js?v=r67"></script>
-  <script src="js/demo-mode.js?v=r67"></script>
-  <script src="js/qte-runner.js?v=r67"></script>
-  <script src="js/battle.js?v=r67"></script>
-  <script src="js/renderer.js?v=r67"></script>
-  <script src="js/main.js?v=r67"></script>
+  <script src="js/utils.js?v=r69"></script>
+  <script src="js/difficulty.js?v=r69"></script>
+  <script src="js/audio.js?v=r69"></script>
+  <script src="js/fx.js?v=r69"></script>
+  <script src="js/input.js?v=r69"></script>
+  <script src="js/data/chains.js?v=r69"></script>
+  <script src="js/data/weapons.js?v=r69"></script>
+  <script src="js/data/spells.js?v=r69"></script>
+  <script src="js/data/combatArts.js?v=r69"></script>
+  <script src="js/data/styles.js?v=r69"></script>
+  <script src="js/data/defenses.js?v=r69"></script>
+  <script src="js/data/enemies.js?v=r69"></script>
+  <script src="js/data/encounters.js?v=r69"></script>
+  <script src="js/data/effects.js?v=r69"></script>
+  <script src="js/systems/effects.js?v=r69"></script>
+  <script src="js/systems/statuses.js?v=r69"></script>
+  <script src="js/systems/resources.js?v=r69"></script>
+  <script src="js/systems/hit-confirm.js?v=r69"></script>
+  <script src="js/systems/active-attacks.js?v=r69"></script>
+  <script src="js/systems/render-state.js?v=r69"></script>
+  <script src="js/systems/qte-debug.js?v=r69"></script>
+  <script src="js/systems/chain-effects.js?v=r69"></script>
+  <script src="js/demo-mode.js?v=r69"></script>
+  <script src="js/qte-runner.js?v=r69"></script>
+  <script src="js/battle.js?v=r69"></script>
+  <script src="js/renderer.js?v=r69"></script>
+  <script src="js/main.js?v=r69"></script>
 </body>
 </html>

@@ -436,119 +436,31 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await captureScenario(cdp, "main-menu-desktop", [
       { label: "main menu visible", ok: await evaluate(cdp, `document.getElementById("main-menu").style.display !== "none"`) },
-      { label: "style 8 visible in menu grid", ok: await evaluate(cdp, `(() => {
-        const btn = document.querySelector('#style-choice-grid button[data-style-id="counterflow"]');
-        if (!btn) return false;
-        const key = btn.querySelector(".style-choice-key");
-        const number = btn.querySelector(".style-choice-number");
-        const role = btn.querySelector(".style-choice-role");
-        const rect = btn.getBoundingClientRect();
-        const style = getComputedStyle(btn);
-        return key && key.textContent.trim() === "风格 8"
-          && number && number.textContent.includes("023")
-          && role && role.textContent.includes("反制")
-          && btn.textContent.includes("逆势双刃")
-          && btn.dataset.styleKey === "8"
-          && rect.width > 40 && rect.height > 20
-          && rect.top >= 0 && rect.bottom <= innerHeight
-          && style.display !== "none" && style.visibility !== "hidden";
+      { label: "style grid removed from public menu", ok: await evaluate(cdp, `!document.getElementById("style-choice-grid") && !document.getElementById("style-select")`) },
+      { label: "default counter plan visible", ok: await evaluate(cdp, `document.body.textContent.includes("敌方回合反制") && (document.body.textContent.includes("当前版本只保留") || document.body.textContent.includes("只开放敌方回合反制"))`) },
+      { label: "demo entry hidden and disabled", ok: await evaluate(cdp, `(() => {
+        const btn = document.getElementById("btn-demo");
+        return !!(btn && btn.hidden && btn.disabled && btn.getAttribute("aria-hidden") === "true");
       })()`) },
-      { label: "style 008 visible in menu grid", ok: await evaluate(cdp, `(() => {
-        const btn = document.querySelector('#style-choice-grid button[data-style-id="eastern"]');
-        if (!btn) return false;
-        const key = btn.querySelector(".style-choice-key");
-        const number = btn.querySelector(".style-choice-number");
-        const rect = btn.getBoundingClientRect();
-        const style = getComputedStyle(btn);
-        return key && key.textContent.trim() === "风格 4"
-          && number && number.textContent.includes("008")
-          && btn.textContent.includes("东方诸国剑术")
-          && btn.dataset.styleKey === "4"
-          && rect.width > 40 && rect.height > 20
-          && style.display !== "none" && style.visibility !== "hidden";
-      })()`) },
-      { label: "native style select labels style 8", ok: await evaluate(cdp, `(() => {
-        const select = document.getElementById("style-select");
-        if (!select) return false;
-        const text = Array.from(select.options).map(option => option.textContent).join("\\n");
-        return text.includes("风格 8 · 023 · 逆势双刃") && text.includes("风格 4 · 008 · 东方诸国剑术");
-      })()`) },
-      { label: "encounter select visible", ok: await evaluate(cdp, `document.body.textContent.includes("自动推荐") && document.body.textContent.includes("熔炉守门人")`) }
-    ]);
-
-    await navigate(cdp, appUrl, desktop);
-    await clickId(cdp, "btn-demo");
-    await closeTutorial(cdp);
-    await captureScenario(cdp, "demo-menu-showcase", [
-      { label: "showcase category visible", ok: await evaluate(cdp, `document.body.textContent.includes("亮点演示")`) },
-      { label: "demo detail visible", ok: await evaluate(cdp, `!document.getElementById("demo-detail-drawer").classList.contains("hidden")`) },
-      { label: "demo stage avoids detail drawer", ok: await evaluate(cdp, `(() => {
-        const r = typeof renderer !== "undefined" ? renderer : null;
-        if (!r || !r.getDemoStageBounds) return false;
-        const stage = r.getDemoStageBounds();
-        if (stage.compact) return true;
-        const drawer = document.getElementById("demo-detail-drawer").getBoundingClientRect();
-        const canvas = document.getElementById("game-canvas").getBoundingClientRect();
-        const scaleX = canvas.width / 960;
-        const stageRight = canvas.left + (stage.x + stage.w) * scaleX;
-        return stageRight <= drawer.left - 8;
-      })()`) }
-    ]);
-
-    await navigate(cdp, appUrl, desktop);
-    await clickId(cdp, "btn-demo");
-    await closeTutorial(cdp);
-    await pressKey(cdp, "1");
-    await pressKey(cdp, "1");
-    await wait(900);
-    await captureScenario(cdp, "showcase-fire-branch", [
-      { label: "fire showcase active", ok: await evaluate(cdp, `document.body.textContent.includes("Showcase · 火球三分支对比")`) },
-      { label: "showcase phase detail active", ok: await evaluate(cdp, `document.body.textContent.includes("当前演示")`) }
-    ]);
-
-    await navigate(cdp, appUrl, desktop);
-    await clickId(cdp, "btn-demo");
-    await closeTutorial(cdp);
-    await pressKey(cdp, "1");
-    await pressKey(cdp, "4");
-    await wait(900);
-    await captureScenario(cdp, "showcase-enemy-readout", [
-      { label: "enemy threat visible", ok: await evaluate(cdp, `document.body.textContent.includes("类型/危险")`) },
-      { label: "enemy recommendation visible", ok: await evaluate(cdp, `document.body.textContent.includes("推荐应对")`) },
-      { label: "enemy window visible", ok: await evaluate(cdp, `document.body.textContent.includes("窗口状态")`) }
-    ]);
-
-    await navigate(cdp, appUrl, desktop);
-    await clickId(cdp, "btn-demo");
-    await closeTutorial(cdp);
-    await pressKey(cdp, "1");
-    await pressKey(cdp, "5");
-    await wait(900);
-    await captureScenario(cdp, "showcase-counterflow-track", [
-      { label: "counterflow showcase active", ok: await evaluate(cdp, `document.body.textContent.includes("Showcase · 逆势双刃三节点反击")`) },
-      { label: "counterflow action sequence active", ok: await evaluate(cdp, `typeof demo !== "undefined" && demo.state === "action_sequence" && demo.playerConfig.style === "counterflow"`) },
-      { label: "counterflow visual track active", ok: await evaluate(cdp, `(() => {
-        const seq = typeof demo !== "undefined" ? demo.actionSequence : null;
-        if (!seq || !seq.phases || !seq.phases[seq.phaseIndex]) return false;
-        const visual = seq.phases[seq.phaseIndex].visual;
-        return !!(visual && visual.scheme === "counterflow" && Array.isArray(visual.track) && visual.track.length >= 7);
-      })()`) },
-      { label: "counterflow renderer helper present", ok: await evaluate(cdp, `typeof renderer !== "undefined" && typeof renderer.drawDemoCounterflowTrack === "function"`) }
+      { label: "encounter select visible", ok: await evaluate(cdp, `document.body.textContent.includes("自动推荐") && document.body.textContent.includes("逆势试炼")`) }
     ]);
 
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
-    await pressKey(cdp, "6");
-    await wait(240);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.startFollowupTurn({ source: "visualSmoke", covered: 3, chainId: "bladeRushTriple", nodeId: "finisher" });
+    })()`);
+    await wait(180);
     await pressKey(cdp, "A");
     await wait(320);
-    await captureScenario(cdp, "battle-style6-qte", [
+    await captureScenario(cdp, "battle-default-followup-qte", [
       { label: "battle entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
-      { label: "style 6 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("熔炉守门人")`) },
-      { label: "style 6 forge stage theme", ok: await evaluate(cdp, `(() => {
+      { label: "default counter encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("逆势试炼")`) },
+      { label: "default dojo stage theme", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
-        return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "forge");
+        return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "dojo");
       })()`) },
       { label: "difficulty badge visible", ok: await evaluate(cdp, `document.getElementById("difficulty-badge").textContent.length > 0`) },
       { label: "qte readability metrics active", ok: await evaluate(cdp, `(() => {
@@ -581,42 +493,30 @@ async function runVisualSmoke() {
     await closeTutorial(cdp);
     await clickId(cdp, "touch-toggle");
     await wait(120);
-    await clickVirtualKey(cdp, "6");
-    await wait(320);
+    await evaluate(cdp, `(() => {
+      if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.startFollowupTurn({ source: "visualSmokeVirtual", covered: 3, chainId: "bladeRushTriple", nodeId: "finisher" });
+    })()`);
+    await wait(220);
     await clickVirtualKey(cdp, "A");
     await wait(420);
     await captureScenario(cdp, "battle-virtual-controls-qte", [
       { label: "virtual controls visible", ok: await evaluate(cdp, `!document.getElementById("touch-controls").classList.contains("hidden") && document.getElementById("touch-controls").getAttribute("aria-hidden") === "false"`) },
       { label: "virtual controls avoid qte bar", ok: await evaluate(cdp, `document.getElementById("touch-controls").getBoundingClientRect().bottom < 590`) },
-      { label: "virtual style 6 entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
-      { label: "virtual style encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("熔炉守门人")`) }
+      { label: "virtual followup entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
+      { label: "virtual default encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("逆势试炼")`) }
     ]);
 
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
-    await pressKey(cdp, "7");
-    await wait(240);
-    await pressKey(cdp, "S");
-    await wait(320);
-    await captureScenario(cdp, "battle-style7-qte", [
-      { label: "battle style 7 entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
-      { label: "style 7 encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("秘术回廊")`) },
-      { label: "style 7 arcane stage theme", ok: await evaluate(cdp, `(() => {
-        const r = typeof renderer !== "undefined" ? renderer : null;
-        return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "arcane");
-      })()`) },
-      { label: "style 7 mirror text visible", ok: await evaluate(cdp, `document.body.textContent.includes("镜") || document.body.textContent.includes("咒还")`) }
-    ]);
-
-    await navigate(cdp, appUrl, desktop);
-    await clickId(cdp, "btn-start");
-    await closeTutorial(cdp);
-    await pressKey(cdp, "6");
-    await wait(240);
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.applyEncounter("ember_bulwark");
+      battle.playerConfig.weapon = "greatsword";
+      battle.playerConfig.spells = ["fire"];
       battle.activeAttackSystem.clear();
+      battle.playerState.currentState = "swordAttack";
       battle.playerHp = 38;
       battle.enemyHp = Math.max(1, Math.floor(battle.enemyMaxHp * 0.30));
       battle.activeEncounterPhaseId = "molten_core";
@@ -643,6 +543,12 @@ async function runVisualSmoke() {
       attack.elapsed = 0.86;
       battle.activeAttackSystem.updateAttackState(attack);
       attack.paused = true;
+      battle.triggerActorReaction("player", "attack", 1.0, {
+        color: "#e67e22",
+        direction: 1,
+        distance: 18,
+        duration: 1.6
+      });
       battle.hitConfirmSystem.confirm({
         source: "player",
         target: "enemy",
@@ -709,7 +615,7 @@ async function runVisualSmoke() {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || typeof battle === "undefined" || !r.getActorPerformance) return false;
         const p = r.getActorPerformance(battle, "player", battle.actorReactions.get("player"), r.getCurrentPose(battle));
-        return !!(p && p.attack > 0.45 && p.armReach > 16 && p.afterimageAlpha > 0.08);
+        return !!(p && p.attack > 0.45 && p.armReach > 16 && p.actionProgress >= 0);
       })()`) },
       { label: "player footwork visuals active", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
@@ -885,10 +791,11 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
-    await pressKey(cdp, "7");
-    await wait(240);
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.applyEncounter("arcane_conduit");
+      battle.playerConfig.weapon = "dualBlades";
+      battle.playerConfig.spells = ["absorb"];
       battle.activeAttackSystem.clear();
       battle.resourceSystem.add("spellEnergy", 140);
       battle.playerState.absorbReady = true;
@@ -968,10 +875,10 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
-    await pressKey(cdp, "8");
-    await wait(240);
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.applyEncounter("counter_dojo");
+      battle.playerConfig.weapon = "dualBlades";
       battle.setTurnState("enemy_turn");
       battle.enemyAttack = battle.buildEnemyAttack("curseBurst");
       battle.enemyAttackTimer = Math.max(0.2, battle.enemyAttack.windup * 0.72);
@@ -986,15 +893,15 @@ async function runVisualSmoke() {
     await captureScenario(cdp, "battle-enemy-telegraph", [
       { label: "enemy telegraph turn active", ok: await evaluate(cdp, `typeof battle !== "undefined" && battle.turnState === "enemy_turn"`) },
       { label: "enemy telegraph attack active", ok: await evaluate(cdp, `battle.enemyAttack && battle.enemyAttack.id === "curseBurst" && battle.enemyAttackPhase === "response"`) },
-      { label: "style 8 dojo stage theme", ok: await evaluate(cdp, `(() => {
+      { label: "default counter dojo stage theme", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "dojo");
       })()`) },
-      { label: "style 8 player counter rig", ok: await evaluate(cdp, `(() => {
+      { label: "default counter player rig", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         if (!r || typeof battle === "undefined" || !r.getPlayerRigProfile) return false;
         const rig = r.getPlayerRigProfile(r.getPlayerModelProfile(battle));
-        return !!(rig && rig.silhouette === "counter-duelist" && rig.stance > 1.25 && rig.scaleX < 0.95 && rig.shadowScale < 1);
+        return !!(rig && rig.silhouette === "agile-duelist" && rig.stance > 1.15 && rig.scaleX < 1 && rig.armWidth <= 6);
       })()`) },
       { label: "enemy response cinematic focus", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
@@ -1116,10 +1023,10 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
-    await pressKey(cdp, "8");
-    await wait(240);
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.applyEncounter("counter_dojo");
+      battle.playerConfig.weapon = "dualBlades";
       battle.setTurnState("enemy_turn");
       battle.activeAttackSystem.clear();
       battle.startEnemyAttackChain("spellDoubleCut");
@@ -1158,10 +1065,10 @@ async function runVisualSmoke() {
     await navigate(cdp, appUrl, desktop);
     await clickId(cdp, "btn-start");
     await closeTutorial(cdp);
-    await pressKey(cdp, "6");
-    await wait(240);
     await evaluate(cdp, `(() => {
       if (typeof battle === "undefined") throw new Error("battle missing");
+      battle.applyEncounter("ember_bulwark");
+      battle.playerConfig.weapon = "greatsword";
       battle.enemyHp = 0;
       battle.activeEncounterPhaseId = "molten_core";
       battle.battleStats.damageDealt = 132;
@@ -1181,56 +1088,18 @@ async function runVisualSmoke() {
       { label: "html result summary visible", ok: await evaluate(cdp, `document.getElementById("game-over").textContent.includes("战斗摘要") && document.getElementById("game-over").textContent.includes("熔心压迫")`) }
     ]);
 
-    await navigate(cdp, appUrl, desktop);
-    await clickId(cdp, "btn-demo");
-    await closeTutorial(cdp);
-    await pressKey(cdp, "3");
-    await pressKey(cdp, "6");
-    await waitForEvaluate(
-      cdp,
-      `document.getElementById("turn-indicator").textContent.includes("结算") && document.body.textContent.includes("R")`,
-      14000,
-      "demo result preview"
-    );
-    await captureScenario(cdp, "demo-result-preview", [
-      { label: "demo result preview visible", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("结算")`) },
-      { label: "replay hint visible", ok: await evaluate(cdp, `document.body.textContent.includes("R") && document.body.textContent.includes("重播")`) },
-      { label: "demo result suppresses residual flash", ok: await evaluate(cdp, `(() => {
-        const r = typeof renderer !== "undefined" ? renderer : null;
-        const scene = typeof demo !== "undefined" ? demo : null;
-        return !!(r && scene && scene.turnState === "demo_preview" && !r.shouldDrawScreenFlash(scene));
-      })()`) }
-    ]);
-    await pressKey(cdp, "R");
-    await waitForEvaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`, 4000, "demo replay qte");
-    await wait(500);
-    await captureScenario(cdp, "demo-result-replay-qte", [
-      { label: "demo replay entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
-      { label: "replayed item remains flame blade", ok: await evaluate(cdp, `document.body.textContent.includes("焰刃") || document.body.textContent.includes("熔甲")`) },
-      { label: "demo qte bar avoids detail drawer", ok: await evaluate(cdp, `(() => {
-        const r = typeof renderer !== "undefined" ? renderer : null;
-        if (!r || !r.getDemoStageBounds) return false;
-        const stage = r.getDemoStageBounds();
-        if (stage.compact) return true;
-        const drawer = document.getElementById("demo-detail-drawer").getBoundingClientRect();
-        const canvas = document.getElementById("game-canvas").getBoundingClientRect();
-        const scaleX = canvas.width / 960;
-        const barW = Math.min(760, Math.max(520, stage.w - 36));
-        const barRight = canvas.left + (stage.centerX + barW / 2) * scaleX;
-        return barRight <= drawer.left - 8;
-      })()`) }
-    ]);
-
     await navigate(cdp, appUrl, mobileLandscape);
-    await clickId(cdp, "btn-demo");
-    await closeTutorial(cdp);
     await wait(260);
-    await captureScenario(cdp, "demo-menu-mobile-landscape", [
+    await captureScenario(cdp, "main-menu-mobile-landscape", [
       { label: "container fits viewport", ok: await evaluate(cdp, `(() => {
         const r = document.getElementById("game-container").getBoundingClientRect();
         return r.width <= innerWidth + 1 && r.height <= innerHeight + 1 && r.left >= -1 && r.top >= -1;
       })()`) },
-      { label: "mobile showcase visible", ok: await evaluate(cdp, `document.body.textContent.includes("亮点演示")`) }
+      { label: "mobile default plan visible", ok: await evaluate(cdp, `document.body.textContent.includes("敌方回合反制")`) },
+      { label: "mobile demo entry hidden", ok: await evaluate(cdp, `(() => {
+        const btn = document.getElementById("btn-demo");
+        return !!(btn && btn.hidden && btn.disabled);
+      })()`) }
     ]);
 
     const errors = pageErrorEvents(cdp);

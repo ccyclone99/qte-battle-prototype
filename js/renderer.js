@@ -3901,7 +3901,9 @@ class CanvasRenderer {
     }
     this.drawEncounterFloorDetails(ctx, theme, floorY, t);
 
-    const showStageLane = scene.turnState === "player_turn" || scene.turnState === "followup_turn";
+    const showStageLane = typeof RenderStateHelpers !== "undefined"
+      ? RenderStateHelpers.shouldShowPlayerStageLane(scene)
+      : (scene.turnState === "player_turn" || scene.turnState === "followup_turn");
     if (showStageLane) {
       const lanePulse = 0.45 + Math.sin(t * 2.2) * 0.08;
       ctx.strokeStyle = this.hexToRgba(accent, lanePulse);
@@ -5403,6 +5405,9 @@ class CanvasRenderer {
     const playerState = scene.playerState || {};
     const absorbReady = !!playerState.absorbReady || !!(statusVisuals && statusVisuals.absorbReady);
     const shieldEnchant = !!playerState.shieldEnchanted || !!(statusVisuals && statusVisuals.shieldEnchant);
+    const guardStance = typeof RenderStateHelpers !== "undefined"
+      ? RenderStateHelpers.getGuardStance(scene)
+      : (scene.getGuardStanceView ? scene.getGuardStanceView() : { active: false, ratio: 0 });
     const baseIntensity = inResponse ? 1 : (phase === "hit" ? 0.82 : 0.46);
 
     return {
@@ -5416,10 +5421,11 @@ class CanvasRenderer {
       color: attack.color || meta.threatColor || "#2ecc71",
       dodge: hasResponse("dodge"),
       parry: hasResponse("parry"),
-      guard: hasResponse("guard"),
+      guard: hasResponse("guard") || !!guardStance.active,
+      guardStance,
       absorbReady,
       shieldEnchant,
-      intensity: Utils.clamp(baseIntensity + (metrics && metrics.timeToHit < 0.35 ? 0.12 : 0), 0.25, 1.1),
+      intensity: Utils.clamp(baseIntensity + (metrics && metrics.timeToHit < 0.35 ? 0.12 : 0) + (guardStance.active ? 0.16 : 0), 0.25, 1.1),
       timeRatio: metrics ? Utils.clamp(metrics.progress, 0, 1) : 0
     };
   }

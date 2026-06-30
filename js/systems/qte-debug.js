@@ -35,6 +35,9 @@ const QTEDebugFormatter = {
       lines.push("Runner：无");
       if (scene && scene.resourceSystem) lines.push(...scene.resourceSystem.getDebugLines());
       if (scene && scene.statusSystem) lines.push(...scene.statusSystem.getDebugLines(4));
+      if (scene && scene.getCombatTelemetryLines) lines.push(...scene.getCombatTelemetryLines(4));
+      if (scene && scene.getCombatTelemetryExport) lines.push("遥测导出：window.exportCombatTelemetry()");
+      if (scene && scene.getDamagePathAuditLines) lines.push(...scene.getDamagePathAuditLines(3));
       if (scene && scene.hitConfirmSystem) lines.push(...scene.hitConfirmSystem.getDebugLines(4));
       if (scene && scene.activeAttackSystem) lines.push(...scene.activeAttackSystem.getDebugLines(4));
       if (scene && scene.effectQueue) lines.push(...scene.effectQueue.getDebugLines(4));
@@ -80,6 +83,9 @@ const QTEDebugFormatter = {
     lines.push(`已完成：${resultText}`);
     if (scene.resourceSystem) lines.push(...scene.resourceSystem.getDebugLines());
     if (scene.statusSystem) lines.push(...scene.statusSystem.getDebugLines(4));
+    if (scene.getCombatTelemetryLines) lines.push(...scene.getCombatTelemetryLines(4));
+    if (scene.getCombatTelemetryExport) lines.push("遥测导出：window.exportCombatTelemetry()");
+    if (scene.getDamagePathAuditLines) lines.push(...scene.getDamagePathAuditLines(3));
     if (scene.hitConfirmSystem) lines.push(...scene.hitConfirmSystem.getDebugLines(4));
     if (scene.activeAttackSystem) lines.push(...scene.activeAttackSystem.getDebugLines(4));
     if (scene.effectQueue) lines.push(...scene.effectQueue.getDebugLines(4));

@@ -44,7 +44,7 @@ const battleHelpHtml = `
   <div><b>遭遇</b>：主菜单可选自动推荐、命名遭遇或敌人测试</div>
   <div><b>追击窗口</b>：敌方回合应对成功后，短时间内按 A/S/D 触发武器 QTE；不输入则自动攻击</div>
   <div><b>敌方回合</b>：敌方攻击窗口内按 A/S/D 出刀拼刀；敌方施法窗口内出刀打断施法</div>
-  <div><b>防御</b>：绿色窗口按 SPACE 闪避/弹反，F 格挡</div>
+  <div><b>防御</b>：按住 F 举盾到接触帧，松开解除；SPACE 闪避/弹反</div>
   <div><b>连击</b>：每次成功命中增加连击，伤害随连击提升，受击会打断</div>
   <div><b>通用</b>：H 帮助，L 日志，T 调试，ESC 返回菜单</div>
 `;
@@ -99,6 +99,12 @@ function selectedEnemyId() {
   if (!enemySelect || enemySelect.value === "auto") return null;
   return enemySelect.value;
 }
+
+window.exportCombatTelemetry = function exportCombatTelemetry() {
+  return battle && battle.getCombatTelemetryExport
+    ? battle.getCombatTelemetryExport()
+    : null;
+};
 
 function applyDefaultCombatPlan() {
   if (!battle || !StyleDatabase[DEFAULT_COMBAT_PLAN_ID]) return false;
@@ -385,7 +391,7 @@ function updateBattleUI() {
   } else if (battle.turnState === "enemy_turn") {
     turnText = "敌方回合";
     turnClass = "enemy";
-    helpHtml = `<div><b>A/S/D</b> 逐节点拼刀/打断施法</div><div><b>SPACE</b> 闪避/弹反 <b>F</b> 格挡</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
+    helpHtml = `<div><b>A/S/D</b> 逐节点拼刀/打断施法</div><div><b>F</b> 按住举盾到接触帧 <b>SPACE</b> 闪避/弹反</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "qte_running") {
     turnText = "QTE";
     turnClass = "qte";

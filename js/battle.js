@@ -53,6 +53,18 @@ class BattleSystem {
     this.armorBreakActive = false;
     this.defenseTriggered = false;
     this.defenseMode = null;
+    this.guardStance = {
+      active: false,
+      recovering: 0,
+      brokenTimer: 0,
+      holdTime: 0,
+      stability: 0,
+      maxStability: 0,
+      lastResult: "none",
+      lastAttack: "",
+      lastDamagePrevented: 0,
+      lastUpdated: 0
+    };
 
     // QTE
     this.qteRunner = null;
@@ -95,6 +107,30 @@ class BattleSystem {
       hits: 0,
       misses: 0
     };
+    this.combatTelemetry = {
+      maxEvents: 28,
+      events: [],
+      counters: {
+        earlyCounters: 0,
+        lateCounters: 0,
+        invalidCounters: 0,
+        clashSuccess: 0,
+        clashMiss: 0,
+        spellInterrupts: 0,
+        followupsOpened: 0,
+        followupsUsed: 0,
+        followupsMissed: 0,
+        playerHits: 0,
+        enemyHits: 0,
+        normalAttacks: 0,
+        guardBlocks: 0,
+        guardBreaks: 0,
+        guardDodges: 0,
+        armorMitigations: 0,
+        shieldMitigations: 0
+      }
+    };
+    this.lastPlayerFeedback = "观察敌人动作接近身体时，再按 A/S/D 出刀。";
 
     // 特效
     this.particles = new ParticleSystem();
@@ -171,6 +207,7 @@ class BattleSystem {
 
     dt *= this.timeScale;
 
+    this.updatePersistentGuard(dt);
     if (this.activeAttackSystem) this.activeAttackSystem.update(dt);
     if (this.hitConfirmSystem) this.hitConfirmSystem.update(dt);
 
@@ -473,10 +510,361 @@ class BattleSystem {
     return nextDamage;
   }
 
+  getEnemyDefenseStats() {
+    return (this.enemyConfig && this.enemyConfig.defenseStats) || {};
+  }
+
+  applyEnemyDefenseStats(amount, options = {}) {
+    if (amount <= 0 || options.ignoreDefense) {
+      return { amount, prevented: 0, armorPrevented: 0, shieldPrevented: 0 };
+    }
+    const stats = this.getEnemyDefenseStats();
+    if (!stats || (!stats.armor && !stats.shield && !stats.armorDamageMul && !stats.shieldDamageMul)) {
+      return { amount, prevented: 0, armorPrevented: 0, shieldPrevented: 0 };
+    }
+
+    const armorBreakStatus = this.statusSystem && this.statusSystem.has("armorBreak", "enemy");
+    const armorFlatMul = armorBreakStatus || this.armorBreakActive
+      ? (stats.armorBreakFlatMul === undefined ? 0.5 : stats.armorBreakFlatMul)
+      : 1;
+    let next = amount;
+    let armorPrevented = 0;
+    let shieldPrevented = 0;
+
+    if (stats.armor) {
+      const flat = Math.floor((stats.armor || 0) * armorFlatMul);
+      const before = next;
+      next = Math.max(1, next - flat);
+      armorPrevented += before - next;
+    }
+    if (stats.armorDamageMul && stats.armorDamageMul !== 1) {
+      const before = next;
+      next = Math.max(1, Math.floor(next * stats.armorDamageMul));
+      armorPrevented += before - next;
+    }
+
+    const meleeLike = !options.isSpell && !options.isDot && !options.bypassShield;
+    if (stats.shield && meleeLike) {
+      const before = next;
+      next = Math.max(1, next - (stats.shield || 0));
+      shieldPrevented += before - next;
+    }
+    if (stats.shieldDamageMul && stats.shieldDamageMul !== 1 && meleeLike) {
+      const before = next;
+      next = Math.max(1, Math.floor(next * stats.shieldDamageMul));
+      shieldPrevented += before - next;
+    }
+
+    const prevented = Math.max(0, amount - next);
+    if (armorPrevented > 0) {
+      this.recordCombatEvent("armorMitigation", { prevented: armorPrevented, amount: next });
+    }
+    if (shieldPrevented > 0) {
+      this.recordCombatEvent("shieldMitigation", { prevented: shieldPrevented, amount: next });
+    }
+    return { amount: next, prevented, armorPrevented, shieldPrevented };
+  }
+
   isIncomingSpellAttack(attack) {
     if (!attack) return false;
     const id = attack.id || "";
     return !!attack.interruptible || id.includes("spell") || id.includes("arcane") || id.includes("curse");
+  }
+
+  canUpdatePersistentGuard() {
+    return ["enemy_turn", "player_turn", "followup_turn", "resolving"].includes(this.turnState);
+  }
+
+  getGuardProfile() {
+    const weapon = WeaponDatabase[this.playerConfig.weapon] || {};
+    return {
+      maxStability: 64,
+      sustainDrain: 4,
+      blockCostMul: 1,
+      damageMul: 0.45,
+      heavyDamageMul: 0.65,
+      bashDamageMul: 0.72,
+      spellDamageMul: 0.80,
+      breakDamageMul: 0.9,
+      counterDamage: 0,
+      canGuardSpell: false,
+      shieldDodge: false,
+      canGuardTypes: ["quick_melee", "melee", "heavy_melee", "finisher"],
+      ...(weapon.guardProfile || {})
+    };
+  }
+
+  updatePersistentGuard(dt) {
+    const guard = this.guardStance;
+    if (!guard) return;
+
+    if (guard.recovering > 0) guard.recovering = Math.max(0, guard.recovering - dt);
+    if (guard.brokenTimer > 0) guard.brokenTimer = Math.max(0, guard.brokenTimer - dt);
+
+    const canOwnInput = this.canUpdatePersistentGuard();
+    if (!canOwnInput) {
+      if (guard.active) this.exitPersistentGuard("interrupt");
+      return;
+    }
+
+    while (true) {
+      const ev = this.input.peek();
+      if (!ev || String(ev.key).toUpperCase() !== "F") break;
+      this.input.consume();
+      if (ev.type === "press") this.enterPersistentGuard("press");
+      else if (ev.type === "release") this.exitPersistentGuard("release");
+    }
+
+    if (this.input.isHeld("F")) {
+      if (!guard.active && guard.recovering <= 0 && guard.brokenTimer <= 0) {
+        this.enterPersistentGuard("held");
+      }
+    } else if (guard.active) {
+      this.exitPersistentGuard("release");
+    }
+
+    if (!guard.active) return;
+
+    const profile = this.getGuardProfile();
+    guard.holdTime += dt;
+    guard.stability = Math.max(0, guard.stability - (profile.sustainDrain || 0) * dt);
+    guard.lastUpdated = performance.now();
+    this.playerState.currentState = "shield";
+    if (guard.stability <= 0) {
+      this.breakPersistentGuard("held");
+    }
+  }
+
+  enterPersistentGuard(reason = "press") {
+    const guard = this.guardStance;
+    const profile = this.getGuardProfile();
+    if (!guard || guard.active || guard.recovering > 0 || guard.brokenTimer > 0) return false;
+    guard.active = true;
+    guard.holdTime = 0;
+    guard.maxStability = profile.maxStability || 64;
+    guard.stability = guard.stability > 0
+      ? Math.min(guard.stability, guard.maxStability)
+      : guard.maxStability;
+    guard.lastResult = reason === "held" ? "preheld" : "raised";
+    guard.lastAttack = "";
+    guard.lastDamagePrevented = 0;
+    guard.lastUpdated = performance.now();
+    this.playerState.currentState = "shield";
+    this.lastPlayerFeedback = "举盾中：等敌方接触帧结算，长时间持盾会消耗盾稳。";
+    this.setMessage("举盾中 · 松开 F 解除");
+    if (typeof SFX !== "undefined" && SFX.sfxGuard) SFX.sfxGuard();
+    this.triggerActorReaction("player", "guard", 0.78, {
+      color: (WeaponDatabase[this.playerConfig.weapon] || {}).color || "#5dade2",
+      duration: 0.22
+    });
+    this.recordCombatEvent("guardEnter", { reason, stability: Math.round(guard.stability) });
+    return true;
+  }
+
+  exitPersistentGuard(reason = "release") {
+    const guard = this.guardStance;
+    if (!guard || !guard.active) return false;
+    guard.active = false;
+    guard.recovering = reason === "release" ? 0.18 : 0.10;
+    guard.lastResult = reason;
+    guard.lastUpdated = performance.now();
+    if (this.playerState.currentState === "shield") this.playerState.currentState = "idle";
+    if (reason === "release") {
+      this.lastPlayerFeedback = "已放下盾：敌方命中前没有盾稳保护。";
+      this.setMessage("放下盾");
+      this.recordCombatEvent("guardRelease", { stability: Math.round(guard.stability) });
+    }
+    return true;
+  }
+
+  breakPersistentGuard(reason = "impact") {
+    const guard = this.guardStance;
+    if (!guard) return false;
+    guard.active = false;
+    guard.brokenTimer = 0.75;
+    guard.recovering = 0.25;
+    guard.stability = 0;
+    guard.lastResult = "broken";
+    guard.lastUpdated = performance.now();
+    if (this.playerState.currentState === "shield") this.playerState.currentState = "idle";
+    this.lastPlayerFeedback = "盾稳被打空：重击/盾击需要闪避或更晚举盾。";
+    this.setMessage("盾稳崩溃");
+    this.triggerActorReaction("player", "hit", 0.78, {
+      color: "#e74c3c",
+      direction: -1,
+      distance: 18,
+      lift: 3,
+      duration: 0.30
+    });
+    this.recordCombatEvent("guardBreak", { reason });
+    return true;
+  }
+
+  canPersistentGuardBlockAttack(attack) {
+    if (!attack || !this.guardStance || !this.guardStance.active) return false;
+    const profile = this.getGuardProfile();
+    const counter = this.getAttackCounterProfile(attack);
+    const type = counter.type;
+    if (this.isIncomingSpellAttack(attack)) {
+      return !!profile.canGuardSpell || (profile.canGuardTypes || []).includes("spell_cast") || (profile.canGuardTypes || []).includes("projectile");
+    }
+    return !!counter.canGuard || (profile.canGuardTypes || []).includes(type);
+  }
+
+  getPersistentGuardDamageMul(attack, broken = false) {
+    const profile = this.getGuardProfile();
+    const counter = this.getAttackCounterProfile(attack);
+    if (broken) return profile.breakDamageMul === undefined ? 0.9 : profile.breakDamageMul;
+    if (this.isIncomingSpellAttack(attack)) return profile.spellDamageMul === undefined ? profile.damageMul : profile.spellDamageMul;
+    if (counter.type === "heavy_melee" || counter.type === "finisher") return profile.heavyDamageMul === undefined ? profile.damageMul : profile.heavyDamageMul;
+    if (counter.type === "bash") return profile.bashDamageMul === undefined ? profile.damageMul : profile.bashDamageMul;
+    return profile.damageMul === undefined ? 0.45 : profile.damageMul;
+  }
+
+  getPersistentGuardBlockCost(attack, damage) {
+    const profile = this.getGuardProfile();
+    const counter = this.getAttackCounterProfile(attack);
+    const typeMul = counter.type === "heavy_melee" || counter.type === "finisher"
+      ? 1.55
+      : (counter.type === "bash" ? 1.35 : (counter.type === "quick_melee" ? 0.85 : 1));
+    return Math.max(8, (damage || 0) * typeMul * (profile.blockCostMul || 1));
+  }
+
+  resolvePersistentGuardImpact(activeAttack, sourceAttack) {
+    const guard = this.guardStance;
+    const attack = sourceAttack || (activeAttack && activeAttack.intent && activeAttack.intent.attack);
+    if (!guard || !guard.active || !attack) return null;
+
+    const damage = activeAttack && activeAttack.intent
+      ? activeAttack.intent.damage || attack.damage || 0
+      : attack.damage || 0;
+    const canBlock = this.canPersistentGuardBlockAttack(attack);
+    const blockCost = this.getPersistentGuardBlockCost(attack, damage);
+    const remaining = guard.stability - blockCost;
+    const broken = !canBlock || remaining <= 0;
+    const damageMul = this.getPersistentGuardDamageMul(attack, broken);
+    const leakDamage = Math.max(0, Math.floor(damage * damageMul));
+    const prevented = Math.max(0, damage - leakDamage);
+    guard.stability = Math.max(0, remaining);
+    guard.lastAttack = attack.name || attack.id || "";
+    guard.lastDamagePrevented = prevented;
+    guard.lastResult = broken ? "broken" : "blocked";
+    guard.lastUpdated = performance.now();
+
+    if (activeAttack && this.activeAttackSystem) {
+      this.activeAttackSystem.cancel(activeAttack, broken ? "guardBreak" : "guard");
+    }
+
+    if (broken) {
+      this.breakPersistentGuard(canBlock ? "stability" : "invalid");
+    } else {
+      this.triggerActorReaction("player", "guard", 1.0, {
+        color: (WeaponDatabase[this.playerConfig.weapon] || {}).color || "#5dade2",
+        direction: -1,
+        distance: 12,
+        lift: 2,
+        duration: 0.28
+      });
+      this.hitStop = Math.max(this.hitStop, 0.10);
+      this.screenShake = Math.max(this.screenShake, 0.08);
+      this.spawnParticles("guard", 220, 360, 0.85);
+      if (typeof SFX !== "undefined" && SFX.sfxGuard) SFX.sfxGuard();
+      this.recordCombatEvent("guardBlock", {
+        attack: attack.name || attack.id || "",
+        prevented,
+        stability: Math.round(guard.stability)
+      });
+      this.lastPlayerFeedback = "格挡成功：敌方命中在盾稳上结算，后续连段仍要继续判断。";
+      this.setMessage(`格挡 ${attack.name || "攻击"} · 盾稳 ${Math.round(guard.stability)}`);
+    }
+
+    let died = false;
+    if (leakDamage > 0) {
+      const result = this.confirmDamage({
+        source: "enemy",
+        target: "player",
+        token: `guard-leak:${attack.id || "attack"}:${this.enemyAttackCursor}:${Math.round((activeAttack ? activeAttack.elapsed : this.enemyAttackTimer) * 1000)}`,
+        shape: this.isIncomingSpellAttack(attack) ? "beam" : "arc",
+        anchor: "enemyCore",
+        toAnchor: "playerCore",
+        damage: leakDamage,
+        label: `${attack.id || "attack"}:guardLeak`,
+        attackId: attack.id,
+        visualEvent: `${attack.id || "attack"}:guardLeak`,
+        isEnemyAttack: true,
+        isSpell: this.isIncomingSpellAttack(attack),
+        options: { attackId: attack.id }
+      });
+      died = !!(result && result.died);
+    }
+
+    const profile = this.getGuardProfile();
+    if (!broken && profile.counterDamage > 0) {
+      this.confirmDamage({
+        source: "player",
+        target: "enemy",
+        token: `guard-counter:${attack.id || "attack"}:${this.enemyAttackCursor}:${Math.round((activeAttack ? activeAttack.elapsed : this.enemyAttackTimer) * 1000)}`,
+        shape: "arc",
+        anchor: "playerShield",
+        toAnchor: "enemyCore",
+        damage: profile.counterDamage,
+        label: "guardCounter",
+        visualEvent: "guardCounter",
+        weapon: this.playerConfig.weapon,
+        chainFamily: "guard",
+        options: { suppressFloatingText: true, suppressLog: true }
+      });
+    }
+
+    if (!broken && !this.hasPendingEnemyActiveAttacks(activeAttack) && this.turnState !== "game_over") {
+      this.startResolvingToFollowup({ source: "guardStance", covered: 1, attack: attack.id || "" });
+    } else if (broken && !this.hasPendingEnemyActiveAttacks(activeAttack) && this.turnState !== "game_over") {
+      this.startResolving(() => this.startEnemyTurn());
+    }
+
+    return {
+      confirmed: leakDamage > 0,
+      defended: !broken,
+      guardBreak: broken,
+      damage: leakDamage,
+      prevented,
+      died
+    };
+  }
+
+  canGuardStanceDodge(attack = null) {
+    const guard = this.guardStance;
+    if (!guard || !guard.active) return false;
+    const profile = this.getGuardProfile();
+    if (!profile.shieldDodge && !this.hasCombatArt("desslo") && !this.hasCombatArt("eastern")) return false;
+    const sourceAttack = attack || this.enemyAttack;
+    if (!sourceAttack) return true;
+    return this.getAttackCounterProfile(sourceAttack).canDodge;
+  }
+
+  triggerGuardStanceDodge() {
+    const incoming = this.getIncomingActiveAttack();
+    const sourceAttack = incoming && incoming.intent ? incoming.intent.attack : this.enemyAttack;
+    if (!incoming || !this.canGuardStanceDodge(sourceAttack)) return false;
+    this.exitPersistentGuard("dodge");
+    this.defenseTriggered = true;
+    this.defenseMode = "dodge";
+    this.activeAttackSystem.cancel(incoming, "dodge");
+    this.triggerActorReaction("player", "dodge", 1.0, {
+      color: "#2ecc71",
+      direction: -1,
+      distance: 34,
+      lift: 3,
+      duration: 0.28
+    });
+    this.recordCombatEvent("guardDodge", { attack: sourceAttack ? sourceAttack.name : "" });
+    this.lastPlayerFeedback = "持盾闪避成功：盾稳保留，敌方后续动作仍要观察。";
+    this.setMessage("持盾闪避");
+    if (typeof SFX !== "undefined" && SFX.sfxDodge) SFX.sfxDodge();
+    if (!this.hasPendingEnemyActiveAttacks(incoming)) {
+      this.startResolvingToFollowup({ source: "guardDodge", covered: 1 });
+    }
+    return true;
   }
 
   // ========== 玩家回合 ==========
@@ -510,10 +898,18 @@ class BattleSystem {
     this.actionBar += dt;
     if (this.actionBar >= this.actionBarMax) {
       this.actionBar = this.actionBarMax;
+      let recordedMiss = false;
       if (this.pendingFollowUp) {
         this.pendingFollowUp = false;
         this.resetCombo();
+        this.recordCombatEvent("followupMissed", { reason: "timeout" });
+        recordedMiss = true;
+        this.lastPlayerFeedback = "追击窗口已错过：下一次防守成功后尽快按 A/S/D。";
         this.setMessage("追加机会已错过");
+      }
+      if (!recordedMiss) {
+        this.recordCombatEvent("followupMissed", { reason: "autoAttack" });
+        this.lastPlayerFeedback = "追击窗口未输入：系统执行无加成自动攻击。";
       }
       this.performNormalAttack({ automatic: true });
     }
@@ -923,6 +1319,12 @@ class BattleSystem {
       const attack = this.enemyAttack;
       if (!attack) return;
 
+      if (key === "SPACE" && this.guardStance && this.guardStance.active && this.canGuardStanceDodge(attack)) {
+        this.input.consume();
+        this.triggerGuardStanceDodge();
+        return;
+      }
+
       if (this.enemyAttackPhase === "response" && this.canEasternGuardNeutralize(key)) {
         this.input.consume();
         this.triggerEasternGuardNeutralize();
@@ -1045,6 +1447,7 @@ class BattleSystem {
     if (!chainConfig) return;
     if (!this.canPayChainCost(chainConfig)) return;
 
+    const fromFollowupTurn = this.turnState === "followup_turn";
     const chainState = this.getChainState(chainKey, chainConfig);
     this.playerState.currentState = chainState;
     if (chainState === "casting") {
@@ -1052,6 +1455,9 @@ class BattleSystem {
     }
 
     this.setTurnState("qte_running");
+    if (fromFollowupTurn) {
+      this.recordCombatEvent("followupUsed", { chainId, key: chainKey });
+    }
     this.input.clear();
     this.input.ignoreHeldUntilRelease(chainKey);
     this.triggerActorReaction("player", chainState === "swordAttack" ? "attack" : "cast", 0.9, {
@@ -1346,6 +1752,14 @@ class BattleSystem {
       duration: Math.max(0.20, Math.min(0.34, timeline.impactTime + 0.12))
     });
     this.log(`反制节点 ${nodeIndex + 1}/${nodeCount}：${sourceAttack.name} -> ${outcome.grade}`);
+    this.recordCombatEvent("counterCommit", {
+      attack: sourceAttack.name,
+      key: chainKey,
+      node: `${nodeIndex + 1}/${nodeCount}`,
+      grade: outcome.grade,
+      timeToImpact: outcome.timeToImpact,
+      overlap: outcome.overlap
+    });
 
     this.activeAttackSystem.commit({
       kind: "defenseCounter",
@@ -1442,6 +1856,13 @@ class BattleSystem {
       duration: 0.36
     });
     this.log(`出刀打断施法：锁定 ${interruptTargets.length} 段敌方动作`);
+    this.recordCombatEvent("spellInterruptCommit", {
+      attack: sourceAttack.name,
+      key: chainKey,
+      grade: outcome.grade,
+      covered: interruptTargets.length,
+      timeToImpact: outcome.timeToImpact
+    });
 
     this.activeAttackSystem.commit({
       kind: "defenseCounter",
@@ -1530,6 +1951,11 @@ class BattleSystem {
       }, { accepted: false }, { whiff: true }),
       onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
     });
+    this.recordCombatEvent("invalidCounter", {
+      attack: sourceAttack ? sourceAttack.name : "",
+      key: chainKey,
+      hint: attackCounter.hint || ""
+    });
     this.setMessage(`${sourceAttack ? sourceAttack.name : "此段"}不能拼刀 · ${attackCounter.hint || "换防御"}`);
   }
 
@@ -1589,6 +2015,14 @@ class BattleSystem {
     });
     this.setMessage(`出刀过早 · ${sourceAttack ? sourceAttack.name : "敌方攻击"}还没进身`);
     this.log(`反制过早：${sourceAttack ? sourceAttack.name : "unknown"}`);
+    this.recordCombatEvent("earlyCounter", {
+      attack: sourceAttack ? sourceAttack.name : "",
+      key: chainKey,
+      timeToImpact: outcome.timeToImpact,
+      gap: Number.isFinite(outcome.enemyActiveStart) && Number.isFinite(outcome.playerActiveEnd)
+        ? outcome.enemyActiveStart - outcome.playerActiveEnd
+        : null
+    });
   }
 
   triggerLateCounterAttempt(chainKey, incoming, outcome = {}) {
@@ -1639,6 +2073,14 @@ class BattleSystem {
     });
     this.setMessage(`出刀过慢 · ${sourceAttack ? sourceAttack.name : "敌方攻击"}压到身前`);
     this.log(`反制过晚：${sourceAttack ? sourceAttack.name : "unknown"}`);
+    this.recordCombatEvent("lateCounter", {
+      attack: sourceAttack ? sourceAttack.name : "",
+      key: chainKey,
+      timeToImpact: outcome.timeToImpact,
+      gap: Number.isFinite(outcome.playerActiveStart) && Number.isFinite(outcome.enemyActiveEnd)
+        ? outcome.playerActiveStart - outcome.enemyActiveEnd
+        : null
+    });
   }
 
   finishFailedCounterAttempt(sourceAttack = null, options = {}) {
@@ -1707,6 +2149,12 @@ class BattleSystem {
       if (node.outcome === "perfect") this.flashScreen("#f1c40f", 0.12);
       this.setMessage(`${node.outcome === "perfect" ? "完美拼刀" : "拼刀"} ${node.nodeIndex + 1}/${node.nodeCount}`);
     }
+    this.recordCombatEvent(canceled ? "clashSuccess" : "clashMiss", {
+      attack: node.nodeId || "",
+      node: Number.isFinite(node.nodeIndex) && Number.isFinite(node.nodeCount) ? `${node.nodeIndex + 1}/${node.nodeCount}` : "",
+      outcome: node.outcome || "",
+      posture: node.postureDamage || 0
+    });
     return result;
   }
 
@@ -1739,6 +2187,10 @@ class BattleSystem {
     this.spawnParticles("slash", 480, 330, 1.2);
     this.flashScreen("#9b59b6", 0.10);
     this.log(`出刀打断施法，取消 ${canceled.length} 段敌方动作`);
+    this.recordCombatEvent("spellInterrupt", {
+      canceled: canceled.length,
+      label: intent.label || ""
+    });
     return result;
   }
 
@@ -1985,6 +2437,7 @@ class BattleSystem {
     if (chainConfig && !this.canPayChainCost(chainConfig)) return;
 
     this.pendingFollowUp = false;
+    this.recordCombatEvent("followupUsed", { chainId });
     this.defenseTriggered = true;
     this.playerState.currentState = "swordAttack";
     SFX.sfxCounter();
@@ -2551,6 +3004,10 @@ class BattleSystem {
     if (sourceAttack && this.tryAbsorbIncomingSpell(sourceAttack)) {
       return { confirmed: false, absorbed: true };
     }
+    const guardResult = this.resolvePersistentGuardImpact(attack, sourceAttack);
+    if (guardResult) {
+      return guardResult;
+    }
 
     this.enemyAttackPhase = "hit";
     if (sourceAttack) {
@@ -2891,6 +3348,10 @@ class BattleSystem {
         chainFamily: "normal"
       }
     });
+    this.recordCombatEvent("normalAttack", {
+      automatic: !!options.automatic,
+      damage
+    });
     this.setMessage(automaticNoBonus ? "自动攻击" : "普通攻击");
   }
 
@@ -3074,7 +3535,6 @@ class BattleSystem {
   startFollowupTurn(context = {}) {
     this.resolvingToFollowup = false;
     this.setTurnState("followup_turn");
-    this.showTurnBanner("追击窗口", "#2ecc71");
     this.tickStatuses("player");
     if (this.playerHp <= 0 || this.turnState === "game_over") return;
 
@@ -3095,7 +3555,24 @@ class BattleSystem {
 
     const sourceText = context.source === "spellInterrupt"
       ? "施法打断成功"
-      : (context.source === "clash" ? "拼刀成功" : "敌方破绽");
+      : (context.source === "guardStance" ? "举盾化解成功" : (context.source === "guardDodge" ? "持盾闪避成功" : (context.source === "clash" ? "拼刀成功" : "敌方破绽")));
+    this.showTurnBanner(`追击窗口 · ${sourceText}`, "#2ecc71");
+    this.flashScreen("#2ecc71", 0.08);
+    this.triggerActorReaction("player", "attack", 0.62, {
+      color: "#2ecc71",
+      direction: 1,
+      distance: 8,
+      lift: 1,
+      duration: 0.22
+    });
+    if (typeof SFX !== "undefined" && SFX.sfxWindowOpen) SFX.sfxWindowOpen();
+    this.recordCombatEvent("followupOpen", {
+      source: context.source || "",
+      covered: context.covered || 0,
+      chainId: context.chainId || "",
+      nodeId: context.nodeId || ""
+    });
+    this.lastPlayerFeedback = `${sourceText}：现在才是我方追击机会，按 A/S/D 进入武器 QTE。`;
     this.setMessage(`${sourceText} · A/S/D 追击 QTE，否则自动攻击`);
   }
 
@@ -3388,6 +3865,11 @@ class BattleSystem {
       this.resetCombo();
       this.battleStats.hitsTaken++;
       if (!options.suppressLog) this.log(`玩家受到 ${amount} 伤害`);
+      this.recordCombatEvent("playerHit", {
+        amount,
+        force: Math.round(force * 100) / 100,
+        crit: !!options.isCrit
+      });
       if (this.playerHp <= 0) {
         this.setTurnState("game_over");
         this.setMessage("战败…");
@@ -3396,6 +3878,8 @@ class BattleSystem {
       }
       return false;
     } else {
+      const defenseResult = this.applyEnemyDefenseStats(amount, options);
+      amount = defenseResult.amount;
       const force = impact ? impact.force : (options.isCrit ? 1.35 : 1);
       const majorImpact = !!options.isCrit || force >= 1.35 || amount >= 28;
       this.enemyHp = Math.max(0, this.enemyHp - amount);
@@ -3430,7 +3914,16 @@ class BattleSystem {
         this.setCameraZoom(1.15, 0.3);
         this.triggerImpactFrames(1);
       }
-      if (!options.suppressLog) this.log(`敌人受到 ${amount} ${options.isCrit ? "暴击" : ""}伤害`);
+      if (!options.suppressLog) {
+        const mitigated = defenseResult.prevented > 0 ? `（减免 ${defenseResult.prevented}）` : "";
+        this.log(`敌人受到 ${amount} ${options.isCrit ? "暴击" : ""}伤害${mitigated}`);
+      }
+      this.recordCombatEvent("enemyHit", {
+        amount,
+        force: Math.round(force * 100) / 100,
+        crit: !!options.isCrit,
+        mitigated: defenseResult.prevented || 0
+      });
       return false;
     }
   }
@@ -3702,18 +4195,238 @@ class BattleSystem {
     return { ...s, accuracy };
   }
 
+  recordCombatEvent(type, details = {}) {
+    if (!this.combatTelemetry) return null;
+    const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const counters = this.combatTelemetry.counters || {};
+    const event = {
+      type,
+      time: Math.round(now),
+      turnState: this.turnState,
+      enemyPhase: this.enemyAttackPhase,
+      weapon: this.playerConfig.weapon || "",
+      encounter: this.activeEncounterId || this.enemyId || "",
+      ...details
+    };
+    const events = this.combatTelemetry.events || [];
+    events.push(event);
+    while (events.length > (this.combatTelemetry.maxEvents || 28)) events.shift();
+    this.combatTelemetry.events = events;
+
+    const increment = key => {
+      counters[key] = (counters[key] || 0) + 1;
+    };
+    if (type === "earlyCounter") increment("earlyCounters");
+    else if (type === "lateCounter") increment("lateCounters");
+    else if (type === "invalidCounter") increment("invalidCounters");
+    else if (type === "clashSuccess") increment("clashSuccess");
+    else if (type === "clashMiss") increment("clashMiss");
+    else if (type === "spellInterrupt") increment("spellInterrupts");
+    else if (type === "followupOpen") increment("followupsOpened");
+    else if (type === "followupUsed") increment("followupsUsed");
+    else if (type === "followupMissed") increment("followupsMissed");
+    else if (type === "playerHit") increment("playerHits");
+    else if (type === "enemyHit") increment("enemyHits");
+    else if (type === "normalAttack") increment("normalAttacks");
+    else if (type === "guardBlock") increment("guardBlocks");
+    else if (type === "guardBreak") increment("guardBreaks");
+    else if (type === "guardDodge") increment("guardDodges");
+    else if (type === "armorMitigation") increment("armorMitigations");
+    else if (type === "shieldMitigation") increment("shieldMitigations");
+    this.combatTelemetry.counters = counters;
+    return event;
+  }
+
+  formatCombatTelemetryEvent(event) {
+    if (!event) return "";
+    const attack = event.attack ? ` ${event.attack}` : "";
+    const node = event.node ? ` ${event.node}` : "";
+    const grade = event.grade ? ` ${event.grade}` : "";
+    const gap = Number.isFinite(event.gap) ? `${Math.abs(event.gap).toFixed(2)}s` : "";
+    if (event.type === "earlyCounter") return `早按${attack}${gap ? ` 提前${gap}` : ""}`;
+    if (event.type === "lateCounter") return `晚按${attack}${gap ? ` 滞后${gap}` : ""}`;
+    if (event.type === "invalidCounter") return `无效${attack}${event.hint ? ` ${event.hint}` : ""}`;
+    if (event.type === "counterCommit") return `出刀${attack}${node}${grade}`;
+    if (event.type === "clashSuccess") return `拼刀${node}${event.outcome ? ` ${event.outcome}` : ""}`;
+    if (event.type === "clashMiss") return `拼刀未覆盖${node}`;
+    if (event.type === "spellInterruptCommit") return `打断起手${attack}${grade}`;
+    if (event.type === "spellInterrupt") return `法术打断 x${event.canceled || 0}`;
+    if (event.type === "followupOpen") return `追击开启${event.source ? ` ${event.source}` : ""}`;
+    if (event.type === "followupUsed") return `追击使用${event.chainId ? ` ${event.chainId}` : ""}`;
+    if (event.type === "followupMissed") return "追击错过";
+    if (event.type === "guardEnter") return `举盾 ${event.reason || ""} 稳${event.stability || 0}`;
+    if (event.type === "guardRelease") return `放盾 稳${event.stability || 0}`;
+    if (event.type === "guardBlock") return `格挡${attack} 挡${event.prevented || 0} 稳${event.stability || 0}`;
+    if (event.type === "guardBreak") return "破盾";
+    if (event.type === "guardDodge") return `持盾闪避${attack}`;
+    if (event.type === "armorMitigation") return `护甲减伤 -${event.prevented || 0}`;
+    if (event.type === "shieldMitigation") return `盾牌减伤 -${event.prevented || 0}`;
+    if (event.type === "playerHit") return `受击 -${event.amount || 0}`;
+    if (event.type === "enemyHit") return `命中 -${event.amount || 0}`;
+    if (event.type === "normalAttack") return event.automatic ? "自动攻击" : "普通攻击";
+    return event.type;
+  }
+
+  getGuardStanceDebugLine() {
+    const guard = this.guardStance;
+    if (!guard) return "";
+    const state = guard.active
+      ? "举盾"
+      : (guard.brokenTimer > 0 ? "破盾恢复" : (guard.recovering > 0 ? "收盾" : "未举盾"));
+    const max = guard.maxStability || (this.getGuardProfile().maxStability || 64);
+    const stability = Math.round(guard.stability || 0);
+    const result = guard.lastResult || "none";
+    const attack = guard.lastAttack ? ` ${guard.lastAttack}` : "";
+    return `举盾：${state} ${stability}/${Math.round(max)} ${result}${attack}`;
+  }
+
+  getCombatTelemetryLines(limit = 5) {
+    if (!this.combatTelemetry) return [];
+    const counters = this.combatTelemetry.counters || {};
+    const lines = [
+      `实战记录：早${counters.earlyCounters || 0} 晚${counters.lateCounters || 0} 无效${counters.invalidCounters || 0} 拼刀${counters.clashSuccess || 0} 格挡${counters.guardBlocks || 0}/${counters.guardBreaks || 0} 打断${counters.spellInterrupts || 0} 追击${counters.followupsOpened || 0}/${counters.followupsUsed || 0}`
+    ];
+    const guardLine = this.getGuardStanceDebugLine();
+    if (guardLine) lines.push(guardLine);
+    const advice = this.getCombatAdviceLine();
+    if (advice) lines.push(advice);
+    const events = (this.combatTelemetry.events || []).slice(-limit).reverse();
+    for (const event of events) {
+      lines.push(`· ${this.formatCombatTelemetryEvent(event)}`);
+    }
+    return lines;
+  }
+
+  getCombatAdviceLine() {
+    const counters = this.combatTelemetry && this.combatTelemetry.counters ? this.combatTelemetry.counters : {};
+    const early = counters.earlyCounters || 0;
+    const late = counters.lateCounters || 0;
+    const invalid = counters.invalidCounters || 0;
+    const followupsOpened = counters.followupsOpened || 0;
+    const followupsUsed = counters.followupsUsed || 0;
+    const clash = counters.clashSuccess || 0;
+    const interrupts = counters.spellInterrupts || 0;
+    const guardBlocks = counters.guardBlocks || 0;
+    const guardBreaks = counters.guardBreaks || 0;
+
+    if (early > 0 && early >= late) return "建议：等敌刃进身/绿色窗口再出刀，早按会露破绽。";
+    if (late > 0) return "建议：敌招压到身前前半拍出刀，晚按会吃命中。";
+    if (invalid > 0) return "建议：不是所有段都能拼刀，法术段可出刀打断，其他段看提示换防御。";
+    if (guardBreaks > 0) return "建议：盾稳被打空时，重击改用闪避或更晚举盾，不要一直按住。";
+    if (followupsOpened > followupsUsed) return "建议：追击窗口出现后按 A/S/D，把防守成功转成武器 QTE。";
+    if (guardBlocks > 0) return "建议：举盾能保命，但双刀盾稳低；连续快攻仍优先用 A/S/D 覆盖。";
+    if (clash > 0 || interrupts > 0) return "建议：节奏正常，继续看下一段敌方动作接触点。";
+    return "建议：观察敌人动作接近身体时，再按 A/S/D 出刀。";
+  }
+
+  getCombatTelemetryExport() {
+    const counters = this.combatTelemetry && this.combatTelemetry.counters ? this.combatTelemetry.counters : {};
+    return {
+      schema: "qte-counterflow-telemetry/v1",
+      localOnly: true,
+      style: this.playerConfig.style || "",
+      weapon: this.playerConfig.weapon || "",
+      encounter: this.activeEncounterId || null,
+      enemy: this.enemyId || "",
+      difficulty: Difficulty.current || "normal",
+      result: this.turnState === "game_over"
+        ? (this.enemyHp <= 0 ? "win" : "loss")
+        : "in_progress",
+      hp: {
+        player: this.playerHp,
+        playerMax: this.playerMaxHp,
+        enemy: this.enemyHp,
+        enemyMax: this.enemyMaxHp
+      },
+      counters: { ...counters },
+      guard: this.getGuardStanceView(),
+      battleStats: this.getBattleStats(),
+      events: (this.combatTelemetry && this.combatTelemetry.events ? this.combatTelemetry.events : []).map(event => ({ ...event }))
+    };
+  }
+
+  getCombatTelemetryExportText() {
+    return JSON.stringify(this.getCombatTelemetryExport());
+  }
+
+  getGuardStanceView() {
+    const guard = this.guardStance || {};
+    const profile = this.getGuardProfile();
+    return {
+      active: !!guard.active,
+      recovering: Math.round((guard.recovering || 0) * 1000) / 1000,
+      brokenTimer: Math.round((guard.brokenTimer || 0) * 1000) / 1000,
+      stability: Math.round(guard.stability || 0),
+      maxStability: Math.round(guard.maxStability || profile.maxStability || 64),
+      ratio: Utils.clamp((guard.stability || 0) / Math.max(1, guard.maxStability || profile.maxStability || 64), 0, 1),
+      lastResult: guard.lastResult || "none",
+      lastAttack: guard.lastAttack || "",
+      lastDamagePrevented: guard.lastDamagePrevented || 0,
+      shieldDodge: !!profile.shieldDodge
+    };
+  }
+
+  getDamagePathAudit() {
+    return [
+      {
+        category: "player_qte",
+        route: "hit-confirmed",
+        proof: "resolvePlayerQTEImpact -> confirmDamage -> HitConfirmSystem.confirm"
+      },
+      {
+        category: "enemy_active_attack",
+        route: "hit-confirmed",
+        proof: "resolveEnemyActiveAttackImpact -> confirmDamage -> HitConfirmSystem.confirm"
+      },
+      {
+        category: "normal_attack",
+        route: "hit-confirmed",
+        proof: "resolveNormalAttackImpact -> confirmDamage -> HitConfirmSystem.confirm"
+      },
+      {
+        category: "counter_and_auxiliary",
+        route: "hit-confirmed",
+        proof: "resolveAuxiliaryPlayerAttackImpact -> confirmDamage -> HitConfirmSystem.confirm"
+      },
+      {
+        category: "persistent_guard_leak",
+        route: "hit-confirmed",
+        proof: "resolvePersistentGuardImpact -> confirmDamage -> HitConfirmSystem.confirm"
+      },
+      {
+        category: "status_or_resource_backlash",
+        route: "intentional-direct",
+        proof: "resource/status systems may call applyDamage for non-hitbox backlash over time"
+      }
+    ];
+  }
+
+  getDamagePathAuditLines(limit = 4) {
+    return this.getDamagePathAudit()
+      .slice(0, limit)
+      .map(item => `伤害路径：${item.category} ${item.route}`);
+  }
+
   getBattleResultLines() {
     const stats = this.getBattleStats();
+    const telemetry = this.combatTelemetry && this.combatTelemetry.counters ? this.combatTelemetry.counters : {};
+    const advice = this.getCombatAdviceLine();
     const encounterName = this.encounterConfig ? this.encounterConfig.name : (this.enemyConfig && this.enemyConfig.name ? this.enemyConfig.name : "训练目标");
     const phase = this.getCurrentEncounterPhase()
       || (this.encounterConfig && Array.isArray(this.encounterConfig.phases)
         ? this.encounterConfig.phases.find(item => item.id === this.activeEncounterPhaseId)
         : null);
     const phaseName = phase ? phase.name : "常态";
+    const defenseLine = (telemetry.armorMitigations || telemetry.shieldMitigations)
+      ? [`防护：护甲减伤${telemetry.armorMitigations || 0}次  盾牌减伤${telemetry.shieldMitigations || 0}次`]
+      : [];
     return [
       `遭遇：${encounterName} / 阶段：${phaseName}`,
       `输出：${stats.damageDealt}  命中率：${stats.accuracy}%  Perfect：${stats.perfectCount}`,
       `最大连击：${stats.maxCombo}  受击：${stats.hitsTaken}`,
+      `反制：拼刀${telemetry.clashSuccess || 0}  格挡${telemetry.guardBlocks || 0}/${telemetry.guardBreaks || 0}  早${telemetry.earlyCounters || 0}  晚${telemetry.lateCounters || 0}  打断${telemetry.spellInterrupts || 0}  追击${telemetry.followupsOpened || 0}`,
+      ...defenseLine,
+      advice,
       `剩余 HP：${this.playerHp}/${this.playerMaxHp}  敌方：${this.enemyHp}/${this.enemyMaxHp}`
     ];
   }

@@ -9,6 +9,7 @@ const {
   ChainDatabase,
   SpellDatabase,
   StyleDatabase,
+  WeaponDatabase,
   EnemyDatabase,
   EncounterDatabase,
   EffectEventDefinitions
@@ -18,6 +19,7 @@ const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const utilsJs = fs.readFileSync(path.join(root, "js/utils.js"), "utf8");
 const mainJs = fs.readFileSync(path.join(root, "js/main.js"), "utf8");
 const demoModeJs = fs.readFileSync(path.join(root, "js/demo-mode.js"), "utf8");
+const qteRunnerJs = fs.readFileSync(path.join(root, "js/qte-runner.js"), "utf8");
 const battleJs = fs.readFileSync(path.join(root, "js/battle.js"), "utf8");
 const inputJs = fs.readFileSync(path.join(root, "js/input.js"), "utf8");
 const rendererJs = fs.readFileSync(path.join(root, "js/renderer.js"), "utf8");
@@ -25,6 +27,8 @@ const fxJs = fs.readFileSync(path.join(root, "js/fx.js"), "utf8");
 const audioJs = fs.readFileSync(path.join(root, "js/audio.js"), "utf8");
 const chainsJs = fs.readFileSync(path.join(root, "js/data/chains.js"), "utf8");
 const weaponsJs = fs.readFileSync(path.join(root, "js/data/weapons.js"), "utf8");
+const enemiesJs = fs.readFileSync(path.join(root, "js/data/enemies.js"), "utf8");
+const renderStateJs = fs.readFileSync(path.join(root, "js/systems/render-state.js"), "utf8");
 const qteDebugJs = fs.readFileSync(path.join(root, "js/systems/qte-debug.js"), "utf8");
 const hitConfirmJs = fs.readFileSync(path.join(root, "js/systems/hit-confirm.js"), "utf8");
 const activeAttacksJs = fs.readFileSync(path.join(root, "js/systems/active-attacks.js"), "utf8");
@@ -34,6 +38,7 @@ const styleCss = fs.readFileSync(path.join(root, "style.css"), "utf8");
 const readmeMd = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const specMd = fs.readFileSync(path.join(root, "SPEC.md"), "utf8");
 const flowSmokeJs = fs.readFileSync(path.join(root, "scripts/flow-smoke.js"), "utf8");
+const checkBalanceJs = fs.readFileSync(path.join(root, "scripts/check-balance.js"), "utf8");
 const visualSmokePath = path.join(root, "scripts/visual-smoke.js");
 const visualSmokeJs = fs.existsSync(visualSmokePath) ? fs.readFileSync(visualSmokePath, "utf8") : "";
 const verifyPath = path.join(root, "scripts/verify.js");
@@ -42,6 +47,8 @@ const ciPath = path.join(root, ".github/workflows/ci.yml");
 const ciYml = fs.existsSync(ciPath) ? fs.readFileSync(ciPath, "utf8") : "";
 const manualChecklistPath = path.join(root, "docs/manual-playtest-checklist.md");
 const manualChecklistMd = fs.existsSync(manualChecklistPath) ? fs.readFileSync(manualChecklistPath, "utf8") : "";
+const qtePrototypePath = path.join(root, "docs/qte-prototype-reference.md");
+const qtePrototypeMd = fs.existsSync(qtePrototypePath) ? fs.readFileSync(qtePrototypePath, "utf8") : "";
 const results = [];
 
 function check(label, condition) {
@@ -60,6 +67,7 @@ check("index loads js/data/effects.js", scriptIndex("js/data/effects.js") >= 0);
 check("index loads js/data/encounters.js", scriptIndex("js/data/encounters.js") >= 0);
 check("index loads js/fx.js before effect queue", scriptIndex("js/fx.js") >= 0 && scriptIndex("js/fx.js") < scriptIndex("js/systems/effects.js"));
 check("index loads js/systems/chain-effects.js", scriptIndex("js/systems/chain-effects.js") >= 0);
+check("index loads render state helper before renderer", scriptIndex("js/systems/render-state.js") >= 0 && scriptIndex("js/systems/render-state.js") < scriptIndex("js/renderer.js"));
 check("index loads hit-confirm before battle", scriptIndex("js/systems/hit-confirm.js") >= 0 && scriptIndex("js/systems/hit-confirm.js") < scriptIndex("js/battle.js"));
 check("index loads active-attacks before battle", scriptIndex("js/systems/active-attacks.js") >= 0 && scriptIndex("js/systems/active-attacks.js") < scriptIndex("js/battle.js"));
 check(
@@ -132,6 +140,32 @@ check("fireBladeBurst has burst renderer data", !!(EffectEventDefinitions.fireBl
 check("overflowBurst has burst renderer data", !!(EffectEventDefinitions.overflowBurst && EffectEventDefinitions.overflowBurst.bursts));
 check("greatswordCleavePerfect has burst renderer data", !!(EffectEventDefinitions.greatswordCleavePerfect && EffectEventDefinitions.greatswordCleavePerfect.bursts));
 check("counter clash effect data remains available", !!(EffectEventDefinitions.counterflowClashLead && EffectEventDefinitions.counterflowClashFollow && EffectEventDefinitions.counterflowClashFollow.bursts));
+check(
+  "qte prototype reference system is retained",
+  ["fireball_evolution", "counterspell_reversal", "followup_dualblades", "flame_blade", "overflow_burst"].every(id => chainsJs.includes(id))
+    && demoModeJs.includes("class DemoMode")
+    && qteRunnerJs.includes("class QTEChainRunner")
+    && fs.existsSync(path.join(root, "scripts/sim-chain.js"))
+    && fs.existsSync(path.join(root, "scripts/check-timing.js"))
+    && fs.existsSync(path.join(root, "scripts/check-balance.js"))
+    && fs.existsSync(path.join(root, "scripts/validate-data.js"))
+);
+check(
+  "qte prototype reference doc exists",
+  qtePrototypeMd.includes("QTE Prototype Reference")
+    && qtePrototypeMd.includes("Retention Contract")
+    && qtePrototypeMd.includes("QTEChainRunner")
+    && qtePrototypeMd.includes("DemoMode")
+    && qtePrototypeMd.includes("flame_blade")
+    && qtePrototypeMd.includes("overflow_burst")
+    && qtePrototypeMd.includes("Public Freeze Notes")
+);
+check(
+  "public demo entry hidden while prototype code remains",
+  indexHtml.includes('id="btn-demo" hidden disabled')
+    && demoModeJs.includes("class DemoMode")
+    && qteRunnerJs.includes("class QTEChainRunner")
+);
 check("renderer has player silhouette helper", rendererJs.includes("drawPlayerSilhouette"));
 check("renderer has enemy silhouette helper", rendererJs.includes("drawEnemySilhouette"));
 check("renderer has stage and nameplate helpers", rendererJs.includes("drawBattleStage") && rendererJs.includes("drawActorGroundSigil") && rendererJs.includes("drawCombatNameplates"));
@@ -231,13 +265,94 @@ check("battle supports encounter selection", battleJs.includes("encounterOverrid
 check("battle supports encounter phases", battleJs.includes("getCurrentEncounterPhase") && battleJs.includes("maybeEnterEncounterPhase") && battleJs.includes("getEncounterAttackPattern"));
 check("battle result summary exists", battleJs.includes("getBattleResultLines") && rendererJs.includes("战斗摘要") && mainJs.includes("getBattleResultLines") && styleCss.includes("game-over-stats-title"));
 check("qte debug shows encounter rules", qteDebugJs.includes("getEncounterDebugLines"));
+check("qte debug shows combat telemetry", qteDebugJs.includes("getCombatTelemetryLines"));
+check("battle records combat comprehension events", battleJs.includes("recordCombatEvent(type") && battleJs.includes("getCombatTelemetryLines") && battleJs.includes("getCombatAdviceLine") && battleJs.includes("earlyCounters") && battleJs.includes("lateCounters") && battleJs.includes("invalidCounters") && battleJs.includes("followupsOpened") && battleJs.includes("早按会露破绽"));
+check(
+  "persistent guard stance is implemented",
+  battleJs.includes("updatePersistentGuard(dt)")
+    && battleJs.includes("resolvePersistentGuardImpact")
+    && battleJs.includes("getGuardStanceView")
+    && battleJs.includes("guardBlocks")
+    && mainJs.includes("按住 F 举盾到接触帧")
+    && indexHtml.includes("命中接触帧才结算")
+);
+check(
+  "weapon differentiation profiles exist",
+  !!(WeaponDatabase.swordShield && WeaponDatabase.swordShield.guardProfile)
+    && WeaponDatabase.swordShield.guardProfile.maxStability > WeaponDatabase.dualBlades.guardProfile.maxStability
+    && WeaponDatabase.dualBlades.counterProfile.recovery < WeaponDatabase.greatsword.counterProfile.recovery
+    && weaponsJs.includes("swordShield")
+    && checkBalanceJs.includes("Counter pressure by weapon")
+);
+check(
+  "follow-up presentation is source-aware",
+  battleJs.includes("追击窗口 ·")
+    && battleJs.includes("举盾化解成功")
+    && battleJs.includes("持盾闪避成功")
+    && battleJs.includes("lastPlayerFeedback")
+);
+check(
+  "combat telemetry export is local-only",
+  battleJs.includes("getCombatTelemetryExport")
+    && battleJs.includes('schema: "qte-counterflow-telemetry/v1"')
+    && battleJs.includes("localOnly: true")
+    && mainJs.includes("window.exportCombatTelemetry")
+    && qteDebugJs.includes("遥测导出")
+);
+check(
+  "renderer boundary helper extraction exists",
+  renderStateJs.includes("const RenderStateHelpers")
+    && renderStateJs.includes("shouldShowPlayerStageLane")
+    && renderStateJs.includes("getGuardStance")
+    && rendererJs.includes("RenderStateHelpers.shouldShowPlayerStageLane")
+    && rendererJs.includes("RenderStateHelpers.getGuardStance")
+);
+check(
+  "armor and shield defense stats are explicit",
+  enemiesJs.includes("defenseStats")
+    && enemiesJs.includes("armorDamageMul")
+    && enemiesJs.includes("shieldDamageMul")
+    && battleJs.includes("applyEnemyDefenseStats")
+    && battleJs.includes("armorMitigation")
+    && battleJs.includes("shieldMitigation")
+    && battleJs.includes("防护：护甲减伤")
+);
+check(
+  "damage path audit exists",
+  battleJs.includes("getDamagePathAudit")
+    && battleJs.includes("persistent_guard_leak")
+    && battleJs.includes("intentional-direct")
+    && qteDebugJs.includes("getDamagePathAuditLines")
+);
+check(
+  "flow smoke covers R63-R71 implementation",
+  flowSmokeJs.includes("verifyPersistentGuardStance")
+    && flowSmokeJs.includes("verifyWeaponDifferentiationAndTelemetryExport")
+    && flowSmokeJs.includes("verifyArmorShieldDefenseStats")
+    && flowSmokeJs.includes("damage path audit classifies public damage")
+);
 check("SPEC includes visual smoke command", specMd.includes("node scripts\\visual-smoke.js"));
+check("SPEC protects QTE chain prototype system", specMd.includes("QTE Chain Prototype System") && specMd.includes("reference-critical") && specMd.includes("prototype reference"));
+check(
+  "SPEC includes completion roadmap specs",
+  [
+    "R63 Persistent Guard Stance Spec",
+    "R64 Weapon Differentiation Spec",
+    "R65 Follow-Up Turn Presentation Spec",
+    "R66 Player-Facing Feedback And Tutorial Spec",
+    "R67 Combat Telemetry Export Spec",
+    "R68 Visual And Manual Test Sync Spec",
+    "R69 Renderer Boundary Extraction Spec",
+    "R70 Armor And Shield Depth Spec",
+    "R71 Hit Confirm Completion Audit Spec"
+  ].every(text => specMd.includes(text))
+);
 check("SPEC syntax check targets source directories", specMd.includes("Get-ChildItem -Path .\\js,.\\scripts"));
 check("verify script exists", !!verifyJs);
 check("verify script runs core gates", verifyJs.includes("scripts/validate-data.js") && verifyJs.includes("scripts/check-timing.js") && verifyJs.includes("scripts/check-balance.js") && verifyJs.includes("scripts/flow-smoke.js"));
 check("verify script supports visual toggle", verifyJs.includes("--skip-visual") && verifyJs.includes("--visual") && verifyJs.includes("scripts/visual-smoke.js"));
 check("CI workflow runs verify", ciYml.includes("node scripts/verify.js --ci --skip-visual"));
-check("manual playtest checklist exists", manualChecklistMd.includes("Battle Feel") && manualChecklistMd.includes("Demo Direction") && manualChecklistMd.includes("Audio"));
+check("manual playtest checklist exists", manualChecklistMd.includes("Battle Feel") && manualChecklistMd.includes("QTE Prototype Reference") && manualChecklistMd.includes("Audio") && !manualChecklistMd.includes("battle style `6`"));
 check("README documents verify command", readmeMd.includes("node scripts/verify.js") && readmeMd.includes("--skip-visual"));
 check("input reset protects virtual controls", inputJs.includes("reset()") && inputJs.includes("heldKeys.clear()") && inputJs.includes("options.fresh") && mainJs.includes("input.reset()") && mainJs.includes("pressVirtualKey(key)") && mainJs.includes("fresh: true") && mainJs.includes("tutorialOverlay.style.display !== \"none\""));
 check("R12 handfeel profiles exist", utilsJs.includes("getChainHandfeel") && utilsJs.includes("getDemoPacing") && utilsJs.includes("overflow_burst"));

@@ -133,6 +133,22 @@ function createDefaultBattle(options = {}) {
   return setup;
 }
 
+function setupSingleEnemyAttack(attackId, options = {}) {
+  const setup = createBattle(options);
+  const { battle } = setup;
+  battle.applyStyle("current");
+  if (options.weapon) battle.playerConfig.weapon = options.weapon;
+  battle.setTurnState("enemy_turn");
+  battle.activeAttackSystem.clear();
+  battle.enemyAttackChain = null;
+  battle.enemyCounterState = null;
+  battle.enemyAttack = battle.buildEnemyAttack(attackId);
+  battle.enemyAttackTimer = 0;
+  battle.enemyAttackPhase = "windup";
+  battle.commitEnemyActiveAttack(battle.enemyAttack);
+  return setup;
+}
+
 function verifyDefaultCombatPlan() {
   const { input, battle, logs } = createBattle();
   applyDefaultPlan(battle);
@@ -443,6 +459,69 @@ function verifySpellInterruptEnemyTurn() {
   assert("spell interrupt opens followup turn", followupOpened || runUntil(battle, () => battle.turnState === "followup_turn", 8), battle.turnState);
 }
 
+function verifyPersistentGuardStance() {
+  const { input, battle } = setupSingleEnemyAttack("slash", { weapon: "swordShield" });
+  const playerStart = battle.playerHp;
+  input.injectKey("F", "press");
+  tick(battle, 0.12);
+  assert("persistent guard enters stance", battle.guardStance.active && battle.playerState.currentState === "shield", JSON.stringify(battle.getGuardStanceView()));
+  assert("persistent guard waits for contact", battle.playerHp === playerStart, `${battle.playerHp}/${playerStart}`);
+  assert("persistent guard blocks at contact", runUntil(battle, () => (battle.combatTelemetry.counters.guardBlocks || 0) >= 1, 3), battle.getCombatTelemetryLines(3).join(" | "));
+  assert("persistent guard reduces contact damage", battle.playerHp > playerStart - 12, `${battle.playerHp}/${playerStart}`);
+  assert("persistent guard telemetry export includes guard", battle.getCombatTelemetryExport().guard.lastResult === "blocked", JSON.stringify(battle.getCombatTelemetryExport().guard));
+
+  const release = setupSingleEnemyAttack("slash", { weapon: "swordShield" });
+  release.input.injectKey("F", "press");
+  tick(release.battle, 0.10);
+  release.input.injectKey("F", "release");
+  tick(release.battle, 0.12);
+  const releaseStart = release.battle.playerHp;
+  assert("persistent guard release exits stance", !release.battle.guardStance.active, JSON.stringify(release.battle.getGuardStanceView()));
+  assert("released guard does not block contact", runUntil(release.battle, () => release.battle.playerHp < releaseStart, 3), `${release.battle.playerHp}/${releaseStart}`);
+  assert("released guard has no block count", (release.battle.combatTelemetry.counters.guardBlocks || 0) === 0, JSON.stringify(release.battle.combatTelemetry.counters));
+
+  const broken = setupSingleEnemyAttack("heavySmash", { weapon: "swordShield" });
+  broken.input.injectKey("F", "press");
+  tick(broken.battle, 0.10);
+  broken.battle.guardStance.stability = 4;
+  assert("low stability guard breaks on heavy contact", runUntil(broken.battle, () => (broken.battle.combatTelemetry.counters.guardBreaks || 0) >= 1, 4), broken.battle.getCombatTelemetryLines(4).join(" | "));
+}
+
+function verifyWeaponDifferentiationAndTelemetryExport() {
+  const weapons = context.WeaponDatabase;
+  assert("weapon profile adds sword shield", !!weapons.swordShield && weapons.swordShield.guardProfile.maxStability > weapons.dualBlades.guardProfile.maxStability, JSON.stringify(Object.keys(weapons)));
+  assert("dual blades recover faster than greatsword", weapons.dualBlades.counterProfile.recovery < weapons.greatsword.counterProfile.recovery, `${weapons.dualBlades.counterProfile.recovery}/${weapons.greatsword.counterProfile.recovery}`);
+  assert("greatsword has stronger finisher posture", weapons.greatsword.counterProfile.finisherPostureDamage > weapons.dualBlades.counterProfile.postureDamage, `${weapons.greatsword.counterProfile.finisherPostureDamage}/${weapons.dualBlades.counterProfile.postureDamage}`);
+
+  const { battle } = createDefaultBattle();
+  const payload = battle.getCombatTelemetryExport();
+  assert("telemetry export schema", payload.schema === "qte-counterflow-telemetry/v1" && payload.localOnly === true, JSON.stringify(payload));
+  assert("telemetry export includes weapon encounter difficulty", !!payload.weapon && !!payload.encounter && !!payload.difficulty, JSON.stringify(payload));
+  assert("damage path audit classifies public damage", battle.getDamagePathAudit().some(item => item.category === "enemy_active_attack" && item.route === "hit-confirmed"), JSON.stringify(battle.getDamagePathAudit()));
+}
+
+function verifyArmorShieldDefenseStats() {
+  const { battle } = createBattle();
+  battle.applyStyle("current");
+  battle.applyEnemyArchetype("shielded");
+  const enemyStart = battle.enemyHp;
+  const result = battle.confirmDamage({
+    source: "player",
+    target: "enemy",
+    token: "smoke:shielded:defense",
+    shape: "arc",
+    anchor: "playerHand",
+    toAnchor: "enemyCore",
+    damage: 20,
+    label: "shieldedDefenseSmoke",
+    weapon: "dualBlades"
+  });
+  assert("shielded enemy hit confirms", result.confirmed === true, JSON.stringify(result));
+  assert("shielded enemy mitigates melee damage", battle.enemyHp > enemyStart - 20 && battle.enemyHp < enemyStart, `${battle.enemyHp}/${enemyStart}`);
+  assert("shield mitigation telemetry recorded", (battle.combatTelemetry.counters.shieldMitigations || 0) >= 1, JSON.stringify(battle.combatTelemetry.counters));
+  assert("battle summary explains shield mitigation", battle.getBattleResultLines().some(line => line.includes("防护") && line.includes("盾牌减伤")), battle.getBattleResultLines().join(" | "));
+}
+
 function verifyActiveAttackHitStopFreeze() {
   const { input, battle } = createDefaultBattle();
   battle.startFollowupTurn({ source: "smoke" });
@@ -557,6 +636,9 @@ try {
   verifyDefaultEnemyAttackChain();
   verifyEarlyCounterWhiffPunish();
   verifySpellInterruptEnemyTurn();
+  verifyPersistentGuardStance();
+  verifyWeaponDifferentiationAndTelemetryExport();
+  verifyArmorShieldDefenseStats();
   verifyActiveAttackHitStopFreeze();
   verifyAllDamageChainsResolveActiveProfiles();
   verifyHitConfirmSystem();

@@ -58,10 +58,11 @@ function summarizeResult(chainId, chain, outcome, result) {
 }
 
 const context = loadDataContext([["js/difficulty.js", "Difficulty"]]);
-const { ChainDatabase, ChainEffectSystem, EncounterDatabase, SpellDatabase, StyleDatabase, Utils, Difficulty, EnemyDatabase } = context;
+const { ChainDatabase, ChainEffectSystem, EncounterDatabase, SpellDatabase, StyleDatabase, Utils, Difficulty, EnemyDatabase, WeaponDatabase } = context;
 const summaries = [];
 const encounterSummaries = [];
 const encounterPressure = [];
+const weaponPressure = [];
 const warnings = [];
 
 function isSwordChain(style, key) {
@@ -162,6 +163,73 @@ function getEnemyAttackTiming(attack) {
     responseDuration,
     responseStart: Math.max(0, impactTime - responseDuration)
   };
+}
+
+function getAttackCounterType(attack) {
+  const counter = attack.counter || {};
+  if (counter.type) return counter.type;
+  const id = attack.id || "";
+  const telegraph = attack.telegraph || {};
+  const isSpell = !!attack.interruptible || id.includes("spell") || id.includes("arcane") || id.includes("curse");
+  if (isSpell) return "spell_cast";
+  if (id.includes("heavy") || telegraph.type === "smash") return "heavy_melee";
+  if (telegraph.type === "bash") return "bash";
+  if (telegraph.type === "stab" && attack.windup < 0.85) return "quick_melee";
+  return "melee";
+}
+
+function weaponCoversAttack(weapon, attack, timing) {
+  const profile = {
+    startup: 0.10,
+    activeDuration: 0.12,
+    recovery: 0.28,
+    allowedCounterTypes: ["quick_melee", "melee", "finisher"],
+    ...(weapon.counterProfile || {})
+  };
+  const type = getAttackCounterType(attack);
+  if (!profile.allowedCounterTypes.includes(type)) return false;
+  const activeSpan = (profile.startup || 0.1) + (profile.activeDuration || 0.12);
+  return activeSpan <= timing.responseDuration + 0.045;
+}
+
+function summarizeWeaponPressure() {
+  const encounter = EncounterDatabase.encounters && EncounterDatabase.encounters.counter_dojo;
+  if (!encounter) return;
+  const refs = expandAttackPattern(encounter.attackPattern || []);
+  for (const [weaponId, weapon] of Object.entries(WeaponDatabase || {})) {
+    let coverable = 0;
+    let quickCoverable = 0;
+    let quickTotal = 0;
+    let heavyCoverable = 0;
+    let heavyTotal = 0;
+    for (const ref of refs) {
+      const attack = buildEncounterAttack(ref, encounter.modifiers || {});
+      const timing = getEnemyAttackTiming(attack);
+      const type = getAttackCounterType(attack);
+      const covers = weaponCoversAttack(weapon, attack, timing);
+      if (covers) coverable++;
+      if (type === "quick_melee") {
+        quickTotal++;
+        if (covers) quickCoverable++;
+      }
+      if (type === "heavy_melee" || type === "finisher") {
+        heavyTotal++;
+        if (covers) heavyCoverable++;
+      }
+    }
+    weaponPressure.push({
+      weaponId,
+      weaponName: weapon.name || weaponId,
+      coverable,
+      total: refs.length,
+      quickCoverable,
+      quickTotal,
+      heavyCoverable,
+      heavyTotal,
+      recovery: weapon.counterProfile ? weapon.counterProfile.recovery : 0.28,
+      guardStability: weapon.guardProfile ? weapon.guardProfile.maxStability : 0
+    });
+  }
 }
 
 function validateEncounterPressure(encounterId, encounter) {
@@ -284,6 +352,8 @@ for (const [encounterId, encounter] of Object.entries((EncounterDatabase && Enco
   validateEncounterPressure(encounterId, encounter);
 }
 
+summarizeWeaponPressure();
+
 for (const [styleId, style] of Object.entries(StyleDatabase || {})) {
   const encounterId = style.preferredEncounter;
   const encounter = encounterId && EncounterDatabase.encounters[encounterId];
@@ -357,6 +427,14 @@ console.log("Top encounter-adjusted perfect damage:");
 for (const item of topEncounterDamage) {
   const delta = item.damage === item.baseDamage ? "" : ` (base ${item.baseDamage})`;
   console.log(`  ${item.styleId.padEnd(11)} ${item.encounterId.padEnd(16)} ${item.chainId.padEnd(22)} ${String(item.damage).padStart(3)}${delta}  ${item.chainName}`);
+}
+
+console.log("");
+console.log("Counter pressure by weapon:");
+for (const row of weaponPressure.sort((a, b) => b.coverable - a.coverable || a.recovery - b.recovery)) {
+  const quick = row.quickTotal > 0 ? `${row.quickCoverable}/${row.quickTotal}` : "-";
+  const heavy = row.heavyTotal > 0 ? `${row.heavyCoverable}/${row.heavyTotal}` : "-";
+  console.log(`  ${row.weaponId.padEnd(12)} cover ${String(row.coverable).padStart(2)}/${row.total} quick ${quick.padEnd(3)} heavy ${heavy.padEnd(3)} guard ${String(row.guardStability).padStart(3)} recovery ${row.recovery.toFixed(2)}s`);
 }
 
 const tightestPressure = encounterPressure

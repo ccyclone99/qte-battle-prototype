@@ -34,6 +34,8 @@ node scripts/verify.js --visual
 
 `visual-smoke.js` 仍保留在仓库中，但 demo 入口冻结期间不作为默认验收目标。人工体验检查见 `docs/manual-playtest-checklist.md`。
 
+QTE 链原型是正式游戏参考资料，不能因为公开入口冻结而删除。参考索引见 `docs/qte-prototype-reference.md`。
+
 ## 开局配置
 
 主菜单先选择：
@@ -49,7 +51,7 @@ node scripts/verify.js --visual
 |---|---|
 | 敌方回合 | 敌人攻击窗口内 `A/S/D` 拼刀；敌人施法窗口内 `A/S/D` 打断施法 |
 | 追击窗口 | 敌方回合应对成功后，`A/S/D` 触发武器 QTE；不输入则自动攻击 |
-| 防御 | `SPACE` 闪避/弹反，`F` 格挡 |
+| 防御 | `F` 按住举盾到接触帧，松开解除；`SPACE` 闪避/弹反 |
 
 ## 已实现特性
 
@@ -70,6 +72,8 @@ node scripts/verify.js --visual
 - [x] R12 手感标定和武器/咒术协同反馈
 - [x] R13 命名遭遇和遭遇规则修正
 - [x] R51 单一反制方案、敌方多段攻势、双持覆盖帧、演示入口冻结
+- [x] QTE 原型参考资料保留契约与链目录文档
+- [x] R63-R71 常驻举盾、武器差异、追击呈现、遥测导出、渲染边界、护甲盾牌与伤害路径审计
 
 ## 文件结构
 
