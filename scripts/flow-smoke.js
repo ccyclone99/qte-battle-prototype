@@ -154,9 +154,9 @@ function verifyDefaultCombatPlan() {
   applyDefaultPlan(battle);
   assert("default plan enters enemy turn", battle.turnState === "enemy_turn", battle.turnState);
   assert("default plan id", battle.playerConfig.style === "current", battle.playerConfig.style);
-  assert("default plan enemy hp", battle.enemyMaxHp === 210, String(battle.enemyMaxHp));
-  assert("default plan encounter", battle.activeEncounterId === "counter_dojo", battle.activeEncounterId || "none");
-  assert("default plan opens with physical pressure", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
+  assert("default plan enemy hp", battle.enemyMaxHp === 180, String(battle.enemyMaxHp));
+  assert("default plan encounter", battle.activeEncounterId === "counter_tutorial", battle.activeEncounterId || "none");
+  assert("default plan opens with beginner clash", battle.enemyAttackChain && battle.enemyAttackChain.id === "tutorialSingleClash", battle.enemyAttackChain?.id || "none");
 
   battle.startFollowupTurn({ source: "smoke" });
   tap(input, battle, "S");
@@ -176,20 +176,28 @@ function verifyNoFreePlayerQte() {
 
 function verifyDefaultCounterPressureRotation() {
   const { battle } = createDefaultBattle();
-  assert("counter pressure first chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
-  assert("counter pressure first has three nodes", battle.enemyAttackChain.nodes.length === 3, String(battle.enemyAttackChain.nodes.length));
+  assert("beginner pressure first chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "tutorialSingleClash", battle.enemyAttackChain?.id || "none");
+  assert("beginner pressure first has one node", battle.enemyAttackChain.nodes.length === 1, String(battle.enemyAttackChain.nodes.length));
 
   battle.startFollowupTurn({ source: "smoke" });
   battle.startEnemyTurn();
-  assert("counter pressure second chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "spellDoubleCut", battle.enemyAttackChain?.id || "none");
+  assert("beginner pressure second chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "tutorialTwoHitRead", battle.enemyAttackChain?.id || "none");
 
   battle.startFollowupTurn({ source: "smoke" });
   battle.startEnemyTurn();
-  assert("counter pressure third chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "shieldSpellRush", battle.enemyAttackChain?.id || "none");
+  assert("beginner pressure third chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "tutorialGuardContact", battle.enemyAttackChain?.id || "none");
+
+  battle.startFollowupTurn({ source: "smoke" });
+  battle.startEnemyTurn();
+  assert("beginner pressure fourth chain teaches spell", battle.enemyAttackChain && battle.enemyAttackChain.id === "tutorialSpellInterrupt", battle.enemyAttackChain?.id || "none");
 
   const pattern = context.EncounterDatabase.encounters.counter_dojo.attackPattern || [];
   for (const id of ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"]) {
     assert(`counter pressure pattern includes ${id}`, pattern.includes(id), pattern.join(","));
+  }
+  const tutorialPattern = context.EncounterDatabase.encounters.counter_tutorial.attackPattern || [];
+  for (const id of ["tutorialSingleClash", "tutorialTwoHitRead", "tutorialGuardContact", "tutorialSpellInterrupt", "tutorialFollowupCheck"]) {
+    assert(`beginner pattern includes ${id}`, tutorialPattern.includes(id), tutorialPattern.join(","));
   }
 }
 
@@ -198,7 +206,7 @@ function verifyDefaultPlanScope() {
   applyDefaultPlan(battle);
   const style = battle.getCurrentStyle();
   const chains = battle.getEffectiveChains();
-  const encounter = context.EncounterDatabase.encounters.counter_dojo;
+  const encounter = context.EncounterDatabase.encounters.counter_tutorial;
   const modifiers = encounter.modifiers || {};
 
   assert("default plan keeps current id", battle.playerConfig.style === "current", battle.playerConfig.style);
@@ -208,8 +216,8 @@ function verifyDefaultPlanScope() {
   assert("default plan D remains dual blade", chains.D === "dualblades_d_v2", chains.D || "none");
   assert("default plan has no counterspell chain", !style.counterChain, style.counterChain || "none");
   assert("default plan uses sequential counter flow", style.counterFlow && style.counterFlow.enabled && battle.getWeaponCounterProfile().recovery <= 0.2, JSON.stringify(style.counterFlow || {}));
-  assert("counter dojo gives no spell energy", !("startSpellEnergy" in modifiers), String(modifiers.startSpellEnergy));
-  assert("counter dojo gives no absorb boost", !("absorbEnergyMul" in modifiers) && !("absorbDamageMul" in modifiers), JSON.stringify(modifiers));
+  assert("beginner route gives no spell energy", !("startSpellEnergy" in modifiers), String(modifiers.startSpellEnergy));
+  assert("beginner route gives no absorb boost", !("absorbEnergyMul" in modifiers) && !("absorbDamageMul" in modifiers), JSON.stringify(modifiers));
 }
 
 function verifyManualEnemyOverride() {
@@ -365,7 +373,7 @@ function verifyEnemyActiveAttackTiming() {
 }
 
 function verifyDefaultEnemyAttackChain() {
-  const { input, battle } = createDefaultBattle();
+  const { input, battle } = createDefaultBattle({ enemyId: "encounter:counter_dojo" });
   assert("default plan selected", battle.playerConfig.style === "current", battle.playerConfig.style);
   assert("default encounter active", battle.activeEncounterId === "counter_dojo", battle.activeEncounterId || "none");
 
@@ -404,7 +412,7 @@ function verifyDefaultEnemyAttackChain() {
 }
 
 function verifyEarlyCounterWhiffPunish() {
-  const { input, battle } = createDefaultBattle();
+  const { input, battle } = createDefaultBattle({ enemyId: "encounter:counter_dojo" });
   const playerStart = battle.playerHp;
   assert("early counter setup enemy chain", battle.enemyAttackChain && battle.enemyAttackChain.id === "bladeRushTriple", battle.enemyAttackChain?.id || "none");
 
@@ -417,7 +425,7 @@ function verifyEarlyCounterWhiffPunish() {
 }
 
 function verifySpellInterruptEnemyTurn() {
-  const { input, battle } = createDefaultBattle();
+  const { input, battle } = createDefaultBattle({ enemyId: "encounter:counter_dojo" });
   let followupOpened = false;
   let counterCompleted = false;
   const originalStartFollowupTurn = battle.startFollowupTurn.bind(battle);
@@ -500,6 +508,37 @@ function verifyWeaponDifferentiationAndTelemetryExport() {
   assert("damage path audit classifies public damage", battle.getDamagePathAudit().some(item => item.category === "enemy_active_attack" && item.route === "hit-confirmed"), JSON.stringify(battle.getDamagePathAudit()));
 }
 
+function verifyWeaponOverrideAssistDirectorAndAnimationEvents() {
+  const override = createBattle({ weaponId: "greatsword" });
+  applyDefaultPlan(override.battle);
+  assert("weapon override applies greatsword", override.battle.playerConfig.weapon === "greatsword", override.battle.playerConfig.weapon || "none");
+  assert("weapon override maps QTE chains", override.battle.getEffectiveChains().A === "greatsword_a_v2", override.battle.getEffectiveChains().A || "none");
+  assert("weapon override identity exports", override.battle.getCombatTelemetryExport().weaponIdentity.id === "greatsword", JSON.stringify(override.battle.getCombatTelemetryExport().weaponIdentity));
+
+  const assist = createDefaultBattle();
+  const assistProfile = assist.battle.getDifficultyAssistProfile();
+  assert("difficulty assist profile uses time pacing", assistProfile.chainOffsetMul > 1 && assistProfile.qteWindowMul <= 1, JSON.stringify(assistProfile));
+  assist.battle.startFollowupTurn({ source: "smoke" });
+  assist.battle.startEnemyTurn();
+  const secondNode = assist.battle.activeAttackSystem.active.find(attack => attack.intent.kind === "enemyAttack" && attack.intent.chainIndex === 1);
+  assert("difficulty assist spaces later chain nodes", !!secondNode && secondNode.intent.timelineOffset > 1.02, secondNode ? String(secondNode.intent.timelineOffset) : "none");
+  const animationEvents = assist.battle.getActiveAnimationEvents();
+  assert("animation events expose active attack contract", animationEvents.length > 0 && animationEvents[0].phase && animationEvents[0].contactFrame !== null && animationEvents[0].activeStart !== null, JSON.stringify(animationEvents));
+
+  assist.battle.combatTelemetry.counters.earlyCounters = 6;
+  assist.battle.startFollowupTurn({ source: "smoke" });
+  assist.battle.startEnemyTurn();
+  assert("enemy director does not alter beginner route", assist.battle.activeEncounterId === "counter_tutorial" && assist.battle.enemyDirector.lastPick === "", JSON.stringify(assist.battle.getEnemyDirectorView()));
+
+  const advanced = createDefaultBattle({ enemyId: "encounter:counter_dojo" });
+  advanced.battle.combatTelemetry.counters.earlyCounters = 4;
+  advanced.battle.startFollowupTurn({ source: "smoke" });
+  advanced.battle.startEnemyTurn();
+  assert("enemy director can select delayed pressure in dojo", advanced.battle.enemyAttackChain && advanced.battle.enemyAttackChain.id === "delayedCleaveMix", advanced.battle.enemyAttackChain ? advanced.battle.enemyAttackChain.id : "none");
+  const directorView = advanced.battle.getEnemyDirectorView();
+  assert("enemy director telemetry records reason", directorView.enabled && directorView.lastPick === "delayedCleaveMix" && directorView.lastReason === "earlyCounter", JSON.stringify(directorView));
+}
+
 function verifyArmorShieldDefenseStats() {
   const { battle } = createBattle();
   battle.applyStyle("current");
@@ -520,6 +559,116 @@ function verifyArmorShieldDefenseStats() {
   assert("shielded enemy mitigates melee damage", battle.enemyHp > enemyStart - 20 && battle.enemyHp < enemyStart, `${battle.enemyHp}/${enemyStart}`);
   assert("shield mitigation telemetry recorded", (battle.combatTelemetry.counters.shieldMitigations || 0) >= 1, JSON.stringify(battle.combatTelemetry.counters));
   assert("battle summary explains shield mitigation", battle.getBattleResultLines().some(line => line.includes("防护") && line.includes("盾牌减伤")), battle.getBattleResultLines().join(" | "));
+}
+
+function verifyResourcePolicyClosure() {
+  const heatSetup = createBattle({ enemyId: "encounter:ember_bulwark" });
+  heatSetup.battle.applyStyle("current");
+  assert("opening heat applied", heatSetup.battle.resourceSystem.heat === 12, String(heatSetup.battle.resourceSystem.heat));
+  heatSetup.battle.startEnemyTurn();
+  assert("opening heat survives first enemy turn", heatSetup.battle.resourceSystem.heat === 12, String(heatSetup.battle.resourceSystem.heat));
+  heatSetup.battle.startFollowupTurn({ source: "smoke" });
+  heatSetup.battle.startEnemyTurn();
+  assert("heat decays on later enemy boundary", heatSetup.battle.resourceSystem.heat === 4, String(heatSetup.battle.resourceSystem.heat));
+  assert("heat decay telemetry recorded", heatSetup.battle.combatTelemetry.events.some(event => event.type === "heatDecay"), JSON.stringify(heatSetup.battle.combatTelemetry.events));
+
+  const burnSetup = createBattle();
+  burnSetup.battle.applyStyle("current");
+  burnSetup.battle.statusSystem.apply({ target: "enemy", type: "burn", turns: 1 }, { source: "smoke" });
+  const burnEnemyStart = burnSetup.battle.enemyHp;
+  burnSetup.battle.startEnemyTurn();
+  assert("burn ticks at enemy turn start", burnSetup.battle.enemyHp === burnEnemyStart - 4, `${burnSetup.battle.enemyHp}/${burnEnemyStart}`);
+
+  const whiffSetup = createBattle();
+  whiffSetup.battle.applyStyle("current");
+  const heatBeforeWhiff = whiffSetup.battle.resourceSystem.heat;
+  const whiffResult = whiffSetup.battle.resolvePlayerQTEImpact({
+    intent: {
+      damageIntent: {
+        source: "player",
+        target: "enemy",
+        token: "smoke-qte-whiff-resource",
+        rect: { x: 4, y: 4, w: 8, h: 8 },
+        damage: 9,
+        label: "resourceWhiff"
+      },
+      effects: {
+        resources: { heat: 12 },
+        statuses: [{ target: "enemy", type: "burn", turns: 1 }]
+      },
+      context: { chainFamily: "fire" }
+    }
+  });
+  assert("qte whiff blocks impact resources", whiffResult.confirmed === false && whiffSetup.battle.resourceSystem.heat === heatBeforeWhiff, JSON.stringify(whiffResult));
+  assert("qte whiff blocks impact statuses", !whiffSetup.battle.statusSystem.has("burn", "enemy"), whiffSetup.battle.statusSystem.getDebugLines().join(" | "));
+
+  const split = whiffSetup.battle.splitQTEEffectsForActiveAttack({
+    resources: { spellEnergy: -60, heat: 12 },
+    statuses: [{ target: "enemy", type: "burn", turns: 1 }],
+    absorbReady: true
+  });
+  assert("negative resource cost stays commit-side", split.commit.resources.spellEnergy === -60 && split.impact.resources.spellEnergy === undefined, JSON.stringify(split));
+  assert("positive resource gain waits for impact", split.impact.resources.heat === 12 && split.commit.resources.heat === undefined, JSON.stringify(split));
+  assert("resource policy telemetry exports", whiffSetup.battle.getCombatTelemetryExport().resourcePolicy.whiff.positiveResourcesRequireConfirmedImpact === true, JSON.stringify(whiffSetup.battle.getCombatTelemetryExport().resourcePolicy));
+  assert("absorb overflow cost policy fixed", context.SpellDatabase.absorb.overflowCostPolicy === "fixed" && ChainDatabase.overflow_burst.cost.spellEnergy === 60, JSON.stringify(context.SpellDatabase.absorb));
+}
+
+function verifyLearningFeedbackAndWeaponIdentity() {
+  const { input, battle } = createDefaultBattle();
+  const openingObjective = battle.getLearningObjectiveView();
+  assert("learning objective opens on beginner first clash", openingObjective && openingObjective.id === "first-clash", JSON.stringify(openingObjective));
+  assert("learning objective warns against early input", openingObjective.lines.some(line => line.includes("早按")), openingObjective.lines.join(" | "));
+
+  battle.startFollowupTurn({ source: "smoke" });
+  battle.startEnemyTurn();
+  const multiObjective = battle.getLearningObjectiveView();
+  assert("learning objective explains per-node response", multiObjective && multiObjective.id === "multi-node" && multiObjective.lines.some(line => line.includes("不能一次输入覆盖")), JSON.stringify(multiObjective));
+
+  const guardSetup = setupSingleEnemyAttack("guardCrush", { weapon: "swordShield" });
+  const guardObjective = guardSetup.battle.getLearningObjectiveView();
+  assert("learning objective explains guard contact frame", guardObjective && guardObjective.id === "guard-contact" && guardObjective.lines.some(line => line.includes("接触帧")), JSON.stringify(guardObjective));
+
+  const spellSetup = setupSingleEnemyAttack("arcaneBolt");
+  const spellObjective = spellSetup.battle.getLearningObjectiveView();
+  assert("learning objective explains spell interrupt", spellObjective && spellObjective.id === "spell-interrupt" && spellObjective.lines.some(line => line.includes("打断")), JSON.stringify(spellObjective));
+
+  battle.startFollowupTurn({ source: "smoke" });
+  const followupObjective = battle.getLearningObjectiveView();
+  assert("learning objective explains followup qte gate", followupObjective && followupObjective.id === "followup" && followupObjective.lines.some(line => line.includes("现在才允许")), JSON.stringify(followupObjective));
+
+  tap(input, battle, "A");
+  const qteObjective = battle.getLearningObjectiveView();
+  assert("learning objective explains weapon qte state", qteObjective && qteObjective.id === "weapon-qte" && qteObjective.lines.some(line => line.includes("命中帧")), JSON.stringify(qteObjective));
+
+  const early = createDefaultBattle();
+  tap(early.input, early.battle, "A");
+  const feedback = early.battle.getPlayerFeedbackView();
+  assert("feedback view explains early counter", feedback && feedback.tone === "warning" && feedback.line.includes("过早"), JSON.stringify(feedback));
+
+  const identity = battle.getWeaponIdentityView();
+  assert("weapon identity payload describes dual blades", identity && identity.id === "dualBlades" && identity.role.includes("连续") && identity.publicTip.includes("逐段"), JSON.stringify(identity));
+
+  const exportPayload = battle.getCombatTelemetryExport();
+  assert("telemetry export includes learning objective", !!exportPayload.learningObjective && !!exportPayload.feedback && !!exportPayload.weaponIdentity, JSON.stringify(exportPayload));
+  assert("telemetry export includes assist and animation events", !!exportPayload.difficultyAssist && Array.isArray(exportPayload.animationEvents) && !!exportPayload.enemyDirector, JSON.stringify(exportPayload));
+}
+
+function verifyExpandedEnemyPressureLibrary() {
+  const { battle } = createDefaultBattle({ enemyId: "encounter:counter_dojo" });
+  const pattern = context.EncounterDatabase.encounters.counter_dojo.attackPattern || [];
+  for (const id of ["rapidTriple", "delayedCleaveMix", "spellBladeTrap", "shieldCrushCombo"]) {
+    assert(`counter pressure pattern includes ${id}`, pattern.includes(id), pattern.join(","));
+    assert(`enemy attack chain exists ${id}`, !!context.EnemyDatabase.attackChains[id], id);
+  }
+  assert("delayed cleave has authored melee timeline", !!context.EnemyDatabase.attacks.delayedCleave.meleeTimeline && context.EnemyDatabase.attacks.delayedCleave.counter.type === "heavy_melee", JSON.stringify(context.EnemyDatabase.attacks.delayedCleave));
+  assert("guard crush is not clashable", context.EnemyDatabase.attacks.guardCrush.counter.canClash === false && context.EnemyDatabase.attacks.guardCrush.counter.canGuard === true, JSON.stringify(context.EnemyDatabase.attacks.guardCrush.counter));
+
+  while (battle.enemyAttackChain && battle.enemyAttackChain.id !== "rapidTriple") {
+    battle.startFollowupTurn({ source: "smoke" });
+    battle.startEnemyTurn();
+  }
+  assert("expanded rapid triple can rotate in default dojo", battle.enemyAttackChain && battle.enemyAttackChain.id === "rapidTriple", battle.enemyAttackChain ? battle.enemyAttackChain.id : "none");
+  assert("rapid triple has three nodes", battle.enemyAttackChain.nodes.length === 3, String(battle.enemyAttackChain.nodes.length));
 }
 
 function verifyActiveAttackHitStopFreeze() {
@@ -638,7 +787,11 @@ try {
   verifySpellInterruptEnemyTurn();
   verifyPersistentGuardStance();
   verifyWeaponDifferentiationAndTelemetryExport();
+  verifyWeaponOverrideAssistDirectorAndAnimationEvents();
   verifyArmorShieldDefenseStats();
+  verifyResourcePolicyClosure();
+  verifyLearningFeedbackAndWeaponIdentity();
+  verifyExpandedEnemyPressureLibrary();
   verifyActiveAttackHitStopFreeze();
   verifyAllDamageChainsResolveActiveProfiles();
   verifyHitConfirmSystem();

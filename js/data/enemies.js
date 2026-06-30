@@ -278,6 +278,98 @@ const EnemyDatabase = {
       },
       hint: "只能闪避 [SPACE]"
     },
+    delayedCleave: {
+      name: "迟滞斩",
+      icon: "遲",
+      windup: 1.55,
+      hitTime: 0.34,
+      allowedResponses: ["dodge", "guard"],
+      damage: 24,
+      color: "#e67e22",
+      telegraph: {
+        type: "delay",
+        shape: "arc",
+        pose: "drawback",
+        width: 64
+      },
+      meleeTimeline: {
+        total: 1.74,
+        contactFrame: 1.18,
+        activeStart: 1.02,
+        activeEnd: 1.34,
+        sweep: { kind: "slash", width: 72, reach: 110, yOffset: -8 },
+        rootMotion: {
+          source: [
+            { at: 0.00, x: 0 },
+            { at: 0.36, x: 90 },
+            { at: 0.82, x: 116 },
+            { at: 1.18, x: 264 },
+            { at: 1.74, x: 170 }
+          ],
+          target: [
+            { at: 0.00, x: 0 },
+            { at: 1.06, x: 0 },
+            { at: 1.24, x: 13 },
+            { at: 1.74, x: 0 }
+          ]
+        }
+      },
+      counter: {
+        type: "heavy_melee",
+        canClash: true,
+        canGuard: true,
+        canDodge: true,
+        recommended: ["A", "F", "SPACE"],
+        hint: "慢蓄力；等停顿后 A 拼刀 / F 接触帧举盾"
+      },
+      hint: "慢蓄力斩，不要被停顿骗早按"
+    },
+    guardCrush: {
+      name: "破盾压击",
+      icon: "破",
+      windup: 1.25,
+      hitTime: 0.24,
+      allowedResponses: ["dodge", "guard"],
+      damage: 26,
+      stunOnHit: 1.0,
+      color: "#d35400",
+      telegraph: {
+        type: "bash",
+        shape: "cone",
+        pose: "shieldDrive",
+        width: 72
+      },
+      meleeTimeline: {
+        total: 1.44,
+        contactFrame: 0.96,
+        activeStart: 0.80,
+        activeEnd: 1.12,
+        sweep: { kind: "bash", width: 82, reach: 84, yOffset: -2 },
+        rootMotion: {
+          source: [
+            { at: 0.00, x: 0 },
+            { at: 0.28, x: 110 },
+            { at: 0.96, x: 270 },
+            { at: 1.44, x: 176 }
+          ],
+          target: [
+            { at: 0.00, x: 0 },
+            { at: 0.86, x: 0 },
+            { at: 1.02, x: 18 },
+            { at: 1.44, x: 0 }
+          ]
+        }
+      },
+      counter: {
+        type: "bash",
+        canClash: false,
+        canGuard: true,
+        canDodge: true,
+        recommended: ["F", "SPACE"],
+        hint: "破盾压击不能拼刀；F 接触帧举盾或 SPACE 闪避"
+      },
+      hint: "不能拼刀，考验举盾/闪避"
+    },
     spellCast: {
       name: "法术咏唱",
       icon: "✦",
@@ -405,6 +497,57 @@ const EnemyDatabase = {
   },
 
   attackChains: {
+    tutorialSingleClash: {
+      name: "入门一刀",
+      icon: "一",
+      description: "单段快刺；用于第一步训练等接触帧再出刀拼刀。",
+      tutorialStep: "single_clash",
+      nodes: [
+        { id: "stab", attackId: "quickStab", offset: 0, role: "opener", counterNode: "clash_light", opensFollowupOnSuccess: true }
+      ]
+    },
+
+    tutorialTwoHitRead: {
+      name: "入门二连",
+      icon: "二",
+      description: "两段近身攻击；用于训练每段重新观察，不能一次输入覆盖整条连段。",
+      tutorialStep: "two_hit_read",
+      nodes: [
+        { id: "first", attackId: "thrust", offset: 0, role: "opener", counterNode: "clash_finisher" },
+        { id: "second", attackId: "slash", offset: 1.08, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true, meleeStart: 108 }
+      ]
+    },
+
+    tutorialGuardContact: {
+      name: "入门盾压",
+      icon: "盾",
+      description: "不可拼刀的盾压；用于训练提前举盾并等待接触帧结算。",
+      tutorialStep: "guard_contact",
+      nodes: [
+        { id: "bash", attackId: "shieldBash", offset: 0, role: "guard", counterNode: "guard_or_dodge", opensFollowupOnSuccess: true }
+      ]
+    },
+
+    tutorialSpellInterrupt: {
+      name: "入门咏唱",
+      icon: "咒",
+      description: "单段法术咏唱；用于训练 A/S/D 出刀打断施法。",
+      tutorialStep: "spell_interrupt",
+      nodes: [
+        { id: "cast", attackId: "arcaneBolt", offset: 0, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true }
+      ]
+    },
+
+    tutorialFollowupCheck: {
+      name: "入门破绽",
+      icon: "追",
+      description: "慢速终结段；用于训练应对成功后把破绽转换成追击 QTE。",
+      tutorialStep: "followup_conversion",
+      nodes: [
+        { id: "draw", attackId: "delayedCleave", offset: 0, role: "finisher", counterNode: "heavy_clash", opensFollowupOnSuccess: true, meleeStart: 76 }
+      ]
+    },
+
     bladeRushTriple: {
       name: "压步三连",
       icon: "三",
@@ -466,6 +609,47 @@ const EnemyDatabase = {
       nodes: [
         { id: "left", attackId: "quickStab", offset: 0, role: "opener", counterNode: "clash_light" },
         { id: "right", attackId: "slash", offset: 0.72, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true, meleeStart: 118 }
+      ]
+    },
+
+    rapidTriple: {
+      name: "急雨三闪",
+      icon: "疾",
+      description: "三段短间隔快攻；用于测试玩家是否能逐段重新读动作，双持优势最明显。",
+      nodes: [
+        { id: "left", attackId: "quickStab", offset: 0, role: "opener", counterNode: "clash_light" },
+        { id: "right", attackId: "quickStab", offset: 0.58, role: "pressure", counterNode: "clash_light", meleeStart: 126 },
+        { id: "cut", attackId: "slash", offset: 1.16, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true, meleeStart: 124 }
+      ]
+    },
+
+    delayedCleaveMix: {
+      name: "停顿迟斩",
+      icon: "停",
+      description: "先快刺逼早按，再用迟滞斩拉开节拍；用于训练不要按固定节奏反制。",
+      nodes: [
+        { id: "probe", attackId: "quickStab", offset: 0, role: "feint", counterNode: "clash_light" },
+        { id: "delay", attackId: "delayedCleave", offset: 0.98, role: "finisher", counterNode: "heavy_clash", opensFollowupOnSuccess: true, meleeStart: 76 }
+      ]
+    },
+
+    spellBladeTrap: {
+      name: "咏唱诱斩",
+      icon: "诱",
+      description: "施法诱导出刀，随后接迟滞近身斩；用于测试打断施法后的后续观察。",
+      nodes: [
+        { id: "cast", attackId: "arcaneBolt", offset: 0, role: "spell", counterNode: "spell_interrupt", opensFollowupOnSuccess: true },
+        { id: "cleave", attackId: "delayedCleave", offset: 1.10, role: "finisher", counterNode: "heavy_clash", opensFollowupOnSuccess: true, meleeStart: 86 }
+      ]
+    },
+
+    shieldCrushCombo: {
+      name: "折盾二压",
+      icon: "碎",
+      description: "破盾压击接横扫；用于测试不能用攻击键解决所有盾压节点。",
+      nodes: [
+        { id: "crush", attackId: "guardCrush", offset: 0, role: "opener", counterNode: "guard_or_dodge" },
+        { id: "sweep", attackId: "slash", offset: 1.02, role: "finisher", counterNode: "clash_or_guard", opensFollowupOnSuccess: true, meleeStart: 104 }
       ]
     }
   }

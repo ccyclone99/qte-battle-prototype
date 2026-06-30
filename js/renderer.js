@@ -161,6 +161,8 @@ class CanvasRenderer {
       this.drawGameOver(scene);
     }
 
+    this.drawLearningObjectivePanel(scene, t);
+
     this.drawResourcePulseLayer(ctx, this.getResourcePulseVisuals(scene), t);
 
     // 通用浮层提示（选择/演示/结束界面各自处理）
@@ -4190,7 +4192,7 @@ class CanvasRenderer {
     if (/shield_rite|折盾|仪式|圆厅|誓约/.test(text)) {
       return { key: "rite", accent: "#d4ac0d", secondary: "#9b59b6", haze: "#251f0a" };
     }
-    if (/counter_dojo|逆势|错拍|训练场/.test(text)) {
+    if (/counter_tutorial|反制入门|训练中庭|counter_dojo|逆势|错拍|训练场/.test(text)) {
       return { key: "dojo", accent: "#16a085", secondary: "#f1c40f", haze: "#07251f" };
     }
     return { key: "neutral", accent: "#3498db", secondary: "#95a5a6", haze: "#0c0e18" };
@@ -7692,6 +7694,72 @@ class CanvasRenderer {
     ctx.shadowColor = "rgba(0,0,0,0.9)";
     ctx.shadowBlur = 6;
     ctx.fillText(message, this.width / 2, y);
+    ctx.restore();
+  }
+
+  drawLearningObjectivePanel(scene, t = performance.now() / 1000) {
+    if (!scene || !scene.getLearningObjectiveView) return;
+    const objective = scene.getLearningObjectiveView();
+    if (!objective || !objective.lines || objective.lines.length === 0) return;
+    if (scene.turnState && (scene.turnState.startsWith("select_") || scene.turnState.startsWith("demo_") || scene.turnState === "game_over")) return;
+
+    const feedback = scene.getPlayerFeedbackView ? scene.getPlayerFeedbackView() : null;
+    const ctx = this.ctx;
+    const w = Math.min(560, this.width - 120);
+    const x = this.width / 2 - w / 2;
+    const y = 62;
+    const lineCount = Math.min(2, objective.lines.length);
+    const hasFeedback = !!(feedback && feedback.line && feedback.line !== objective.lines[0]);
+    const h = 54 + lineCount * 18 + (hasFeedback ? 22 : 0);
+    const colors = {
+      active: "#16a085",
+      success: "#2ecc71",
+      warning: "#f39c12",
+      neutral: "#5dade2"
+    };
+    const accent = colors[objective.tone] || colors.neutral;
+
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = "rgba(9, 12, 18, 0.66)";
+    ctx.strokeStyle = this.hexToRgba(accent, 0.58);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = accent;
+    ctx.fillRect(x, y, 4, h);
+
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillStyle = "#ffffff";
+    const title = objective.progress
+      ? `${objective.title} · ${objective.progress}`
+      : objective.title;
+    ctx.fillText(this.truncateText(ctx, title, w - 30), x + 16, y + 10);
+
+    ctx.font = "13px sans-serif";
+    ctx.fillStyle = "#d9deea";
+    for (let i = 0; i < lineCount; i++) {
+      ctx.fillText(this.truncateText(ctx, objective.lines[i], w - 30), x + 16, y + 32 + i * 18);
+    }
+
+    if (hasFeedback) {
+      const feedbackColor = colors[feedback.tone] || "#b8c3d9";
+      ctx.fillStyle = this.hexToRgba(feedbackColor, 0.92);
+      ctx.font = "12px sans-serif";
+      ctx.fillText(this.truncateText(ctx, feedback.line, w - 30), x + 16, y + 34 + lineCount * 18);
+    }
+
+    if (objective.tone === "active") {
+      ctx.fillStyle = this.hexToRgba(accent, 0.20 + Math.sin(t * 5) * 0.04);
+      ctx.fillRect(x + 4, y, Math.min(w - 4, 74 + Math.sin(t * 2.4) * 10), 2);
+    }
+
     ctx.restore();
   }
 

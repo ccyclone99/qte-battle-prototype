@@ -17,6 +17,7 @@ const btnDemo = document.getElementById("btn-demo");
 const btnMenu = document.getElementById("btn-menu");
 const difficultySelect = document.getElementById("difficulty-select");
 const enemySelect = document.getElementById("enemy-select");
+const weaponSelect = document.getElementById("weapon-select");
 
 const gameOverOverlay = document.getElementById("game-over");
 const gameOverTitle = document.getElementById("game-over-title");
@@ -24,6 +25,8 @@ const gameOverSubtitle = document.getElementById("game-over-subtitle");
 const gameOverStats = document.getElementById("game-over-stats");
 const btnRestart = document.getElementById("btn-restart");
 const btnBackMenu = document.getElementById("btn-back-menu");
+const btnCopyTelemetry = document.getElementById("btn-copy-telemetry");
+const telemetryCopyStatus = document.getElementById("telemetry-copy-status");
 const tutorialOverlay = document.getElementById("tutorial-overlay");
 const btnTutorialOk = document.getElementById("btn-tutorial-ok");
 
@@ -41,7 +44,8 @@ const DEFAULT_COMBAT_PLAN_ID = "current";
 
 const battleHelpHtml = `
   <div><b>方案</b>：当前只保留敌方回合反制战斗方案</div>
-  <div><b>遭遇</b>：主菜单可选自动推荐、命名遭遇或敌人测试</div>
+  <div><b>武器</b>：主菜单可只切换武器，不恢复旧风格链</div>
+  <div><b>遭遇</b>：自动推荐进入反制入门，逆势试炼是进阶压力测试</div>
   <div><b>追击窗口</b>：敌方回合应对成功后，短时间内按 A/S/D 触发武器 QTE；不输入则自动攻击</div>
   <div><b>敌方回合</b>：敌方攻击窗口内按 A/S/D 出刀拼刀；敌方施法窗口内出刀打断施法</div>
   <div><b>防御</b>：按住 F 举盾到接触帧，松开解除；SPACE 闪避/弹反</div>
@@ -100,6 +104,11 @@ function selectedEnemyId() {
   return enemySelect.value;
 }
 
+function selectedWeaponId() {
+  if (!weaponSelect || weaponSelect.value === "auto") return null;
+  return weaponSelect.value;
+}
+
 window.exportCombatTelemetry = function exportCombatTelemetry() {
   return battle && battle.getCombatTelemetryExport
     ? battle.getCombatTelemetryExport()
@@ -110,6 +119,9 @@ function applyDefaultCombatPlan() {
   if (!battle || !StyleDatabase[DEFAULT_COMBAT_PLAN_ID]) return false;
 
   battle.applyStyle(DEFAULT_COMBAT_PLAN_ID);
+  if (selectedWeaponId() && battle.setWeaponOverride) {
+    battle.setWeaponOverride(selectedWeaponId());
+  }
   battle.startEnemyTurn();
   return true;
 }
@@ -249,6 +261,7 @@ function showMenu() {
   appState = "menu";
   mainMenu.style.display = "flex";
   gameOverOverlay.style.display = "none";
+  if (telemetryCopyStatus) telemetryCopyStatus.textContent = "";
   hideTutorial();
   setTopBarVisible(false);
   hideAllDrawers();
@@ -263,7 +276,7 @@ function startBattle() {
   SFX.enable();
   input.reset();
   Difficulty.set(difficultySelect.value);
-  battle = new BattleSystem(input, { practiceMode: false, enemyId: selectedEnemyId() });
+  battle = new BattleSystem(input, { practiceMode: false, enemyId: selectedEnemyId(), weaponId: selectedWeaponId() });
   battle.onLog = addLog;
   demo = null;
   appState = "battle";
@@ -286,7 +299,7 @@ function startPractice() {
   SFX.enable();
   input.reset();
   Difficulty.set(difficultySelect.value);
-  battle = new BattleSystem(input, { practiceMode: true, enemyId: selectedEnemyId() });
+  battle = new BattleSystem(input, { practiceMode: true, enemyId: selectedEnemyId(), weaponId: selectedWeaponId() });
   battle.onLog = addLog;
   demo = null;
   appState = "battle";
@@ -311,6 +324,7 @@ function showGameOver(won, isPractice, stats = null, resultLines = null) {
     ? "敌人无限血量，继续挑战或返回菜单"
     : (won ? "敌人已被击败" : "玩家生命值耗尽");
   btnRestart.textContent = isPractice ? "继续练习" : "再来一局";
+  if (telemetryCopyStatus) telemetryCopyStatus.textContent = "";
 
   if (Array.isArray(resultLines) && resultLines.length > 0) {
     gameOverStats.innerHTML = [
@@ -335,6 +349,57 @@ function showGameOver(won, isPractice, stats = null, resultLines = null) {
 
 function hideGameOver() {
   gameOverOverlay.style.display = "none";
+  if (telemetryCopyStatus) telemetryCopyStatus.textContent = "";
+}
+
+function setTelemetryCopyStatus(text) {
+  if (telemetryCopyStatus) telemetryCopyStatus.textContent = text || "";
+}
+
+function fallbackCopyText(text) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "readonly");
+  area.style.position = "fixed";
+  area.style.left = "-9999px";
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (err) {
+    ok = false;
+  }
+  document.body.removeChild(area);
+  return ok;
+}
+
+async function copyCombatTelemetry() {
+  const payload = window.exportCombatTelemetry ? window.exportCombatTelemetry() : null;
+  if (!payload) {
+    setTelemetryCopyStatus("当前没有可复制的战斗遥测。");
+    return false;
+  }
+  const text = JSON.stringify(payload, null, 2);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else if (!fallbackCopyText(text)) {
+      throw new Error("clipboard unavailable");
+    }
+    setTelemetryCopyStatus("遥测 JSON 已复制到剪贴板。");
+    addLog("已复制本局遥测 JSON");
+    return true;
+  } catch (err) {
+    if (fallbackCopyText(text)) {
+      setTelemetryCopyStatus("遥测 JSON 已复制到剪贴板。");
+      addLog("已复制本局遥测 JSON");
+      return true;
+    }
+    setTelemetryCopyStatus("复制失败：浏览器拒绝剪贴板访问。");
+    addLog("复制遥测失败：剪贴板不可用");
+    return false;
+  }
 }
 
 function restartCurrentMode() {
@@ -376,6 +441,10 @@ function updateBattleUI() {
   let turnText = "";
   let turnClass = "";
   let helpHtml = "";
+  const weaponIdentity = battle.getWeaponIdentityView ? battle.getWeaponIdentityView() : null;
+  const weaponLine = weaponIdentity
+    ? `<div><b>${weaponIdentity.name}</b>：${weaponIdentity.role} · ${weaponIdentity.publicTip || weaponIdentity.summary || ""}</div>`
+    : "";
   if (battle.turnState.startsWith("select_")) {
     turnText = "战前准备";
     turnClass = "prep";
@@ -383,23 +452,23 @@ function updateBattleUI() {
   } else if (battle.turnState === "player_turn") {
     turnText = "恢复间隙";
     turnClass = "player";
-    helpHtml = `<div>无追击资格，不能手动触发 QTE</div><div><b>H</b> 帮助 <b>L</b> 日志 <b>T</b> 调试</div>`;
+    helpHtml = `${weaponLine}<div>无追击资格，不能手动触发 QTE</div><div><b>H</b> 帮助 <b>L</b> 日志 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "followup_turn") {
     turnText = "追击窗口";
     turnClass = "player";
-    helpHtml = `<div><b>A/S/D</b> 追击武器 QTE；不输入则自动攻击</div><div><b>H</b> 帮助 <b>L</b> 日志 <b>T</b> 调试</div>`;
+    helpHtml = `${weaponLine}<div><b>A/S/D</b> 追击武器 QTE；不输入则自动攻击</div><div><b>H</b> 帮助 <b>L</b> 日志 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "enemy_turn") {
     turnText = "敌方回合";
     turnClass = "enemy";
-    helpHtml = `<div><b>A/S/D</b> 逐节点拼刀/打断施法</div><div><b>F</b> 按住举盾到接触帧 <b>SPACE</b> 闪避/弹反</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
+    helpHtml = `${weaponLine}<div><b>A/S/D</b> 逐节点拼刀/打断施法</div><div><b>F</b> 按住举盾到接触帧 <b>SPACE</b> 闪避/弹反</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "qte_running") {
     turnText = "QTE";
     turnClass = "qte";
-    helpHtml = `<div>在判定窗口内按下对应按键</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
+    helpHtml = `${weaponLine}<div>在判定窗口内按下对应按键</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "attack_active") {
     turnText = "攻击演出";
     turnClass = "qte";
-    helpHtml = `<div>攻击已出手，等待命中结算</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
+    helpHtml = `${weaponLine}<div>攻击已出手，等待命中结算</div><div><b>H</b> 帮助 <b>T</b> 调试</div>`;
   } else if (battle.turnState === "resolving") {
     turnText = "结算中";
     turnClass = "prep";
@@ -609,6 +678,9 @@ if (btnDemo) btnDemo.addEventListener("click", startDemo);
 btnMenu.addEventListener("click", showMenu);
 btnRestart.addEventListener("click", restartCurrentMode);
 btnBackMenu.addEventListener("click", showMenu);
+if (btnCopyTelemetry) btnCopyTelemetry.addEventListener("click", () => {
+  copyCombatTelemetry();
+});
 btnTutorialOk.addEventListener("click", hideTutorial);
 tutorialOverlay.addEventListener("click", (e) => {
   if (e.target === tutorialOverlay) hideTutorial();

@@ -18,11 +18,13 @@ class ResourceSystem {
     this.maxHeat = 100;
     this.visualPulses = [];
     this.nextPulseId = 1;
+    this.lastPolicyEvent = null;
   }
 
   reset() {
     this.heat = 0;
     this.visualPulses = [];
+    this.lastPolicyEvent = null;
     if (this.owner && this.owner.statusSystem) {
       this.owner.statusSystem.remove("overload", "player");
     }
@@ -84,6 +86,30 @@ class ResourceSystem {
     };
   }
 
+  decayHeatForTurn(reason = "turnBoundary") {
+    const decay = SpellDatabase && SpellDatabase.fire ? SpellDatabase.fire.heatTurnDecay || 0 : 0;
+    if (!decay || this.heat <= 0) {
+      this.lastPolicyEvent = {
+        type: "heatDecay",
+        reason,
+        requested: 0,
+        applied: 0,
+        total: this.heat
+      };
+      return this.lastPolicyEvent;
+    }
+
+    const result = this.addHeat(-decay);
+    this.lastPolicyEvent = {
+      type: "heatDecay",
+      reason,
+      requested: decay,
+      applied: Math.abs(result.applied || 0),
+      total: this.heat
+    };
+    return this.lastPolicyEvent;
+  }
+
   update(dt) {
     this.updateVisualPulses();
 
@@ -138,10 +164,46 @@ class ResourceSystem {
     const state = this.owner.playerState || {};
     const spellEnergy = Math.floor(state.spellEnergy || 0);
     const maxSpellEnergy = state.maxSpellEnergy || 100;
+    const policy = this.getPolicyView();
+    const heatPolicy = policy.heat && policy.heat.decayPerEnemyTurn
+      ? `热量交回合 -${policy.heat.decayPerEnemyTurn}`
+      : "热量不自然衰减";
     return [
       `资源：法术能量 ${spellEnergy}/${maxSpellEnergy} cap ${Math.floor(this.getSpellEnergyCap())}`,
-      `资源：heat ${Math.floor(this.heat)}/${this.maxHeat}`
+      `资源：heat ${Math.floor(this.heat)}/${this.maxHeat}`,
+      `资源策略：燃烧DOT / ${heatPolicy} / whiff无收益`
     ];
+  }
+
+  getPolicyView() {
+    const fire = SpellDatabase && SpellDatabase.fire ? SpellDatabase.fire : {};
+    const absorb = SpellDatabase && SpellDatabase.absorb ? SpellDatabase.absorb : {};
+    return {
+      burn: {
+        policy: fire.burnPolicy || "turnStartDot",
+        tickPhase: "enemyTurnStart",
+        amplifiesNextFireHit: false
+      },
+      heat: {
+        policy: fire.heatPolicy || "turnBoundaryDecay",
+        decayPerEnemyTurn: fire.heatTurnDecay || 0,
+        openingResourceProtected: true,
+        damageBonusPerPoint: fire.heatDamageBonusPerPoint || 0,
+        overheatThreshold: fire.overheatThreshold || 0
+      },
+      absorbOverflow: {
+        costPolicy: absorb.overflowCostPolicy || "fixed",
+        overflowCapMul: absorb.staffOverflowMul || 1,
+        decayPerSecond: absorb.staffOverflowDecay || 0
+      },
+      whiff: {
+        positiveResourcesRequireConfirmedImpact: true,
+        statusesRequireConfirmedImpact: true,
+        negativeResourceCostsSpendOnCommit: true,
+        defensiveWhiffConsumesAnimationOnly: true
+      },
+      lastPolicyEvent: this.lastPolicyEvent ? { ...this.lastPolicyEvent } : null
+    };
   }
 
   recordVisualPulse(result) {

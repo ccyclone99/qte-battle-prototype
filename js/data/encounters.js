@@ -136,22 +136,88 @@ const EncounterDatabase = {
       ]
     },
 
+    counter_tutorial: {
+      name: "反制入门",
+      enemyId: "caster",
+      maxHp: 180,
+      terrain: "训练中庭",
+      intent: "分层训练敌方回合反制：先看一刀接触，再处理二连、举盾、施法打断和追击转换。",
+      recommendedStyles: ["current"],
+      attackPattern: [
+        "tutorialSingleClash",
+        "tutorialTwoHitRead",
+        "tutorialGuardContact",
+        "tutorialSpellInterrupt",
+        "tutorialFollowupCheck",
+        "bladeRushTriple"
+      ],
+      phases: [
+        {
+          id: "mixed_exam",
+          name: "入门综合",
+          hpBelow: 0.48,
+          attackPattern: [
+            "tutorialTwoHitRead",
+            "tutorialGuardContact",
+            "tutorialSpellInterrupt",
+            "bladeRushTriple",
+            "delayedCleaveMix"
+          ],
+          ruleLines: [
+            "半血后进入入门综合：二连、盾压、咏唱和三连会交替出现。"
+          ]
+        }
+      ],
+      modifiers: {
+        enemyDamageMul: 0.72,
+        enemyWindupMul: 1.14,
+        responseWindowMul: 1.0,
+        normalDamageMul: 1.0,
+        swordDamageMul: 1.0
+      },
+      ruleLines: [
+        "自动推荐默认进入此训练路线，按一刀、二连、举盾、咏唱、追击逐步加压。",
+        "判定窗口保持来自敌方动作接触帧；简单/普通只放慢节奏和提示密度。",
+        "熟悉后可在遭遇中切换到逆势试炼测试完整压力库。"
+      ]
+    },
+
     counter_dojo: {
       name: "逆势试炼",
       enemyId: "caster",
       maxHp: 210,
       terrain: "错拍训练场",
-      intent: "敌人会轮换物理连斩、法术起手、盾压、重击和咒爆追击，适合测试逐节点拼刀、施法打断和双持多段应对。",
+      intent: "敌人会轮换物理连斩、法术起手、盾压、重击、迟滞斩和咒爆追击，适合测试逐节点拼刀、施法打断和双持多段应对。",
       recommendedStyles: ["current"],
-      attackPattern: ["bladeRushTriple", "spellDoubleCut", "shieldSpellRush", "knifeFlurry", "feintCrush", "curseNeedle"],
+      attackPattern: [
+        "bladeRushTriple",
+        "spellDoubleCut",
+        "shieldSpellRush",
+        "knifeFlurry",
+        "feintCrush",
+        "curseNeedle",
+        "rapidTriple",
+        "delayedCleaveMix",
+        "spellBladeTrap",
+        "shieldCrushCombo"
+      ],
       phases: [
         {
           id: "tight_loop",
           name: "贴身错拍",
           hpBelow: 0.5,
-          attackPattern: ["knifeFlurry", "bladeRushTriple", "spellDoubleCut", "feintCrush", "shieldSpellRush", "curseNeedle"],
+          attackPattern: [
+            "rapidTriple",
+            "knifeFlurry",
+            "bladeRushTriple",
+            "delayedCleaveMix",
+            "spellDoubleCut",
+            "shieldCrushCombo",
+            "spellBladeTrap",
+            "curseNeedle"
+          ],
           ruleLines: [
-            "半血后进入贴身错拍：物理连段更频繁，反制覆盖价值上升。"
+            "半血后进入贴身错拍：物理连段、迟滞斩和盾压更频繁，反制覆盖价值上升。"
           ]
         }
       ],
@@ -164,7 +230,7 @@ const EncounterDatabase = {
       },
       ruleLines: [
         "不开局赠送法术能量；法术处理来自敌方回合的出刀打断。",
-        "敌人同一回合会轮换多段物理、法术+近身、盾压和重击错拍。",
+        "敌人同一回合会轮换多段物理、法术+近身、盾压、迟滞斩和重击错拍。",
         "当前方案使用双持逐段应对多段攻势；只有应对成功后的追击窗口可手动触发武器 QTE。"
       ]
     }

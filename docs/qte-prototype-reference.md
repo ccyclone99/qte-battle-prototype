@@ -106,6 +106,17 @@ Branch side effects should stay data-driven:
 - `visualEvent`
 - `message`
 
+## Resource And Status Policy
+
+Current prototype decisions:
+
+- Burn is enemy turn-start DOT. It does not amplify the next Fire hit.
+- Fire heat boosts Fire chain damage, protects opening encounter heat once, then decays by `SpellDatabase.fire.heatTurnDecay` at later enemy-turn boundaries.
+- Absorb overflow uses fixed chain costs. Overcap pressure is represented by the spell-energy cap multiplier, overcap backlash, and spender timing.
+- Positive resources and enemy statuses are impact-side rewards. They require confirmed hit overlap.
+- Negative resource costs are commit-side costs. A spender can consume resources even if the authored hit later whiffs.
+- Defensive whiffs consume animation/time and expose the player, but do not spend spell/heat resources unless a chain explicitly commits a cost.
+
 ## Runner Lifecycle
 
 1. A chain is selected from loadout, defense response, follow-up window, or test/demo code.
@@ -115,6 +126,7 @@ Branch side effects should stay data-driven:
 5. `resultLog` records node outcomes for debug, active-attack segmentation, and telemetry.
 6. Battle integration converts final effects into active attacks, resources, statuses, or turn-flow changes.
 7. Damage should resolve at active-attack impact/collision, not immediately on input completion.
+8. Impact-side resource gains and statuses resolve only after hit confirm.
 
 ## Extension Checklist
 
@@ -138,11 +150,216 @@ When adding or changing a chain:
 - Historical demo/showcase behavior should be treated as reference material, not current public acceptance.
 - Current public acceptance is the default counter-flow plan, enemy-turn response, follow-up QTE gating, active-attack impact, and readable low-noise combat visuals.
 
+## Formal Transfer Contract
+
+The formal game should treat these shapes as the stable prototype contract. Field names may change during production, but the meaning should remain portable.
+
+### Input Event
+
+```js
+{
+  type: "press" | "release",
+  key: "A" | "S" | "D" | "SPACE" | "F",
+  time: 12345
+}
+```
+
+Rules:
+
+- `clear()` may remove pending events, but it must not release held keys.
+- `reset()` releases held keys and is reserved for hard state transitions.
+- `F` can be held before enemy contact; settlement happens at the active attack contact frame.
+
+### QTE Chain
+
+```js
+{
+  id: "dualblades_a_v2",
+  family: "dualBlades",
+  role: "signature",
+  tags: ["weapon", "melee"],
+  nodes: [
+    {
+      id: "dash",
+      duration: 0.8,
+      input: { type: "press", key: "A" },
+      window: { start: 0.35, end: 0.68 },
+      perfect: 0.52,
+      pose: { state: "attack", motion: "dash" },
+      branches: { perfect: {}, success: {}, fail: {} }
+    }
+  ]
+}
+```
+
+Rules:
+
+- Input completion starts authored action; damage waits for active attack impact.
+- Node-level pose tags are presentation hints, not damage authority.
+- Branch side effects should remain data-driven where possible.
+
+### Enemy Attack
+
+```js
+{
+  id: "delayedCleave",
+  windup: 1.55,
+  hitTime: 0.34,
+  damage: 24,
+  allowedResponses: ["dodge", "guard"],
+  telegraph: { type: "delay", pose: "drawback", width: 64 },
+  meleeTimeline: {
+    total: 1.74,
+    contactFrame: 1.18,
+    activeStart: 1.02,
+    activeEnd: 1.34,
+    rootMotion: { source: [], target: [] }
+  },
+  counter: {
+    type: "heavy_melee",
+    canClash: true,
+    canGuard: true,
+    canDodge: true,
+    recommended: ["A", "F", "SPACE"]
+  }
+}
+```
+
+Rules:
+
+- `contactFrame` is the damage authority for melee attacks.
+- `activeStart` / `activeEnd` define the clash/guard/dodge readability window.
+- `counter.type` defines the player decision category.
+
+### Enemy Attack Chain
+
+```js
+{
+  id: "rapidTriple",
+  nodes: [
+    { id: "left", attackId: "quickStab", offset: 0, counterNode: "clash_light" },
+    { id: "right", attackId: "quickStab", offset: 0.58, counterNode: "clash_light" },
+    { id: "cut", attackId: "slash", offset: 1.16, opensFollowupOnSuccess: true }
+  ]
+}
+```
+
+Rules:
+
+- Each node resolves separately; one player input cannot automatically cover the full chain.
+- Follow-up windows should open only after authored success conditions.
+- Offsets should preserve readable anticipation and avoid impossible overlap.
+
+### Active Attack And Hit Confirm
+
+```js
+{
+  source: "player" | "enemy",
+  target: "enemy" | "player",
+  timeline: {
+    startup: 0.12,
+    reactionStart: 0.64,
+    reactionDuration: 0.24,
+    impactTime: 0.88,
+    recovery: 0.32
+  },
+  damageIntent: {
+    token: "unique-hit-token",
+    shape: "arc" | "beam" | "trail",
+    anchor: "playerHand",
+    toAnchor: "enemyCore",
+    damage: 20
+  }
+}
+```
+
+Rules:
+
+- Player QTE, enemy active attacks, counters, normal attacks, and guard leak damage route through hit confirm.
+- Status DOT and resource backlash are intentional direct-damage exceptions.
+- Duplicate hit tokens must not apply duplicate damage.
+
+### Animation Event
+
+```js
+{
+  id: "aa:12",
+  kind: "enemyAttack",
+  source: "enemy",
+  target: "player",
+  phase: "reaction",
+  type: "melee",
+  motion: "slash",
+  contactFrame: 1.18,
+  activeStart: 1.02,
+  activeEnd: 1.34,
+  chainId: "tutorialTwoHitRead",
+  chainIndex: 1,
+  chainCount: 2,
+  canceled: false,
+  defenderResponse: ""
+}
+```
+
+Rules:
+
+- Animation events are read-only descriptors derived from active attacks.
+- `contactFrame` and `activeStart` / `activeEnd` are the timing bridge between authored animation and damage/counter settlement.
+- Production animation can rename fields, but must preserve phase, source/target, contact frame, active window, and cancel/response state.
+
+### Learning Objective
+
+```js
+{
+  id: "multi-node",
+  tone: "active",
+  title: "目标：逐段拼刀",
+  progress: "压步三连 2/3",
+  lines: ["当前段提示", "每段只结算自己的攻击"]
+}
+```
+
+Rules:
+
+- Learning objective is renderer-read-only.
+- It should describe the immediate player task, not the whole ruleset.
+- It must remain optional for production UI.
+
+### Telemetry Export
+
+```js
+{
+  schema: "qte-counterflow-telemetry/v1",
+  localOnly: true,
+  weaponIdentity: {},
+  learningObjective: {},
+  feedback: {},
+  difficultyAssist: {},
+  enemyDirector: {},
+  animationEvents: [],
+  counters: {},
+  events: []
+}
+```
+
+Rules:
+
+- Export is local/manual only; it must not transmit player data.
+- It should include enough combat context to tune timing, feedback, weapon identity, difficulty assistance, enemy pressure selection, and animation/contact timing.
+
+### Renderer Boundary
+
+- Renderer reads `getLearningObjectiveView()`, `getPlayerFeedbackView()`, `getWeaponIdentityView()`, `getGuardStanceView()`, `getActiveAnimationEvents()`, and `RenderStateHelpers`.
+- Renderer must not mutate combat timing, HP, QTE state, hit confirm state, or input state.
+- New visual layers should be smoke-tested if they affect the public combat surface.
+
 ## Known Gaps Before Formal Game Import
 
-- Persistent held guard is not implemented.
-- Weapon-family gameplay differences need stronger public tuning.
-- Follow-up turn needs clearer player-facing presentation.
-- QTE telemetry is in-memory only.
+- Persistent held guard exists in prototype form, but production needs animation-authored shield poses and stamina/poise integration.
+- Weapon-family identity exists as metadata and tuning, but formal balance still needs manual playtest telemetry across all encounters.
+- Current public weapon choice is weapon-only; production can later add broader builds if they do not reintroduce ambiguous style-chain behavior.
+- Follow-up turn presentation is source-aware, but production should add authored animation transitions per weapon.
+- QTE telemetry is local/manual only; production can add an opt-in telemetry pipeline later.
+- Enemy director is intentionally small and limited to advanced pressure routes; production should keep beginner training deterministic.
 - Demo/reference material needs a future non-public archive viewer or export path if designers need visual browsing again.
-- Renderer boundaries should be split before the prototype becomes a larger production codebase.
+- Renderer boundaries have started with pure helpers, but large production UI should split combat HUD, actor rig, and debug overlays further.

@@ -457,7 +457,7 @@ async function runVisualSmoke() {
     await wait(320);
     await captureScenario(cdp, "battle-default-followup-qte", [
       { label: "battle entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
-      { label: "default counter encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("逆势试炼")`) },
+      { label: "default counter tutorial visible", ok: await evaluate(cdp, `document.body.textContent.includes("反制入门")`) },
       { label: "default dojo stage theme", ok: await evaluate(cdp, `(() => {
         const r = typeof renderer !== "undefined" ? renderer : null;
         return !!(r && typeof battle !== "undefined" && r.getEncounterStageTheme(battle).key === "dojo");
@@ -504,7 +504,7 @@ async function runVisualSmoke() {
       { label: "virtual controls visible", ok: await evaluate(cdp, `!document.getElementById("touch-controls").classList.contains("hidden") && document.getElementById("touch-controls").getAttribute("aria-hidden") === "false"`) },
       { label: "virtual controls avoid qte bar", ok: await evaluate(cdp, `document.getElementById("touch-controls").getBoundingClientRect().bottom < 590`) },
       { label: "virtual followup entered qte", ok: await evaluate(cdp, `document.getElementById("turn-indicator").textContent.includes("QTE")`) },
-      { label: "virtual default encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("逆势试炼")`) }
+      { label: "virtual default encounter visible", ok: await evaluate(cdp, `document.body.textContent.includes("反制入门")`) }
     ]);
 
     await navigate(cdp, appUrl, desktop);

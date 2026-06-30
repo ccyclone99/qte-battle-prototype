@@ -63,6 +63,7 @@ const summaries = [];
 const encounterSummaries = [];
 const encounterPressure = [];
 const weaponPressure = [];
+const phaseCoverage = [];
 const warnings = [];
 
 function isSwordChain(style, key) {
@@ -289,6 +290,45 @@ function validateEncounterPressure(encounterId, encounter) {
   }
 }
 
+function validateEncounterPhaseCoverage(encounterId, encounter) {
+  const phases = encounter.phases || [];
+  phaseCoverage.push({
+    encounterId,
+    encounterName: encounter.name,
+    phaseCount: phases.length,
+    basePatternCount: (encounter.attackPattern || []).length,
+    phasePatternCount: phases.reduce((sum, phase) => sum + ((phase.attackPattern || []).length), 0)
+  });
+
+  if (phases.length === 0) {
+    warnings.push({
+      chainId: `encounter:${encounterId}`,
+      chainName: encounter.name,
+      outcome: "phase",
+      message: "named encounter has no explicit HP phase"
+    });
+  }
+
+  for (const phase of phases) {
+    if (typeof phase.hpBelow !== "number") {
+      warnings.push({
+        chainId: `encounter:${encounterId}:${phase.id || "phase"}`,
+        chainName: encounter.name,
+        outcome: "phase",
+        message: "phase is missing hpBelow threshold"
+      });
+    }
+    if (!Array.isArray(phase.attackPattern) || phase.attackPattern.length === 0) {
+      warnings.push({
+        chainId: `encounter:${encounterId}:${phase.id || "phase"}`,
+        chainName: encounter.name,
+        outcome: "phase",
+        message: "phase is missing an attack pattern"
+      });
+    }
+  }
+}
+
 for (const [chainId, chain] of Object.entries(ChainDatabase)) {
   const byOutcome = new Map();
 
@@ -349,6 +389,7 @@ for (const [chainId, chain] of Object.entries(ChainDatabase)) {
 
 for (const [encounterId, encounter] of Object.entries((EncounterDatabase && EncounterDatabase.encounters) || {})) {
   validateEncounterOpeningResources(encounterId, encounter);
+  validateEncounterPhaseCoverage(encounterId, encounter);
   validateEncounterPressure(encounterId, encounter);
 }
 
@@ -435,6 +476,12 @@ for (const row of weaponPressure.sort((a, b) => b.coverable - a.coverable || a.r
   const quick = row.quickTotal > 0 ? `${row.quickCoverable}/${row.quickTotal}` : "-";
   const heavy = row.heavyTotal > 0 ? `${row.heavyCoverable}/${row.heavyTotal}` : "-";
   console.log(`  ${row.weaponId.padEnd(12)} cover ${String(row.coverable).padStart(2)}/${row.total} quick ${quick.padEnd(3)} heavy ${heavy.padEnd(3)} guard ${String(row.guardStability).padStart(3)} recovery ${row.recovery.toFixed(2)}s`);
+}
+
+console.log("");
+console.log("Named encounter phase coverage:");
+for (const row of phaseCoverage.sort((a, b) => a.encounterId.localeCompare(b.encounterId))) {
+  console.log(`  ${row.encounterId.padEnd(16)} phases ${String(row.phaseCount).padStart(1)} base ${String(row.basePatternCount).padStart(2)} phase nodes ${String(row.phasePatternCount).padStart(2)}  ${row.encounterName}`);
 }
 
 const tightestPressure = encounterPressure

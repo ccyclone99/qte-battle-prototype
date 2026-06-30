@@ -36,8 +36,22 @@ const QTEDebugFormatter = {
       if (scene && scene.resourceSystem) lines.push(...scene.resourceSystem.getDebugLines());
       if (scene && scene.statusSystem) lines.push(...scene.statusSystem.getDebugLines(4));
       if (scene && scene.getCombatTelemetryLines) lines.push(...scene.getCombatTelemetryLines(4));
+      if (scene && scene.getLearningObjectiveView) {
+        const objective = scene.getLearningObjectiveView();
+        if (objective) lines.push(`学习目标：${objective.title}${objective.progress ? ` ${objective.progress}` : ""}`);
+      }
+      if (scene && scene.getWeaponIdentityView) {
+        const weapon = scene.getWeaponIdentityView();
+        if (weapon) lines.push(`武器定位：${weapon.name} / ${weapon.role}`);
+      }
       if (scene && scene.getCombatTelemetryExport) lines.push("遥测导出：window.exportCombatTelemetry()");
       if (scene && scene.getDamagePathAuditLines) lines.push(...scene.getDamagePathAuditLines(3));
+      if (scene && scene.getActiveAnimationEvents) {
+        const events = scene.getActiveAnimationEvents(3);
+        for (const event of events) {
+          lines.push(`动画事件：${event.phase} ${event.source}->${event.target} ${event.type} contact ${event.contactFrame ?? "n/a"} active ${event.activeStart ?? "n/a"}-${event.activeEnd ?? "n/a"}`);
+        }
+      }
       if (scene && scene.hitConfirmSystem) lines.push(...scene.hitConfirmSystem.getDebugLines(4));
       if (scene && scene.activeAttackSystem) lines.push(...scene.activeAttackSystem.getDebugLines(4));
       if (scene && scene.effectQueue) lines.push(...scene.effectQueue.getDebugLines(4));
@@ -84,8 +98,22 @@ const QTEDebugFormatter = {
     if (scene.resourceSystem) lines.push(...scene.resourceSystem.getDebugLines());
     if (scene.statusSystem) lines.push(...scene.statusSystem.getDebugLines(4));
     if (scene.getCombatTelemetryLines) lines.push(...scene.getCombatTelemetryLines(4));
+    if (scene.getLearningObjectiveView) {
+      const objective = scene.getLearningObjectiveView();
+      if (objective) lines.push(`学习目标：${objective.title}${objective.progress ? ` ${objective.progress}` : ""}`);
+    }
+    if (scene.getWeaponIdentityView) {
+      const weapon = scene.getWeaponIdentityView();
+      if (weapon) lines.push(`武器定位：${weapon.name} / ${weapon.role}`);
+    }
     if (scene.getCombatTelemetryExport) lines.push("遥测导出：window.exportCombatTelemetry()");
     if (scene.getDamagePathAuditLines) lines.push(...scene.getDamagePathAuditLines(3));
+    if (scene.getActiveAnimationEvents) {
+      const events = scene.getActiveAnimationEvents(3);
+      for (const event of events) {
+        lines.push(`动画事件：${event.phase} ${event.source}->${event.target} ${event.type} contact ${event.contactFrame ?? "n/a"} active ${event.activeStart ?? "n/a"}-${event.activeEnd ?? "n/a"}`);
+      }
+    }
     if (scene.hitConfirmSystem) lines.push(...scene.hitConfirmSystem.getDebugLines(4));
     if (scene.activeAttackSystem) lines.push(...scene.activeAttackSystem.getDebugLines(4));
     if (scene.effectQueue) lines.push(...scene.effectQueue.getDebugLines(4));

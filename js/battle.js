@@ -17,6 +17,15 @@ class BattleSystem {
     this.encounterConfig = null;
     this.activeEncounterPhaseId = "base";
     this.enemyAttackCursor = 0;
+    this.enemyTurnsStarted = 0;
+    this.weaponOverrideId = this.resolveWeaponOverride(options.weaponId);
+    this.enemyDirector = {
+      enabled: true,
+      lastPick: "",
+      lastReason: "",
+      cooldown: 0,
+      picks: 0
+    };
 
     // 回合/阶段状态
     this._turnState = "select_weapon"; // select_weapon | player_turn | followup_turn | enemy_turn | qte_running | attack_active | resolving | game_over
@@ -324,6 +333,22 @@ class BattleSystem {
     return `敌人测试：${enemy.name}`;
   }
 
+  resolveWeaponOverride(weaponId) {
+    const id = String(weaponId || "auto");
+    if (!id || id === "auto") return null;
+    return WeaponDatabase && WeaponDatabase[id] ? id : null;
+  }
+
+  setWeaponOverride(weaponId) {
+    this.weaponOverrideId = this.resolveWeaponOverride(weaponId);
+    if (this.weaponOverrideId) {
+      this.playerConfig.weapon = this.weaponOverrideId;
+      const weapon = WeaponDatabase[this.weaponOverrideId] || {};
+      this.log(`武器覆盖：${weapon.name || this.weaponOverrideId}`);
+    }
+    return this.weaponOverrideId;
+  }
+
   consumeStyleSelectionInputs() {
     while (true) {
       const ev = this.input.peek();
@@ -355,6 +380,7 @@ class BattleSystem {
     if (!style) return;
     this.playerConfig.style = styleId;
     this.playerConfig.weapon = style.weapon || null;
+    if (this.weaponOverrideId) this.playerConfig.weapon = this.weaponOverrideId;
     this.playerConfig.spells = style.spells ? [...style.spells] : [];
     this.playerConfig.combatArts = style.combatArts ? [...style.combatArts] : [];
     this.actionBarMax = style.actionBarMax || 6.8;
@@ -384,6 +410,7 @@ class BattleSystem {
     this.enemyCounterState = null;
     this.enemyStunTimer = 0;
     this.enemyAttackCursor = 0;
+    this.enemyTurnsStarted = 0;
     if (!options.fromEncounter) {
       this.activeEncounterId = null;
       this.encounterConfig = null;
@@ -696,6 +723,7 @@ class BattleSystem {
       lift: 3,
       duration: 0.30
     });
+    if (typeof SFX !== "undefined" && SFX.sfxGuardBreak) SFX.sfxGuardBreak();
     this.recordCombatEvent("guardBreak", { reason });
     return true;
   }
@@ -999,6 +1027,21 @@ class BattleSystem {
     const responseDuration = Math.min(attack && attack.responseDuration ? attack.responseDuration : Difficulty.responseDuration(), readableCap);
     const responseStart = Math.max(0, impactTime - responseDuration);
     return { impactTime, responseStart, responseDuration };
+  }
+
+  getDifficultyAssistProfile() {
+    if (typeof Difficulty !== "undefined" && Difficulty.getAssistProfile) {
+      return Difficulty.getAssistProfile();
+    }
+    return {
+      difficulty: typeof Difficulty !== "undefined" && Difficulty.current ? Difficulty.current : "normal",
+      chainOffsetMul: 1,
+      learningDetail: "full",
+      directorAggression: 1,
+      qteWindowMul: 1,
+      qteDurationMul: 1,
+      pointerSpeedMul: 1
+    };
   }
 
   getCounterDifficultyScale() {
@@ -1509,6 +1552,28 @@ class BattleSystem {
     };
   }
 
+  getWeaponIdentityView() {
+    const weaponId = this.playerConfig.weapon || "";
+    const weapon = WeaponDatabase[weaponId] || {};
+    const identity = weapon.identity || {};
+    const counter = this.getWeaponCounterProfile();
+    const guard = this.getGuardProfile();
+    return {
+      id: weaponId,
+      name: weapon.name || weaponId || "未知武器",
+      role: identity.role || "通用反制",
+      summary: identity.summary || weapon.description || "",
+      strengths: [...(identity.strengths || [])],
+      risks: [...(identity.risks || [])],
+      recommendedPressure: [...(identity.recommendedPressure || counter.allowedCounterTypes || [])],
+      publicTip: identity.publicTip || "",
+      recovery: counter.recovery,
+      startup: counter.startup,
+      activeDuration: counter.activeDuration,
+      guardStability: guard.maxStability || 0
+    };
+  }
+
   getAttackCounterProfile(attack = {}) {
     const counter = attack.counter || {};
     const id = attack.id || "";
@@ -1542,6 +1607,184 @@ class BattleSystem {
     if (counter.canDodge) parts.push("SPACE");
     if (counter.canGuard) parts.push("F");
     return parts.length > 0 ? parts.join(" / ") : "观察敌方动作";
+  }
+
+  getCurrentIncomingAttackInfo() {
+    const active = this.getIncomingActiveAttack ? this.getIncomingActiveAttack() : null;
+    const attack = active && active.intent ? active.intent.attack : this.enemyAttack;
+    return { active, attack };
+  }
+
+  getLearningObjectiveView() {
+    if (this.turnState === "game_over" || this.turnState.startsWith("select_")) return null;
+    const counters = this.combatTelemetry && this.combatTelemetry.counters ? this.combatTelemetry.counters : {};
+    const { active, attack } = this.getCurrentIncomingAttackInfo();
+    const counter = this.getAttackCounterProfile(attack || {});
+    const weapon = this.getWeaponIdentityView();
+    const chainIndex = attack && Number.isFinite(attack.chainIndex) ? attack.chainIndex : null;
+    const chainCount = attack && Number.isFinite(attack.chainCount) ? attack.chainCount : 0;
+    const chainName = attack && attack.chainName ? attack.chainName : "";
+    const chainProgress = chainCount > 1 && chainIndex !== null ? `${chainIndex + 1}/${chainCount}` : "";
+
+    if (this.turnState === "followup_turn") {
+      return {
+        id: "followup",
+        tone: "success",
+        title: "追击窗口",
+        progress: "防守成功",
+        lines: [
+          "现在才允许手动 A/S/D 进入武器 QTE。",
+          "不输入会自动攻击，但没有暴击加成。"
+        ]
+      };
+    }
+
+    if (this.turnState === "qte_running") {
+      const node = this.qteRunner && this.qteRunner.currentNode ? this.qteRunner.currentNode() : null;
+      return {
+        id: "weapon-qte",
+        tone: "active",
+        title: "武器 QTE",
+        progress: node ? node.name : weapon.role,
+        lines: [
+          "跟随当前节点按键，完成后等待动作命中帧。",
+          `${weapon.name}：${weapon.role}`
+        ]
+      };
+    }
+
+    if (this.turnState === "attack_active") {
+      return {
+        id: "hit-confirm",
+        tone: "neutral",
+        title: "动作结算",
+        progress: "命中帧",
+        lines: [
+          "指令已完成，伤害会在武器或法术碰撞后结算。",
+          "观察双方受击动作，而不是读条结束。"
+        ]
+      };
+    }
+
+    if (this.turnState === "player_turn") {
+      return {
+        id: "recovery-gap",
+        tone: "neutral",
+        title: "恢复间隙",
+        progress: "无追击资格",
+        lines: [
+          "这不是手动 QTE 回合，等待敌方下一段攻势。",
+          "追击只来自敌方回合应对成功。"
+        ]
+      };
+    }
+
+    if (this.turnState !== "enemy_turn") return null;
+
+    if (!attack) {
+      return {
+        id: "read-enemy",
+        tone: "neutral",
+        title: "观察敌方",
+        progress: weapon.role,
+        lines: [
+          "等敌人动作进身，再按 A/S/D 或防御键。",
+          weapon.publicTip || "不要提前把输入交出去。"
+        ]
+      };
+    }
+
+    if (this.isIncomingSpellAttack(attack)) {
+      return {
+        id: "spell-interrupt",
+        tone: "active",
+        title: "目标：打断施法",
+        progress: chainProgress || attack.name || "施法",
+        lines: [
+          "施法节点用 A/S/D 出刀打断，成功后可能打开追击。",
+          "若继续有后续近战段，仍要重新观察。"
+        ]
+      };
+    }
+
+    if (counter.type === "bash" || counter.canGuard) {
+      return {
+        id: "guard-contact",
+        tone: counter.type === "bash" ? "warning" : "active",
+        title: counter.type === "bash" ? "目标：盾压别拼刀" : "目标：接触帧举盾",
+        progress: chainProgress || attack.name || "防御节点",
+        lines: [
+          "按住 F 可以提前举盾，但命中接触帧才结算。",
+          counter.type === "bash" ? "盾压优先 F/SPACE，A/S/D 容易无效。" : "格挡后还要继续看下一段。"
+        ]
+      };
+    }
+
+    if (chainCount > 1) {
+      return {
+        id: "multi-node",
+        tone: "active",
+        title: "目标：逐段拼刀",
+        progress: `${chainName} ${chainProgress}`,
+        lines: [
+          `${attack.name || "当前段"}：${counter.hint || "A/S/D 拼刀"}`,
+          "每段只结算自己的攻击，不能一次输入覆盖整条连段。"
+        ]
+      };
+    }
+
+    const acted = (counters.clashSuccess || 0) + (counters.spellInterrupts || 0) + (counters.guardBlocks || 0) + (counters.guardDodges || 0);
+    return {
+      id: acted > 0 ? "keep-reading" : "first-clash",
+      tone: acted > 0 ? "neutral" : "active",
+      title: acted > 0 ? "目标：看下一刀" : "目标：第一刀别抢",
+      progress: active && active.profile ? `${Math.max(0, active.profile.impactTime - active.elapsed).toFixed(1)}s` : (attack.name || ""),
+      lines: [
+        counter.hint || "绿色窗口出现后按 A/S/D。",
+        acted > 0 ? "节奏对了，继续看接触点。" : "早按会露破绽，等敌刃进身。"
+      ]
+    };
+  }
+
+  getPlayerFeedbackView() {
+    const counters = this.combatTelemetry && this.combatTelemetry.counters ? this.combatTelemetry.counters : {};
+    const events = this.combatTelemetry && this.combatTelemetry.events ? this.combatTelemetry.events : [];
+    const recent = events.length > 0 ? events[events.length - 1] : null;
+    let tone = "neutral";
+    let line = this.lastPlayerFeedback || "";
+    if (recent && ["earlyCounter", "lateCounter", "invalidCounter", "guardBreak", "followupMissed", "playerHit"].includes(recent.type)) {
+      tone = "warning";
+      if (recent.type === "earlyCounter") line = "出刀过早：等敌刃进入身体前的接触区再按。";
+      else if (recent.type === "lateCounter") line = "出刀过慢：敌招压到身前前半拍就要启动。";
+      else if (recent.type === "invalidCounter") line = "这一段不能拼刀：按提示改用举盾、闪避或打断。";
+      else if (recent.type === "guardBreak") line = "盾稳崩溃：重击/破盾压击不要长时间硬吃。";
+      else if (recent.type === "followupMissed") line = "追击窗口错过：下次窗口出现后立刻按 A/S/D。";
+      else if (recent.type === "playerHit") line = "已受击：下一段先看动作接触点，不要预输入。";
+    } else if (recent && ["clashSuccess", "spellInterrupt", "guardBlock", "followupOpen", "followupUsed"].includes(recent.type)) {
+      tone = "success";
+      if (recent.type === "clashSuccess") line = "拼刀成立：继续逐段看下一次接触。";
+      else if (recent.type === "spellInterrupt") line = "施法已打断：确认敌方后续是否还有近身段。";
+      else if (recent.type === "guardBlock") line = "格挡成功：盾稳结算完成，后续连段仍要继续判断。";
+      else if (recent.type === "followupOpen") line = "破绽已打开：现在可以手动 A/S/D 追击。";
+      else if (recent.type === "followupUsed") line = "追击已接入武器 QTE：等待动作命中帧结算。";
+    }
+
+    const advice = this.getCombatAdviceLine ? this.getCombatAdviceLine() : "";
+    return {
+      tone,
+      title: "反馈",
+      line: line || (advice ? advice.replace(/^建议：/, "") : ""),
+      advice: advice ? advice.replace(/^建议：/, "") : "",
+      recent: recent ? this.formatCombatTelemetryEvent(recent) : "",
+      counters: {
+        early: counters.earlyCounters || 0,
+        late: counters.lateCounters || 0,
+        invalid: counters.invalidCounters || 0,
+        guardBreaks: counters.guardBreaks || 0,
+        followupsOpened: counters.followupsOpened || 0,
+        followupsUsed: counters.followupsUsed || 0
+      }
+    };
   }
 
   getCounterNodeOutcome(incoming, weaponProfile) {
@@ -1951,6 +2194,7 @@ class BattleSystem {
       }, { accepted: false }, { whiff: true }),
       onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
     });
+    if (typeof SFX !== "undefined" && SFX.sfxWhiff) SFX.sfxWhiff();
     this.recordCombatEvent("invalidCounter", {
       attack: sourceAttack ? sourceAttack.name : "",
       key: chainKey,
@@ -2013,6 +2257,7 @@ class BattleSystem {
       },
       onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
     });
+    if (typeof SFX !== "undefined" && SFX.sfxWhiff) SFX.sfxWhiff();
     this.setMessage(`出刀过早 · ${sourceAttack ? sourceAttack.name : "敌方攻击"}还没进身`);
     this.log(`反制过早：${sourceAttack ? sourceAttack.name : "unknown"}`);
     this.recordCombatEvent("earlyCounter", {
@@ -2071,6 +2316,7 @@ class BattleSystem {
       }, { accepted: false }, { whiff: true, advance: 48 }),
       onComplete: () => this.finishFailedCounterAttempt(sourceAttack, { keepLockedUntilImpact: true })
     });
+    if (typeof SFX !== "undefined" && SFX.sfxWhiff) SFX.sfxWhiff();
     this.setMessage(`出刀过慢 · ${sourceAttack ? sourceAttack.name : "敌方攻击"}压到身前`);
     this.log(`反制过晚：${sourceAttack ? sourceAttack.name : "unknown"}`);
     this.recordCombatEvent("lateCounter", {
@@ -2129,6 +2375,7 @@ class BattleSystem {
     attack.intent.counterNodeSucceeded = canceled;
     attack.intent.counterNodeResult = { ...(result || {}), canceled };
     if (canceled) {
+      if (typeof SFX !== "undefined" && SFX.sfxClash) SFX.sfxClash();
       this.hitStop = Math.max(this.hitStop, node.outcome === "perfect" ? 0.15 : 0.10);
       this.screenShake = Math.max(this.screenShake, node.outcome === "perfect" ? 0.18 : 0.11);
       this.triggerActorReaction("player", "attack", node.outcome === "perfect" ? 1.08 : 0.9, {
@@ -2191,6 +2438,7 @@ class BattleSystem {
       canceled: canceled.length,
       label: intent.label || ""
     });
+    if (typeof SFX !== "undefined" && SFX.sfxSpellInterrupt) SFX.sfxSpellInterrupt();
     return result;
   }
 
@@ -3358,6 +3606,9 @@ class BattleSystem {
   startEnemyTurn() {
     this.tickStatuses("enemy");
     if (this.checkEnemyDefeated()) return;
+    const protectOpeningResources = this.enemyTurnsStarted <= 0;
+    this.enemyTurnsStarted++;
+    this.applyTurnBoundaryResourceRules("enemyTurnStart", { protectOpening: protectOpeningResources });
     if (this.activeAttackSystem) this.activeAttackSystem.clear();
 
     // 眩晕跳过敌方回合
@@ -3380,6 +3631,9 @@ class BattleSystem {
     this.pendingFollowupContext = null;
     this.enemyAttackChain = null;
     this.enemyCounterState = null;
+    if (this.enemyDirector && this.enemyDirector.cooldown > 0) {
+      this.enemyDirector.cooldown = Math.max(0, this.enemyDirector.cooldown - 1);
+    }
     this.playerState.currentState = "idle";
     this.input.clear();
 
@@ -3410,13 +3664,48 @@ class BattleSystem {
   pickEnemyAttackId() {
     const encounterPattern = this.getEncounterAttackPattern();
     if (Array.isArray(encounterPattern) && encounterPattern.length > 0) {
-      const attackId = encounterPattern[this.enemyAttackCursor % encounterPattern.length];
+      const directed = this.pickDirectedEnemyAttack(encounterPattern);
+      const attackId = directed || encounterPattern[this.enemyAttackCursor % encounterPattern.length];
       this.enemyAttackCursor++;
       if (EnemyDatabase.attacks[attackId] || this.isEnemyAttackChainId(attackId)) return attackId;
     }
 
     const attackIds = (this.enemyConfig && this.enemyConfig.attacks) || EnemyDatabase.base.attacks;
     return attackIds[Math.floor(Math.random() * attackIds.length)];
+  }
+
+  pickDirectedEnemyAttack(pattern = []) {
+    if (!this.enemyDirector || !this.enemyDirector.enabled) return null;
+    if (this.activeEncounterId !== "counter_dojo") return null;
+    if (this.enemyDirector.cooldown > 0) return null;
+    const counters = this.combatTelemetry && this.combatTelemetry.counters ? this.combatTelemetry.counters : {};
+    const assist = this.getDifficultyAssistProfile ? this.getDifficultyAssistProfile() : {};
+    const aggression = assist.directorAggression || 1;
+    const canPick = id => pattern.includes(id) && this.isEnemyAttackChainId(id);
+    let pick = null;
+    let reason = "";
+
+    if ((counters.earlyCounters || 0) >= Math.max(1, Math.round(2 / aggression)) && canPick("delayedCleaveMix")) {
+      pick = "delayedCleaveMix";
+      reason = "earlyCounter";
+    } else if (((counters.guardBlocks || 0) >= Math.max(2, Math.round(3 / aggression)) || (counters.invalidCounters || 0) >= 2) && canPick("shieldCrushCombo")) {
+      pick = "shieldCrushCombo";
+      reason = (counters.invalidCounters || 0) >= 2 ? "invalidCounter" : "overGuard";
+    } else if ((counters.spellInterrupts || 0) >= Math.max(1, Math.round(2 / aggression)) && canPick("rapidTriple")) {
+      pick = "rapidTriple";
+      reason = "spellInterruptSuccess";
+    } else if ((counters.clashSuccess || 0) >= Math.max(3, Math.round(4 / aggression)) && canPick("spellBladeTrap")) {
+      pick = "spellBladeTrap";
+      reason = "clashSuccess";
+    }
+
+    if (!pick) return null;
+    this.enemyDirector.lastPick = pick;
+    this.enemyDirector.lastReason = reason;
+    this.enemyDirector.cooldown = Difficulty.current === "extreme" ? 1 : 2;
+    this.enemyDirector.picks = (this.enemyDirector.picks || 0) + 1;
+    this.recordCombatEvent("directorPick", { attackId: pick, reason });
+    return pick;
   }
 
   isEnemyAttackChainId(id) {
@@ -3472,7 +3761,9 @@ class BattleSystem {
     attack.chainRole = node.role || "";
     attack.counterNode = node.counterNode || "";
     attack.opensFollowupOnSuccess = !!node.opensFollowupOnSuccess;
-    attack.offset = Math.max(0, node.offset || 0);
+    const assist = this.getDifficultyAssistProfile();
+    const offsetMul = assist && Number.isFinite(assist.chainOffsetMul) ? assist.chainOffsetMul : 1;
+    attack.offset = Math.max(0, (node.offset || 0) * offsetMul);
     if (Number.isFinite(node.meleeStart)) attack.meleeStart = node.meleeStart;
     if (node.meleeTimeline) attack.meleeTimeline = node.meleeTimeline;
     attack.name = `${attack.chainIndex + 1}/${attack.chainCount} ${attack.name}`;
@@ -3521,6 +3812,7 @@ class BattleSystem {
     this.enemyAttackChain = null;
     this.enemyAttackPhase = "none";
     this.enemyCounterState = null;
+    if (this.activeAttackSystem) this.activeAttackSystem.clear();
     this.defenseTriggered = false;
     this.defenseMode = null;
     this.qteRunner = null;
@@ -3545,6 +3837,7 @@ class BattleSystem {
     this.enemyAttackChain = null;
     this.enemyAttackPhase = "none";
     this.enemyCounterState = null;
+    if (this.activeAttackSystem) this.activeAttackSystem.clear();
     this.defenseTriggered = false;
     this.defenseMode = null;
     this.qteRunner = null;
@@ -3565,7 +3858,8 @@ class BattleSystem {
       lift: 1,
       duration: 0.22
     });
-    if (typeof SFX !== "undefined" && SFX.sfxWindowOpen) SFX.sfxWindowOpen();
+    if (typeof SFX !== "undefined" && SFX.sfxFollowupOpen) SFX.sfxFollowupOpen();
+    else if (typeof SFX !== "undefined" && SFX.sfxWindowOpen) SFX.sfxWindowOpen();
     this.recordCombatEvent("followupOpen", {
       source: context.source || "",
       covered: context.covered || 0,
@@ -3674,6 +3968,22 @@ class BattleSystem {
 
   tickStatuses(target) {
     ChainEffectSystem.tickStatuses(this, target);
+  }
+
+  applyTurnBoundaryResourceRules(reason = "enemyTurnStart", options = {}) {
+    if (!this.resourceSystem || !this.resourceSystem.decayHeatForTurn) return null;
+    if (options.protectOpening) return null;
+
+    const result = this.resourceSystem.decayHeatForTurn(reason);
+    if (result && result.applied > 0) {
+      this.log(`热量冷却 ${Math.floor(result.applied)}`);
+      this.recordCombatEvent("heatDecay", {
+        amount: Math.floor(result.applied),
+        total: Math.floor(result.total || 0),
+        reason
+      });
+    }
+    return result;
   }
 
   emitTransitionVisual(transition) {
@@ -4264,6 +4574,7 @@ class BattleSystem {
     if (event.type === "playerHit") return `受击 -${event.amount || 0}`;
     if (event.type === "enemyHit") return `命中 -${event.amount || 0}`;
     if (event.type === "normalAttack") return event.automatic ? "自动攻击" : "普通攻击";
+    if (event.type === "directorPick") return `导演换题 ${event.attackId || ""}${event.reason ? ` ${event.reason}` : ""}`;
     return event.type;
   }
 
@@ -4280,6 +4591,14 @@ class BattleSystem {
     return `举盾：${state} ${stability}/${Math.round(max)} ${result}${attack}`;
   }
 
+  getEnemyDirectorDebugLine() {
+    const director = this.enemyDirector;
+    if (!director || this.activeEncounterId !== "counter_dojo") return "";
+    const cooldown = director.cooldown || 0;
+    const last = director.lastPick ? `${director.lastPick}/${director.lastReason || "manual"}` : "none";
+    return `敌方导演：last ${last} cd ${cooldown} picks ${director.picks || 0}`;
+  }
+
   getCombatTelemetryLines(limit = 5) {
     if (!this.combatTelemetry) return [];
     const counters = this.combatTelemetry.counters || {};
@@ -4288,6 +4607,8 @@ class BattleSystem {
     ];
     const guardLine = this.getGuardStanceDebugLine();
     if (guardLine) lines.push(guardLine);
+    const directorLine = this.getEnemyDirectorDebugLine();
+    if (directorLine) lines.push(directorLine);
     const advice = this.getCombatAdviceLine();
     if (advice) lines.push(advice);
     const events = (this.combatTelemetry.events || []).slice(-limit).reverse();
@@ -4329,6 +4650,9 @@ class BattleSystem {
       encounter: this.activeEncounterId || null,
       enemy: this.enemyId || "",
       difficulty: Difficulty.current || "normal",
+      difficultyAssist: this.getDifficultyAssistProfile(),
+      enemyDirector: this.getEnemyDirectorView(),
+      resourcePolicy: this.getResourcePolicyView(),
       result: this.turnState === "game_over"
         ? (this.enemyHp <= 0 ? "win" : "loss")
         : "in_progress",
@@ -4340,13 +4664,67 @@ class BattleSystem {
       },
       counters: { ...counters },
       guard: this.getGuardStanceView(),
+      weaponIdentity: this.getWeaponIdentityView(),
+      learningObjective: this.getLearningObjectiveView(),
+      feedback: this.getPlayerFeedbackView(),
+      animationEvents: this.getActiveAnimationEvents(),
       battleStats: this.getBattleStats(),
       events: (this.combatTelemetry && this.combatTelemetry.events ? this.combatTelemetry.events : []).map(event => ({ ...event }))
     };
   }
 
+  getEnemyDirectorView() {
+    const director = this.enemyDirector || {};
+    return {
+      enabled: !!director.enabled && this.activeEncounterId === "counter_dojo",
+      encounter: this.activeEncounterId || null,
+      lastPick: director.lastPick || "",
+      lastReason: director.lastReason || "",
+      cooldown: director.cooldown || 0,
+      picks: director.picks || 0
+    };
+  }
+
+  getResourcePolicyView() {
+    if (!this.resourceSystem || !this.resourceSystem.getPolicyView) return null;
+    return this.resourceSystem.getPolicyView();
+  }
+
   getCombatTelemetryExportText() {
     return JSON.stringify(this.getCombatTelemetryExport());
+  }
+
+  getActiveAnimationEvents(limit = 8) {
+    const system = this.activeAttackSystem;
+    if (!system || !Array.isArray(system.active)) return [];
+    const round = value => Number.isFinite(value) ? Math.round(value * 1000) / 1000 : null;
+    return system.active.slice(0, limit).map(attack => {
+      const intent = attack.intent || {};
+      const profile = attack.profile || intent.profile || {};
+      const melee = profile.meleeTimeline || null;
+      return {
+        id: attack.id || "",
+        kind: intent.kind || "",
+        source: attack.source || intent.source || "",
+        target: attack.target || intent.target || "",
+        phase: attack.phase || "",
+        type: profile.type || intent.attackType || "",
+        motion: intent.motion || intent.visualEvent || intent.attackId || intent.chainId || "",
+        elapsed: round(attack.elapsed || 0),
+        progress: round(attack.progress || 0),
+        contactFrame: round(profile.impactTime),
+        activeStart: round(profile.activeStart),
+        activeEnd: round(profile.activeEnd),
+        activeDuration: round(profile.activeDuration),
+        chainId: intent.chainId || "",
+        chainIndex: Number.isFinite(intent.chainIndex) ? intent.chainIndex : null,
+        chainCount: Number.isFinite(intent.chainCount) ? intent.chainCount : null,
+        chainNodeId: intent.chainNodeId || "",
+        canceled: !!attack.canceled,
+        defenderResponse: attack.defenderResponse || "",
+        meleeContactFrame: melee ? round((melee.offset || 0) + (melee.contactFrame || 0)) : null
+      };
+    });
   }
 
   getGuardStanceView() {

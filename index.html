@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QTE Battle Prototype</title>
-  <link rel="stylesheet" href="style.css?v=r68">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css?v=r71">
 </head>
 <body>
   <div id="game-container">
@@ -32,10 +33,21 @@
           <span class="menu-static-value">敌方回合反制</span>
         </div>
         <div class="menu-field">
+          <label for="weapon-select">武器：</label>
+          <select id="weapon-select">
+            <option value="auto" selected>自动推荐</option>
+            <option value="dualBlades">双刀</option>
+            <option value="greatsword">大剑</option>
+            <option value="staff">法杖</option>
+            <option value="swordShield">单手剑盾</option>
+          </select>
+        </div>
+        <div class="menu-field">
           <label for="enemy-select">遭遇：</label>
           <select id="enemy-select">
             <option value="auto" selected>自动推荐</option>
             <optgroup label="命名遭遇">
+              <option value="encounter:counter_tutorial">反制入门</option>
               <option value="encounter:ember_bulwark">熔炉守门人</option>
               <option value="encounter:arcane_conduit">秘术回廊</option>
               <option value="encounter:knife_rain">雨巷迅刺</option>
@@ -62,8 +74,10 @@
       <div id="game-over-stats" class="game-over-stats"></div>
       <div class="menu-buttons">
         <button id="btn-restart">再来一局</button>
+        <button id="btn-copy-telemetry">复制遥测</button>
         <button id="btn-back-menu">返回菜单</button>
       </div>
+      <div id="telemetry-copy-status" class="telemetry-copy-status"></div>
     </div>
 
     <!-- 新手引导弹窗 -->
@@ -72,6 +86,7 @@
         <h2>快速上手</h2>
         <ul>
           <li>当前版本只保留敌方回合反制方案，开始后直接进入战斗</li>
+          <li>自动推荐会先进入 <b>反制入门</b>：一刀、二连、举盾、咏唱、追击逐步训练</li>
           <li>敌方回合：绿色反制窗出现时按 <b>A / S / D</b> 逐节点拼刀或打断施法</li>
           <li><b>F</b> 可提前按住举盾，命中接触帧才结算；<b>SPACE</b> 可闪避/弹反</li>
           <li>敌方多段攻击需要逐段应对，不能一次按键自动覆盖整条连段</li>
@@ -153,32 +168,32 @@
     <button id="touch-toggle" class="touch-toggle" title="虚拟按键 V">⌨</button>
   </div>
 
-  <script src="js/utils.js?v=r69"></script>
-  <script src="js/difficulty.js?v=r69"></script>
-  <script src="js/audio.js?v=r69"></script>
-  <script src="js/fx.js?v=r69"></script>
-  <script src="js/input.js?v=r69"></script>
-  <script src="js/data/chains.js?v=r69"></script>
-  <script src="js/data/weapons.js?v=r69"></script>
-  <script src="js/data/spells.js?v=r69"></script>
-  <script src="js/data/combatArts.js?v=r69"></script>
-  <script src="js/data/styles.js?v=r69"></script>
-  <script src="js/data/defenses.js?v=r69"></script>
-  <script src="js/data/enemies.js?v=r69"></script>
-  <script src="js/data/encounters.js?v=r69"></script>
-  <script src="js/data/effects.js?v=r69"></script>
-  <script src="js/systems/effects.js?v=r69"></script>
-  <script src="js/systems/statuses.js?v=r69"></script>
-  <script src="js/systems/resources.js?v=r69"></script>
-  <script src="js/systems/hit-confirm.js?v=r69"></script>
-  <script src="js/systems/active-attacks.js?v=r69"></script>
-  <script src="js/systems/render-state.js?v=r69"></script>
-  <script src="js/systems/qte-debug.js?v=r69"></script>
-  <script src="js/systems/chain-effects.js?v=r69"></script>
-  <script src="js/demo-mode.js?v=r69"></script>
-  <script src="js/qte-runner.js?v=r69"></script>
-  <script src="js/battle.js?v=r69"></script>
-  <script src="js/renderer.js?v=r69"></script>
-  <script src="js/main.js?v=r69"></script>
+  <script src="js/utils.js?v=r71"></script>
+  <script src="js/difficulty.js?v=r71"></script>
+  <script src="js/audio.js?v=r71"></script>
+  <script src="js/fx.js?v=r71"></script>
+  <script src="js/input.js?v=r71"></script>
+  <script src="js/data/chains.js?v=r71"></script>
+  <script src="js/data/weapons.js?v=r71"></script>
+  <script src="js/data/spells.js?v=r71"></script>
+  <script src="js/data/combatArts.js?v=r71"></script>
+  <script src="js/data/styles.js?v=r71"></script>
+  <script src="js/data/defenses.js?v=r71"></script>
+  <script src="js/data/enemies.js?v=r71"></script>
+  <script src="js/data/encounters.js?v=r71"></script>
+  <script src="js/data/effects.js?v=r71"></script>
+  <script src="js/systems/effects.js?v=r71"></script>
+  <script src="js/systems/statuses.js?v=r71"></script>
+  <script src="js/systems/resources.js?v=r71"></script>
+  <script src="js/systems/hit-confirm.js?v=r71"></script>
+  <script src="js/systems/active-attacks.js?v=r71"></script>
+  <script src="js/systems/render-state.js?v=r71"></script>
+  <script src="js/systems/qte-debug.js?v=r71"></script>
+  <script src="js/systems/chain-effects.js?v=r71"></script>
+  <script src="js/demo-mode.js?v=r71"></script>
+  <script src="js/qte-runner.js?v=r71"></script>
+  <script src="js/battle.js?v=r71"></script>
+  <script src="js/renderer.js?v=r71"></script>
+  <script src="js/main.js?v=r71"></script>
 </body>
 </html>

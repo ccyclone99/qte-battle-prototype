@@ -3340,6 +3340,460 @@ Verification:
 
 - `node scripts\flow-smoke.js` validates damage-path audit presence and hit-confirmed public damage categories.
 
+### R72 First-Run Counterflow Onboarding Spec, Completed
+
+Goal: make the first public run teach the current enemy-turn counterflow without adding a separate landing/tutorial mode.
+
+Research notes:
+
+- Action combat tutorials should introduce one player task at a time, then layer the next task only after the player has seen the previous affordance.
+- Readability should be carried by anticipation, contact timing, and a small number of stable labels; large tutorial text should not compete with the melee stage.
+- Failure feedback should name the next timing adjustment, not only say that the player failed.
+
+Scope:
+
+- Keep the public entry on the current default counterflow plan.
+- Add a lightweight in-combat objective view that changes by state: enemy response, multi-node pressure, guard/contact frame, spell interrupt, follow-up, QTE, and attack-active settlement.
+- Keep the objective panel compact and renderer-read-only.
+- Include objective state in local telemetry export for playtest notes.
+
+Implemented direction:
+
+- Added `BattleSystem.getLearningObjectiveView()` and related helper classification.
+- Added a compact objective panel to the Canvas renderer, shown only during active combat states.
+- Objective lines are derived from the current incoming attack, counter profile, enemy chain index, and combat telemetry counters.
+- Browser/local smoke protects first-run objective visibility and no public demo reactivation.
+
+Acceptance criteria:
+
+- Starting the default plan shows a small current objective without changing the encounter flow.
+- Enemy multi-node chains explain that each node must be answered separately.
+- Guardable/shield attacks explicitly mention holding `F` to contact frame.
+- Follow-up and QTE states explain why A/S/D is now allowed.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates objective text for opening, guard, spell, follow-up, and QTE states.
+- `node scripts\smoke-checklist.js` protects renderer loading and objective helper presence.
+
+### R73 Enemy Attack Library Expansion Spec, Completed
+
+Goal: give the enemy turn enough varied questions to make the counterflow style visible.
+
+Research notes:
+
+- Good melee pressure alternates attack type and timing rather than only increasing speed.
+- Telegraphs should signal the decision category: quick clash, guard/dodge, slow heavy, feint/delay, spell interrupt, or shield pressure.
+- Fast chains should ask for repeated reads; they should not be solved by one buffered input.
+
+Scope:
+
+- Expand authored enemy attacks/chains without changing the damage model.
+- Add at least one delayed heavy, one shield-break pressure, one rapid triple pressure, and one spell-to-melee trap.
+- Preserve old attack chains for regression coverage.
+- Include timing/balance audits for the larger pressure library.
+
+Implemented direction:
+
+- Added `delayedCleave` and `guardCrush` attacks with authored melee timelines.
+- Added `rapidTriple`, `delayedCleaveMix`, `spellBladeTrap`, and `shieldCrushCombo` chains.
+- Extended `counter_dojo` and phase attack patterns to rotate the new pressure questions after the original opening set.
+- Balance script automatically includes the expanded pattern in weapon pressure reporting.
+
+Acceptance criteria:
+
+- Counter dojo covers quick multi-hit, slow heavy, feint/delay, spell-melee, and shield pressure.
+- New chains expose melee timelines and counter metadata.
+- Existing smoke tests for old chains still pass.
+
+Verification:
+
+- `node scripts\validate-data.js`
+- `node scripts\check-balance.js --strict`
+- `node scripts\flow-smoke.js`
+
+### R74 Counter Feedback Clarity Spec, Completed
+
+Goal: make success/failure causes clear through compact feedback rather than extra visual noise.
+
+Research notes:
+
+- The clearest combat feedback stack is input result -> animation/impact pause -> short correction text.
+- Early/late/invalid/guard-break/follow-up-missed states need separate wording because they imply different player fixes.
+- Debug detail should stay in the debug drawer; public feedback should stay to one or two short lines.
+
+Scope:
+
+- Reuse existing `lastPlayerFeedback`, combat telemetry, and message surfaces.
+- Add a public feedback view with tone and short correction.
+- Do not add persistent floating text for every damage number or every enemy node.
+- Add export fields so manual testers can compare feedback causes.
+
+Implemented direction:
+
+- Added `BattleSystem.getPlayerFeedbackView()`.
+- Renderer objective panel shows the latest correction line below the current objective.
+- Telemetry export includes `learningObjective`, `feedback`, and weapon identity fields.
+- Feedback selection favors concrete recent failures, then current objective, then general advice.
+
+Acceptance criteria:
+
+- Early, late, invalid, guard break, and missed follow-up states produce different public feedback.
+- Feedback is visible without opening QTE debug.
+- Debug telemetry remains the high-detail channel.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates feedback classification.
+- Visual smoke covers the panel in combat screenshots.
+
+### R75 Weapon Identity And Handfeel Spec, Completed
+
+Goal: make weapon selection differences legible as playstyle, not just numeric values.
+
+Research notes:
+
+- Weapon identity should explain what the player should do differently.
+- Faster weapons can cover quick multi-hit pressure; heavier weapons should reward slower, higher-commitment reads; shield identity should make defensive timing meaningful.
+- The UI should communicate the role without exposing raw tuning tables as the primary experience.
+
+Scope:
+
+- Add structured `identity` metadata to each weapon.
+- Surface the identity through battle help, telemetry export, and balance scripts.
+- Keep current public default as dual blades for counterflow testing.
+- Avoid adding a new weapon select public flow in this pass.
+
+Implemented direction:
+
+- Added `identity` metadata for greatsword, staff, dual blades, and sword-shield.
+- Added `BattleSystem.getWeaponIdentityView()`.
+- Battle help shows the current weapon role and plan in one compact line.
+- Telemetry export includes weapon role, strengths, risks, and recommended enemy pressure.
+
+Acceptance criteria:
+
+- Dual blades read as quick-chain coverage with weak guard.
+- Greatsword reads as heavy/finisher coverage with slow recovery.
+- Staff reads as spell-interrupt/anti-magic coverage with weak melee.
+- Sword-shield reads as guard stability and shield-dodge identity.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates identity payload.
+- `node scripts\check-balance.js --strict` reports weapon pressure across the expanded dojo pattern.
+
+### R76 Formal Prototype Transfer Contract Spec, Completed
+
+Goal: make the QTE/counterflow prototype usable as a future formal-game reference instead of only a playable demo.
+
+Research notes:
+
+- Prototype handoff docs need contracts for input, authored enemy nodes, QTE chains, hit confirmation, telemetry, and renderer boundaries.
+- Transfer docs should distinguish frozen reference assets from current public entry points.
+- Schemas should describe stable fields and extension points, not only implementation files.
+
+Scope:
+
+- Extend `docs/qte-prototype-reference.md` with a formal transfer contract.
+- Cover input events, QTE chain data, enemy attack/chain data, active attack/hit confirm route, learning objective, telemetry export, and renderer-state boundary.
+- Keep historical demo code frozen but documented.
+
+Implemented direction:
+
+- Added a transfer-contract section with minimal JSON-like schemas.
+- Listed runtime extension points and invariants that formal-game implementation should preserve.
+- README now points to the contract as the handoff document.
+
+Acceptance criteria:
+
+- A developer can identify which data shape to port for enemy nodes and QTE chains.
+- The document says which damage routes must remain hit-confirmed.
+- The document preserves demo/frozen prototype reference status.
+
+Verification:
+
+- `node scripts\smoke-checklist.js` protects contract keywords and retained prototype assets.
+
+### R77 Playtest Telemetry Copy Spec, Completed
+
+Goal: make local playtest feedback easy to hand off without opening devtools.
+
+Scope:
+
+- Keep `window.exportCombatTelemetry()` as the canonical local-only payload.
+- Add a result-screen copy button that serializes the same payload as pretty JSON.
+- Include copied/exportable payload data for weapon identity, learning objective, feedback, difficulty assistance, director state, and active animation events.
+- Do not upload telemetry or add any network dependency.
+
+Implemented direction:
+
+- Result screen exposes `复制遥测` after battle or practice end.
+- Clipboard fallback uses a temporary text area when browser clipboard permission is unavailable.
+- The export schema remains `qte-counterflow-telemetry/v1` and stays local-only.
+
+Acceptance criteria:
+
+- A playtester can copy the latest battle payload from the end screen.
+- The payload explains what weapon, encounter, difficulty, current guidance, and recent events were active.
+- The button failure mode is a visible status/log line rather than a silent no-op.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates telemetry payload fields.
+- `node scripts\smoke-checklist.js` protects the result-screen copy entry.
+
+### R78 Beginner Training Route Spec, Completed
+
+Goal: strengthen onboarding by making the default auto run a staged enemy-turn training route.
+
+Scope:
+
+- Add a named beginner encounter before the high-pressure counter dojo.
+- The auto/default combat plan starts in the beginner route.
+- The route layers one decision at a time: single clash, two-hit read, guard/contact frame, spell interrupt, follow-up conversion, then a short mixed exam.
+- Keep the existing `逆势试炼` as the advanced pressure pool.
+
+Implemented direction:
+
+- Added `反制入门` encounter with authored tutorial attack chains.
+- Default `StyleDatabase.current.preferredEncounter` now points to the beginner route.
+- Main menu exposes `反制入门` and keeps `逆势试炼` for advanced testing.
+- The tutorial overlay now names the default staged route and the difference between enemy-turn responses and follow-up QTE.
+
+Acceptance criteria:
+
+- Auto start no longer opens with the hardest mixed dojo loop.
+- A new player sees one mechanic before the next one is layered.
+- Advanced test coverage still reaches all expanded dojo chains.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates default encounter and early route order.
+- `node scripts\smoke-checklist.js` protects the beginner encounter and menu option.
+
+### R79 Animation Contact Event Contract Spec, Completed
+
+Goal: make animation and damage timing auditable through one standard active-event view.
+
+Scope:
+
+- Derive a compact event descriptor from every active attack.
+- Include source, target, phase, type, impact/contact frame, active window, motion, chain index, and cancel/response state.
+- Surface the descriptors through telemetry and QTE debug.
+- Keep damage authority in active-attack impact/collision settlement.
+
+Implemented direction:
+
+- Added `BattleSystem.getActiveAnimationEvents()`.
+- Telemetry export includes `animationEvents`.
+- QTE debug prints the current active animation events in a concise line format.
+- The formal prototype reference document now lists the animation event transfer shape.
+
+Acceptance criteria:
+
+- Debug data can tell whether a visible attack is in startup, response, impact, or recovery.
+- Melee timing reads from contact frame/active window instead of free-form log strings.
+- Future formal-game animation work can consume the same event shape.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates active animation event fields.
+- `node scripts\smoke-checklist.js` protects the contract and debug line.
+
+### R80 Layered Audio Feedback Spec, Completed
+
+Goal: make timing outcomes audible without adding visual clutter.
+
+Scope:
+
+- Add distinct but quiet cues for clash contact, whiff/early, guard break, follow-up opening, and spell interrupt.
+- Reuse the existing synthetic SFX system.
+- Keep master volume unchanged.
+
+Implemented direction:
+
+- Added named SFX methods: `sfxClash`, `sfxWhiff`, `sfxGuardBreak`, `sfxFollowupOpen`, and `sfxSpellInterrupt`.
+- Wired the cues to actual collision/result points rather than button press only.
+- Existing success/fail and window-open cues remain available.
+
+Acceptance criteria:
+
+- Successful clash sounds different from early whiff.
+- Guard break and spell interrupt are recognizable.
+- Follow-up opening has a short confirmation cue without increasing screen text.
+
+Verification:
+
+- `node scripts\smoke-checklist.js` protects the new named audio cues.
+
+### R81 Time-Based Difficulty Assistance Spec, Completed
+
+Goal: make early difficulty more learnable through pacing and guidance instead of wider hit windows.
+
+Scope:
+
+- Keep enemy counter active windows tied to authored active frames.
+- Add a difficulty assist profile for chain spacing, guidance detail, director aggression, and telemetry.
+- Reduce QTE pressure primarily through node duration/pointer pacing; avoid increasing QTE hit-window width beyond authored width.
+
+Implemented direction:
+
+- Added `Difficulty.getAssistProfile()`.
+- Easy/normal use longer route/chain spacing and fuller objective text; hard/extreme reduce guidance and director patience.
+- Chain node offsets are paced by assist profile, but the contact active window remains governed by attack active frames.
+- QTE window multipliers are normalized to authored width while duration/pointer speed still scale difficulty.
+
+Acceptance criteria:
+
+- Easier settings feel slower and better explained without simply making all hit windows huge.
+- Hard/extreme keep stricter pacing and less guidance.
+- Telemetry records the active assist profile.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates assist payload and chain-offset pacing.
+- `node scripts\check-timing.js`
+- `node scripts\check-balance.js --strict`
+
+### R82 Enemy Phase Director Spec, Completed
+
+Goal: keep advanced enemy pressure varied and responsive without making the beginner route chaotic.
+
+Scope:
+
+- Add a small encounter director for advanced counter dojo selection.
+- Do not override the beginner training route sequence.
+- Use recent player telemetry to occasionally select pressure that teaches the current failure pattern.
+- Include cooldown/state in telemetry and debug.
+
+Implemented direction:
+
+- Added an enemy director that can bias `逆势试炼` toward delayed cleave after early presses, shield crush after over-guard/invalid attacks, rapid pressure after strong spell interruption, or spell trap after repeated pure clash success.
+- Director decisions are cooldown-limited and recorded as combat events.
+- Beginner route remains authored and deterministic.
+
+Acceptance criteria:
+
+- Advanced dojo does not feel like a fixed memorized loop forever.
+- New players are not immediately thrown into adaptive pressure.
+- Debug/telemetry can explain when the director intervened.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates director state and non-interference with beginner route.
+
+### R83 Public Weapon Choice Spec, Completed
+
+Goal: expose weapon identity testing without reintroducing the removed style-chain system.
+
+Scope:
+
+- Add a public weapon select control in the main menu.
+- Keep the combat plan fixed as enemy-turn counterflow.
+- Weapon selection changes the weapon profile, QTE chains, guard profile, and identity copy only.
+- `auto` keeps the default plan weapon.
+
+Implemented direction:
+
+- Main menu now offers 自动/双刀/大剑/法杖/单手剑盾.
+- `BattleSystem` accepts a weapon override and reapplies it after the fixed combat plan.
+- Logs/help/telemetry identify the selected weapon.
+
+Acceptance criteria:
+
+- Selecting a weapon does not expose old style IDs or style chains.
+- Different weapons can be tested in the same beginner/advanced encounters.
+- Auto remains dual blades through the fixed current plan.
+
+Verification:
+
+- `node scripts\flow-smoke.js` validates weapon override and follow-up chain mapping.
+- `node scripts\smoke-checklist.js` protects the menu control and absence of style selection.
+
+### R84 Resource Policy Closure Spec, Completed
+
+Goal: close the remaining resource/status ambiguity so the QTE prototype can be used as a stable formal-game reference.
+
+Closed decisions:
+
+- Burn is turn-start DOT on the enemy, not a next-fire-hit amplifier.
+- Fire heat is a stored combat resource that boosts Fire chain damage, then cools at enemy-turn boundaries after the protected opening turn.
+- Absorb overflow uses fixed chain costs; stored overflow pressure is expressed through cap, overcap backlash, and spender timing rather than dynamic per-cast cost scaling.
+- Whiffs do not grant positive resources or enemy statuses. Negative resource costs are commit-side costs, so a cast/spender can still spend resources before the hit confirms.
+- Defensive whiffs consume animation/time and expose the player, but do not spend spell/heat resources unless the chain data explicitly commits a cost.
+
+Implemented direction:
+
+- Added explicit Fire/Absorb policy fields in `js/data/spells.js`.
+- Added `ResourceSystem.decayHeatForTurn()` and policy export data.
+- Battle protects opening heat once, then applies heat decay at later enemy-turn boundaries.
+- Combat telemetry now includes `resourcePolicy`.
+- QTE effect splitting continues to keep negative resource costs on commit and positive resources/statuses on confirmed impact.
+
+Acceptance criteria:
+
+- Opening heat from encounters remains usable and is not lost before the first enemy action.
+- Heat no longer remains permanently capped across repeated turns.
+- A missed/whiffed active QTE cannot grant heat, burn, or other positive impact-side effects.
+- Overflow Burst remains a fixed-cost spender and the rule is visible in data/tests.
+
+Verification:
+
+- `node scripts\flow-smoke.js` covers opening heat protection, later heat decay, burn DOT, whiff no-gain behavior, and resource commit/impact splitting.
+- `node scripts\smoke-checklist.js` protects the policy fields and telemetry export.
+
+### R85 Encounter Hard Extreme Coverage Spec, Completed
+
+Goal: make named encounter tuning auditable on hard/extreme without requiring memory of manual checklist notes.
+
+Implemented direction:
+
+- `scripts\check-balance.js` already scans every named encounter and phase across all difficulty presets for impact timing and response-window floors.
+- Added explicit named encounter phase coverage output so missing HP phases or empty phase attack patterns become strict warnings.
+- Existing flow smoke verifies phase activation and result-summary phase reporting.
+
+Acceptance criteria:
+
+- Every named encounter has at least one explicit HP phase.
+- Hard/extreme pressure warnings surface in `check-balance --strict`.
+- The current public beginner route and advanced dojo stay covered by flow smoke.
+
+Verification:
+
+- `node scripts\check-balance.js --strict`
+- `node scripts\flow-smoke.js`
+
+### R86 Debug Overlay And Hit Confirm Closure Spec, Completed
+
+Goal: keep prototype observability strong without adding permanent visual clutter to the public combat screen.
+
+Closed decisions:
+
+- Hit confirm is mandatory for player QTE damage, enemy active attacks, normal attacks, counter/auxiliary attacks, and persistent guard leak damage.
+- Hit-confirm overlays remain debug-gated only.
+- Future visuals stay in Canvas 2D with pose-tag/root-motion contracts unless the current renderer can no longer express readability.
+- Dual Blades Perfect streak handling stays chain-local for prototype interpretation; global combo remains a generic damage/timing stat, not a separate dual-blade-only snowball rule.
+
+Implemented direction:
+
+- `getDamagePathAudit()` documents current damage routes.
+- `getActiveAnimationEvents()` and telemetry expose active event timing.
+- QTE debug includes hit confirm, damage paths, animation events, resource policy, and local telemetry export.
+- Renderer hitbox overlays remain gated behind `scene.showHitConfirmOverlay`.
+
+Acceptance criteria:
+
+- Public combat does not show always-on hitbox/debug overlays.
+- Debug data can prove damage waits for hit-confirmed impact.
+- Formal-game handoff has a stable description of active attacks, hit confirm, resource policy, and telemetry boundaries.
+
+Verification:
+
+- `node scripts\flow-smoke.js`
+- `node scripts\smoke-checklist.js`
+- `node scripts\visual-smoke.js`
+
 ## 22. Verification Commands
 
 ```powershell
@@ -3383,12 +3837,14 @@ Manual browser smoke test:
 
 - Open `http://localhost:8765/`.
 - Confirm main menu HUD is hidden.
-- In the main menu, leave `遭遇` on auto for one run, then repeat once with a named encounter override.
+- In the main menu, leave `武器` and `遭遇` on auto for one run, then repeat once with a weapon override and once with a named encounter override.
 - Confirm the public menu has no style grid/dropdown and `效果演示` is hidden/disabled.
-- Start battle and confirm it enters the default enemy-turn counter-flow plan without pressing `1-8`.
+- Start battle and confirm it enters `反制入门` without pressing `1-8`.
+- Confirm the first default route teaches single clash, then two-hit read, guard/contact frame, spell interrupt, and follow-up conversion.
 - During enemy physical chains, press `A/S/D` inside active windows and confirm each node resolves separately.
 - During enemy spell nodes, press `A/S/D` and confirm spell interruption opens a follow-up window after the authored attack lands.
 - In follow-up window, press `A/S/D` and confirm a weapon QTE starts; repeat once with no input and confirm automatic attack fallback.
+- End a battle and confirm `复制遥测` copies a JSON payload with `difficultyAssist`, `enemyDirector`, and `animationEvents`.
 - Press `T` and confirm QTE debug shows encounter lines, `实战记录`, and one `建议：...` line.
 - Run `node scripts\sim-chain.js flame_blade perfect` to confirm retained fire/weapon prototype chains still execute.
 - Run `node scripts\sim-chain.js overflow_burst perfect` to confirm retained absorb/spender prototype chains still execute.
@@ -3397,24 +3853,22 @@ Manual browser smoke test:
 - Check `docs/qte-prototype-reference.md` when changing QTE chain data, runner behavior, demo retention, or prototype validation scripts.
 - Confirm no console errors.
 
-## 23. Open Questions
+## 23. Closed Decisions
 
-- Should burn deal turn-start DOT or amplify the next fire hit?
-- Should Fire heat gain decay over time, at turn boundaries, or only through overheat branches?
-- Should Absorb overflow cost scale with stored energy or remain fixed per chain?
-- Should armor break later become both a status multiplier and an enemy armor-stat reducer?
-- Should Dual Blades Perfect streak be global combo-based or chain-local?
-- Should named encounters get explicit phase changes at HP thresholds or stay as modifier-driven matchups?
-- Should future visuals remain Canvas 2D or introduce a stronger animation layer first?
-- Should hit confirm become mandatory for all damage immediately, or should phase 1 keep a fallback guaranteed-hit mode for existing content until chain hitbox metadata is complete?
-- Should whiffs consume full resource costs, partial costs, or only animation time?
+- Burn: enemy turn-start DOT.
+- Fire heat: protected opening resource, then enemy-turn-boundary cooling.
+- Absorb overflow: fixed spender cost plus overcap backlash.
+- Armor/shield: explicit enemy `defenseStats` plus armor-break status interaction.
+- Dual Blades Perfect interpretation: chain-local; generic combo stays global.
+- Named encounters: explicit HP phases with attack-pattern swaps.
+- Visual direction: Canvas 2D pose/root-motion layer remains current target.
+- Hit confirm: mandatory for public damage routes; overlay stays debug-only.
+- Whiffs: no positive impact rewards; explicit commit costs still spend.
 
 ## 24. Immediate Next Task Recommendation
 
-The active-attack and hit-confirm layer is now in place. The next bottleneck is depth and tuning, not another timing-system rewrite:
+The remaining work is subjective polish and formal-game handoff quality, not another combat-rule rewrite:
 
-1. Run manual hard/extreme playtests against all four named encounters and tune subjective outliers that automated pressure floors cannot judge.
-2. Decide whether armor/shield should gain explicit armor stats instead of only status and encounter multipliers.
-3. Add explicit armor/shield stats only if manual playtesting shows status-only armor does not create enough decision pressure.
-4. Keep hit-confirm overlays available for debugging, but avoid turning them into always-on visual noise.
-5. Revisit the animation layer only if pose-tag Canvas 2D can no longer express attack/defense readability.
+1. Run manual hard/extreme playtests against every named encounter and tune outliers that automated timing floors cannot judge.
+2. Keep iterating actor pose/root-motion readability before adding new effects.
+3. Keep updating `docs/qte-prototype-reference.md` whenever a chain, resource rule, or telemetry shape changes.

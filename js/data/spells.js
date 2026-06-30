@@ -12,6 +12,9 @@ const SpellDatabase = {
     armorBreakTurns: 3,
     heatDamageBonusPerPoint: 0.003,
     overheatThreshold: 85,
+    heatTurnDecay: 8,
+    heatPolicy: "turnBoundaryDecay",
+    burnPolicy: "turnStartDot",
     // 盾：敌人命中时受到火焰反伤
     shieldThornDamage: 8,
     shieldThornMessage: "火焰反伤！",
@@ -41,6 +44,7 @@ const SpellDatabase = {
     // 杖：吸收转化为法术能量，可突破上限
     staffOverflowMul: 1.5,
     staffOverflowDecay: 8,
+    overflowCostPolicy: "fixed",
     staffOverflowMessage: "法术能量过载！",
     // 盾：完美格挡/弹反时反射魔法
     shieldReflectMul: 1.0,

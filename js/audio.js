@@ -87,6 +87,33 @@ const SFX = {
     this.playTone({ type: "square", freq: 320, freqEnd: 320, duration: 0.12, attack: 0.005, release: 0.1, volume: 0.34 });
   },
 
+  sfxClash() {
+    this.playNoise({ duration: 0.09, release: 0.06, volume: 0.54 });
+    this.playTone({ type: "square", freq: 520, freqEnd: 260, duration: 0.10, attack: 0.003, release: 0.06, volume: 0.42 });
+    this.playTone({ type: "sine", freq: 920, freqEnd: 620, duration: 0.08, attack: 0.003, release: 0.05, volume: 0.18 });
+  },
+
+  sfxWhiff() {
+    this.playNoise({ duration: 0.08, release: 0.05, volume: 0.22 });
+    this.playTone({ type: "sawtooth", freq: 360, freqEnd: 180, duration: 0.11, attack: 0.005, release: 0.07, volume: 0.18 });
+  },
+
+  sfxGuardBreak() {
+    this.playNoise({ duration: 0.16, release: 0.11, volume: 0.62 });
+    this.playTone({ type: "sawtooth", freq: 180, freqEnd: 70, duration: 0.20, attack: 0.004, release: 0.12, volume: 0.45 });
+    this.playTone({ type: "square", freq: 280, freqEnd: 120, duration: 0.14, attack: 0.004, release: 0.10, volume: 0.22 });
+  },
+
+  sfxFollowupOpen() {
+    this.playTone({ type: "triangle", freq: 520, freqEnd: 780, duration: 0.13, attack: 0.006, release: 0.09, volume: 0.32 });
+    this.playTone({ type: "sine", freq: 780, freqEnd: 1170, duration: 0.12, attack: 0.006, release: 0.08, volume: 0.22 });
+  },
+
+  sfxSpellInterrupt() {
+    this.playTone({ type: "triangle", freq: 720, freqEnd: 360, duration: 0.16, attack: 0.005, release: 0.11, volume: 0.38 });
+    this.playNoise({ duration: 0.10, release: 0.08, volume: 0.24 });
+  },
+
   sfxMagic() {
     this.playTone({ type: "sine", freq: 440, freqEnd: 880, duration: 0.25, attack: 0.02, release: 0.18, volume: 0.44 });
     this.playTone({ type: "triangle", freq: 220, freqEnd: 660, duration: 0.3, attack: 0.02, release: 0.22, volume: 0.28 });

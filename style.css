@@ -104,6 +104,13 @@ body {
   margin-bottom: 2px;
 }
 
+.telemetry-copy-status {
+  min-height: 18px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #9fd8c8;
+}
+
 .hp-group {
   display: flex;
   align-items: center;

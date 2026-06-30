@@ -11,7 +11,7 @@ const StyleDatabase = {
     spells: [],
     combatArts: [],
     preferredEnemy: "caster",
-    preferredEncounter: "counter_dojo",
+    preferredEncounter: "counter_tutorial",
     actionBarMax: 3.35,
     manualQteCrit: true,
     counterCrit: true,
